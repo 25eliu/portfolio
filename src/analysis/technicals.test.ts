@@ -51,3 +51,17 @@ describe("computeTechnicals", () => {
     expect(t.sma200).toBeNull();
   });
 });
+
+describe("computeTechnicals deterministic values", () => {
+  test("OBV nets to zero on up-then-down with equal volume", () => {
+    const bars = [bar("2026-01-01", 10, 1000), bar("2026-01-02", 11, 1000), bar("2026-01-03", 10, 1000)];
+    expect(computeTechnicals(bars, null).obv).toBe(0);
+  });
+  test("VWAP of a constant-price series equals that price", () => {
+    expect(computeTechnicals(series(Array(20).fill(50)), null).vwap).toBeCloseTo(50, 6);
+  });
+  test("stochastic %K is 100 at the top of its range", () => {
+    const bars = Array.from({ length: 14 }, (_, i) => bar(`2026-01-${String(i + 1).padStart(2, "0")}`, 10 + i));
+    expect(computeTechnicals(bars, null).stochK).toBeCloseTo(100, 4);
+  });
+});
