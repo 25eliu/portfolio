@@ -29,7 +29,7 @@ function sentimentTone(s: number): { tone: "pos" | "neg" | "warn"; label: string
 export function RecommendationCard({ r }: { r: Recommendation }) {
   const [open, setOpen] = useState(false);
   const hasDetail =
-    r.technicals.rsi != null ||
+    r.technicals.rsi14 != null ||
     r.technicals.macd != null ||
     r.technicals.support != null ||
     r.technicals.resistance != null ||
@@ -113,8 +113,8 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
           {open && (
             <div className="mt-2.5 space-y-2 text-[11px]">
               <div className="grid grid-cols-2 gap-2">
-                {r.technicals.rsi != null && <Detail label="RSI" value={r.technicals.rsi.toFixed(0)} />}
-                {r.technicals.macd != null && <Detail label="MACD" value={r.technicals.macd} />}
+                {r.technicals.rsi14 != null && <Detail label="RSI" value={r.technicals.rsi14.toFixed(0)} />}
+                {r.technicals.macd != null && <Detail label="MACD" value={r.technicals.macd.toFixed(2)} />}
                 {r.technicals.support != null && (
                   <Detail label="Support" value={usd(r.technicals.support)} />
                 )}

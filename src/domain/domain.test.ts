@@ -86,7 +86,7 @@ describe("Recommendation / DailyReport", () => {
     strategyFamily: "momentum_breakout",
     thesis: "Reclaimed VWAP on volume.",
     signals: ["vwap_reclaim", "unusual_volume"],
-    technicals: { rsi: 58, macd: "bullish_cross", support: 168.4, resistance: 182 },
+    technicals: { rsi14: 58, macd: 0.5, support: 168.4, resistance: 182 },
     catalyst: { kind: "upgrade", summary: "analyst upgrade", sentiment: 0.7 },
     tradePlan: { entry: 172.5, stop: 167, target: 184, rMultiple: 2.1, invalidation: "close below 167" },
     briefingNote: null,

@@ -1,4 +1,4 @@
-import { newId, type Action, type DailyReport, type Horizon, type Recommendation } from "../domain/index.ts";
+import { newId, type Action, type DailyReport, type Horizon, type Recommendation, emptyTechnicals } from "../domain/index.ts";
 import { fakePrice } from "../market/fake/pricing.ts";
 
 /**
@@ -43,8 +43,9 @@ function makeRecommendation(symbol: string, date: string): Recommendation {
     thesis: `[demo] ${family.replace(/_/g, " ")} setup on ${symbol}; placeholder thesis until the LLM step lands.`,
     signals: [...new Set(signals)],
     technicals: {
-      rsi: 30 + (s % 40),
-      macd: s % 2 === 0 ? "bullish_cross" : "bearish_cross",
+      ...emptyTechnicals(),
+      rsi14: 30 + (s % 40),
+      macd: s % 2 === 0 ? 0.5 : -0.5,
       support: stop,
       resistance: target,
     },

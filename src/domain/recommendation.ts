@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Symbol } from "./holding.ts";
+import { Technicals } from "./technicals.ts";
 
 export const Action = z.enum(["BUY", "SELL", "HOLD", "WATCH"]);
 export type Action = z.infer<typeof Action>;
@@ -15,14 +16,6 @@ export const TradePlan = z.object({
   invalidation: z.string(),
 });
 export type TradePlan = z.infer<typeof TradePlan>;
-
-export const Technicals = z.object({
-  rsi: z.number().nullable().default(null),
-  macd: z.string().nullable().default(null),
-  support: z.number().nullable().default(null),
-  resistance: z.number().nullable().default(null),
-});
-export type Technicals = z.infer<typeof Technicals>;
 
 export const Catalyst = z.object({
   kind: z.string(),
