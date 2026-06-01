@@ -126,6 +126,33 @@ describe("reports", () => {
     expect(latest?.marketContext?.macroSummary).toBe("risk-on");
     expect(latest?.marketContext?.sources).toHaveLength(1);
   });
+
+  test("latest() skips legacy/unreadable reports and returns the newest valid one", () => {
+    const db = openMemoryDb();
+    const r = repositories(db);
+    r.reports.insert({
+      id: newId(),
+      date: "2026-06-01",
+      generatedAt: "2026-06-01T00:00:00.000Z",
+      source: "llm",
+      recommendations: [],
+      marketContext: null,
+    });
+    // A NEWER legacy row from the old schema (technicals.macd used to be a string).
+    db.query(
+      `INSERT INTO reports (id, date, generated_at, source, recommendations_json, market_context_json)
+       VALUES (?, ?, ?, ?, ?, NULL)`,
+    ).run(
+      "legacy1",
+      "2026-07-01",
+      "2026-07-01T00:00:00.000Z",
+      "fake",
+      JSON.stringify([
+        { ticker: "AAPL", action: "BUY", conviction: 0.5, horizon: "5d", strategyFamily: "x", thesis: "t", signals: [], technicals: { macd: "bullish_cross" } },
+      ]),
+    );
+    expect(r.reports.latest()?.date).toBe("2026-06-01");
+  });
 });
 
 describe("runs", () => {

@@ -20,6 +20,16 @@ const toDomain = (r: Row): DailyReport =>
     marketContext: r.market_context_json ? JSON.parse(r.market_context_json) : null,
   });
 
+/** Parse a row, tolerating legacy/incompatible reports written under an older schema. */
+const safeToDomain = (r: Row): DailyReport | null => {
+  try {
+    return toDomain(r);
+  } catch (err) {
+    console.warn(`[reports] skipping unreadable report ${r.id} (${r.date}): ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+    return null;
+  }
+};
+
 export function reportsRepo(db: DB) {
   return {
     insert(report: DailyReport): DailyReport {
@@ -39,10 +49,15 @@ export function reportsRepo(db: DB) {
     },
 
     latest(): DailyReport | null {
-      const row = db
-        .query<Row, []>("SELECT * FROM reports ORDER BY generated_at DESC LIMIT 1")
-        .get();
-      return row ? toDomain(row) : null;
+      // Return the most recent report that still parses; skip legacy rows from an older schema.
+      const rows = db
+        .query<Row, []>("SELECT * FROM reports ORDER BY generated_at DESC LIMIT 20")
+        .all();
+      for (const row of rows) {
+        const parsed = safeToDomain(row);
+        if (parsed) return parsed;
+      }
+      return null;
     },
   };
 }
