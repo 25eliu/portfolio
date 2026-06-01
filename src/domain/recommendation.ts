@@ -3,6 +3,7 @@ import { Symbol } from "./holding.ts";
 import { Technicals } from "./technicals.ts";
 import { Fundamentals } from "./fundamentals.ts";
 import { MarketContext, Source } from "./marketContext.ts";
+import { ScreenType } from "./scan.ts";
 
 export const Action = z.enum(["BUY", "SELL", "HOLD", "WATCH"]);
 export type Action = z.infer<typeof Action>;
@@ -47,7 +48,7 @@ export const Recommendation = z.object({
   /** Grounding citations backing the recommendation. */
   sources: z.array(Source).default([]),
   /** Originating opportunity screen for scan candidates (null for held/watchlist). */
-  screen: z.string().nullable().default(null),
+  screen: ScreenType.nullable().default(null),
   catalyst: Catalyst.nullable().default(null),
   tradePlan: TradePlan.nullable().default(null),
   briefingNote: z.string().nullable().default(null),

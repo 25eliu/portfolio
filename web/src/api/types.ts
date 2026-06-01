@@ -10,6 +10,8 @@ export type {
   MarketSnapshot,
   RiskProfile,
   RiskPreset,
+  MarketContext,
+  WatchlistItem,
 } from "@shared/domain/index.ts";
 export type { PricedPortfolio, RunResult } from "@shared/pipeline/types.ts";
 export type { Run } from "@shared/db/repositories/runs.ts";

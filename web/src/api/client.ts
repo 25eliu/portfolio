@@ -9,6 +9,7 @@ import type {
   Run,
   RunResult,
   Snapshot,
+  WatchlistItem,
 } from "./types.ts";
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -38,4 +39,8 @@ export const client = {
   risk: () => api<{ risk: RiskProfile | null }>("/risk"),
   setRisk: (preset: RiskPreset) =>
     api<RiskProfile>("/risk", { method: "PUT", body: JSON.stringify({ preset }) }),
+  watchlist: () => api<WatchlistItem[]>("/watchlist"),
+  addWatch: (symbol: string) =>
+    api<WatchlistItem>("/watchlist", { method: "POST", body: JSON.stringify({ symbol }) }),
+  removeWatch: (id: string) => api<{ ok: boolean }>(`/watchlist/${id}`, { method: "DELETE" }),
 };

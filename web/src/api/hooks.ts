@@ -9,6 +9,7 @@ const keys = {
   snapshots: ["snapshots"],
   status: ["status"],
   risk: ["risk"],
+  watchlist: ["watchlist"],
 };
 
 export const usePortfolios = () => useQuery({ queryKey: keys.portfolios, queryFn: client.portfolios });
@@ -18,6 +19,7 @@ export const useRecommendations = () =>
 export const useSnapshots = () => useQuery({ queryKey: keys.snapshots, queryFn: client.snapshots });
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: client.status });
 export const useRisk = () => useQuery({ queryKey: keys.risk, queryFn: client.risk });
+export const useWatchlist = () => useQuery({ queryKey: keys.watchlist, queryFn: client.watchlist });
 
 /** Invalidate everything that a portfolio mutation can affect. */
 function useInvalidateAll() {
@@ -49,4 +51,14 @@ export function useRunNow() {
 export function useSetRisk() {
   const invalidate = useInvalidateAll();
   return useMutation({ mutationFn: (preset: RiskPreset) => client.setRisk(preset), onSuccess: invalidate });
+}
+
+export function useAddWatch() {
+  const invalidate = useInvalidateAll();
+  return useMutation({ mutationFn: (symbol: string) => client.addWatch(symbol), onSuccess: invalidate });
+}
+
+export function useRemoveWatch() {
+  const invalidate = useInvalidateAll();
+  return useMutation({ mutationFn: (id: string) => client.removeWatch(id), onSuccess: invalidate });
 }

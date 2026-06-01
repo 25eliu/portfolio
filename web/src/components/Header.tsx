@@ -95,7 +95,7 @@ export function Header({ onManage, onSeed, onRun, seeding, running }: Props) {
             onClick={onRun}
             loading={running}
           >
-            {running ? "Running" : "Run analysis"}
+            {running ? "Analyzing" : "Run analysis"}
           </Button>
         </div>
       </div>

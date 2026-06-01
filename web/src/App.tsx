@@ -11,6 +11,7 @@ import {
 import { EquityCurve } from "./components/EquityCurve.tsx";
 import { Header } from "./components/Header.tsx";
 import { JournalPlaceholder } from "./components/JournalPlaceholder.tsx";
+import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
 import { PortfolioPanel } from "./components/PortfolioPanel.tsx";
 import { Recommendations } from "./components/Recommendations.tsx";
 import { SummaryBand } from "./components/SummaryBand.tsx";
@@ -140,6 +141,7 @@ export default function App() {
         </Section>
 
         <Section title="Daily recommendations" index={3}>
+          <MarketContextBanner report={recommendations.data?.report ?? null} />
           <Recommendations report={recommendations.data?.report ?? null} />
         </Section>
 

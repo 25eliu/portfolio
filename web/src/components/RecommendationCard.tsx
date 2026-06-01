@@ -5,6 +5,17 @@ import { cn } from "../lib/cn.ts";
 import { usd } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
 
+/** Screen types from the discovery layer get a visually distinct (accent) tone. */
+const DISCOVERY_SCREENS = new Set(["sentiment", "thematic"]);
+
+function screenTone(screen: string): "accent" | "neutral" {
+  return DISCOVERY_SCREENS.has(screen) ? "accent" : "neutral";
+}
+
+function screenLabel(screen: string): string {
+  return screen.replace(/_/g, " ");
+}
+
 const ACTION_TONE: Record<Action, "pos" | "neg" | "neutral" | "accent"> = {
   BUY: "pos",
   SELL: "neg",
@@ -38,12 +49,17 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
   return (
     <article className="card p-4 transition-colors hover:border-hairline-strong">
       <header className="mb-2.5 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold tracking-tight text-text">{r.ticker}</span>
           <Badge tone={ACTION_TONE[r.action]}>{r.action}</Badge>
           <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
             {r.horizon}
           </span>
+          {r.screen && (
+            <Badge tone={screenTone(r.screen)}>
+              {screenLabel(r.screen)}
+            </Badge>
+          )}
         </div>
         <div className="text-right">
           <div className="eyebrow">Conviction</div>
@@ -101,6 +117,37 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         </div>
       )}
 
+      {r.fundamentals && (
+        <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5 text-[11px]">
+          <FundStat label="P/E" value={r.fundamentals.peTrailing != null ? r.fundamentals.peTrailing.toFixed(1) : "—"} />
+          <FundStat label="Rev YoY" value={r.fundamentals.revenueGrowthYoY != null ? `${r.fundamentals.revenueGrowthYoY.toFixed(0)}%` : "—"} />
+          <FundStat label="Net mgn" value={r.fundamentals.netMargin != null ? `${r.fundamentals.netMargin.toFixed(0)}%` : "—"} />
+          <FundStat label="Tgt up" value={r.priceTargetUpside != null ? `${r.priceTargetUpside.toFixed(0)}%` : "—"} />
+        </div>
+      )}
+
+      {r.sources.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-hairline pt-2">
+          {r.sources.slice(0, 3).map((s) => {
+            let label = s.title;
+            if (!label) {
+              try { label = new URL(s.url).hostname; } catch { label = s.url; }
+            }
+            return (
+              <a
+                key={s.url}
+                href={s.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-accent hover:underline"
+              >
+                {label}
+              </a>
+            );
+          })}
+        </div>
+      )}
+
       {hasDetail && (
         <>
           <button
@@ -147,6 +194,15 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between rounded-md bg-surface-2 px-2 py-1">
       <span className="text-text-muted">{label}</span>
       <span className="tnum font-mono text-text-secondary">{value}</span>
+    </div>
+  );
+}
+
+function FundStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-wide text-text-muted">{label}</div>
+      <div className="tnum font-mono text-[11px] text-text-secondary">{value}</div>
     </div>
   );
 }

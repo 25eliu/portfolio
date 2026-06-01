@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { useAddHolding, useDeleteHolding, useHoldings } from "../api/hooks.ts";
+import { Plus, Trash2, X } from "lucide-react";
+import { useAddHolding, useDeleteHolding, useHoldings, useAddWatch, useRemoveWatch, useWatchlist } from "../api/hooks.ts";
 import { usd } from "../lib/format.ts";
 import { Button } from "./ui/Button.tsx";
 import { Dialog } from "./ui/Dialog.tsx";
@@ -13,10 +13,17 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
   const add = useAddHolding();
   const del = useDeleteHolding();
 
+  const watchlist = useWatchlist();
+  const addWatch = useAddWatch();
+  const removeWatch = useRemoveWatch();
+
   const [symbol, setSymbol] = useState("");
   const [shares, setShares] = useState("");
   const [costBasis, setCostBasis] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const [watchSymbol, setWatchSymbol] = useState("");
+  const [watchError, setWatchError] = useState<string | null>(null);
 
   const submit = async () => {
     setError(null);
@@ -36,6 +43,20 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
       setCostBasis("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add holding");
+    }
+  };
+
+  const submitWatch = async () => {
+    setWatchError(null);
+    if (!watchSymbol.trim()) {
+      setWatchError("Enter a ticker symbol.");
+      return;
+    }
+    try {
+      await addWatch.mutateAsync(watchSymbol.trim().toUpperCase());
+      setWatchSymbol("");
+    } catch (e) {
+      setWatchError(e instanceof Error ? e.message : "Failed to add to watchlist");
     }
   };
 
@@ -120,6 +141,56 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
       </table>
 
       {error && <p className="mt-3 text-xs text-neg">{error}</p>}
+
+      {/* ── Watchlist section ─────────────────────────────────────── */}
+      <div className="mt-6 border-t border-hairline pt-5">
+        <div className="eyebrow mb-3">Watchlist</div>
+
+        {/* Current watchlist chips */}
+        {watchlist.data && watchlist.data.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {watchlist.data.map((w) => (
+              <span
+                key={w.id}
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-2 px-2.5 py-1 text-xs font-medium text-text"
+              >
+                {w.symbol}
+                <button
+                  onClick={() => removeWatch.mutate(w.id)}
+                  aria-label={`Remove ${w.symbol} from watchlist`}
+                  className="ml-0.5 rounded-full p-0.5 text-text-muted transition-colors hover:bg-neg/10 hover:text-neg"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {watchlist.data?.length === 0 && (
+          <p className="mb-3 text-xs text-text-muted">No symbols on your watchlist yet.</p>
+        )}
+
+        {/* Add to watchlist row */}
+        <div className="flex items-center gap-2">
+          <input
+            value={watchSymbol}
+            onChange={(e) => setWatchSymbol(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submitWatch()}
+            placeholder="Add to watchlist"
+            className={`${inputClass} flex-1 uppercase`}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={submitWatch}
+            loading={addWatch.isPending}
+          >
+            Watch
+          </Button>
+        </div>
+        {watchError && <p className="mt-2 text-xs text-neg">{watchError}</p>}
+      </div>
     </Dialog>
   );
 }
