@@ -13,7 +13,8 @@ export default defineConfig({
   webServer: {
     command: "bun run dev",
     url: "http://localhost:5173",
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000,
+    env: { MARKET_ADAPTER: "fake", DATABASE_PATH: "./data/e2e.sqlite", GEMINI_API_KEY: "", FMP_API_KEY: "" },
   },
 });

@@ -39,4 +39,24 @@ describe("loadEnv", () => {
     expect(e.MARKET_ADAPTER).toBe("alpaca");
     expect(e.ALPACA_KEY_ID).toBe("k");
   });
+
+  test("defaults the Phase 2 analysis knobs", () => {
+    const e = loadEnv({});
+    expect(e.GEMINI_MODEL).toBe("gemini-3.1-pro-preview");
+    expect(e.GEMINI_THINKING_LEVEL).toBe("medium");
+    expect(e.LLM_CONCURRENCY).toBe(4);
+    expect(e.MAX_SCAN_CANDIDATES).toBe(8);
+    expect(e.GEMINI_API_KEY).toBe("");
+    expect(e.FMP_API_KEY).toBe("");
+  });
+
+  test("coerces LLM_CONCURRENCY and MAX_SCAN_CANDIDATES", () => {
+    const e = loadEnv({ LLM_CONCURRENCY: "8", MAX_SCAN_CANDIDATES: "12" });
+    expect(e.LLM_CONCURRENCY).toBe(8);
+    expect(e.MAX_SCAN_CANDIDATES).toBe(12);
+  });
+
+  test("rejects an invalid thinking level", () => {
+    expect(() => loadEnv({ GEMINI_THINKING_LEVEL: "ultra" })).toThrow(/Invalid environment/);
+  });
 });
