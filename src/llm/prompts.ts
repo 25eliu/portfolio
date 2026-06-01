@@ -11,14 +11,39 @@ export type TickerInput = {
   riskPreset: string;
 };
 
-export function buildTickerPrompt(t: TickerInput, ctx: MarketContext): string {
+/**
+ * Two-stage analysis: Gemini 3 can't return real grounding citations together with a function call
+ * in one request (the combined call yields no extractable sources), so we run a grounded RESEARCH
+ * call (Search only → text + citations) followed by a STRUCTURE call (function tool only) that turns
+ * the research into the schema. Stage-A prompt builders are `*ResearchPrompt`; stage-B are the
+ * structuring prompts that take the research text.
+ */
+
+export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): string {
   return [
-    `You are an equity analyst. Analyze ${t.symbol} and return ONE recommendation via the`,
-    `submit_recommendation function. Use Google Search to verify recent catalysts/news and cite them.`,
-    `Base any numeric facts ONLY on the provided data; do not invent figures.`,
+    `You are an equity analyst researching ${t.symbol}. Use Google Search to find the most recent`,
+    `catalysts, news, earnings/guidance, analyst opinions, and credible sentiment (reputable analysts,`,
+    `notable investors, substantive financial press / Reddit / X). Weight credible voices over hype.`,
+    ``,
+    `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
+    `Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
+    ``,
+    `Summarize your findings in 4-6 sentences: the key catalysts, the prevailing sentiment and who`,
+    `holds it, and the main risks. Do not give a recommendation yet — just the researched facts.`,
+  ].join("\n");
+}
+
+export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+  return [
+    `You are an equity analyst. Using the research findings and quantitative data below, return ONE`,
+    `recommendation for ${t.symbol} by calling the submit_recommendation function.`,
+    `Base any numeric facts ONLY on the provided technicals/fundamentals; do not invent figures.`,
     ``,
     `Market context (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
-    `Risk profile: ${t.riskPreset}. Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
+    `Risk profile: ${t.riskPreset}.`,
+    ``,
+    `Research findings (sources already captured separately):`,
+    research || "(no external research available)",
     ``,
     `Technicals: ${JSON.stringify(t.technicals)}`,
     `Fundamentals: ${JSON.stringify(t.fundamentals)}`,
@@ -39,31 +64,38 @@ export function buildMarketContextPrompt(date: string, spyTrend: string, spyPctF
 }
 
 /**
- * Sentiment/thematic opportunity discovery prompt (Addendum A). Asks the model to scout the wider
- * market — via Google Search grounding — for high-potential US-listed equities that credible
- * professionals and high-signal communities are currently flagging, returning structured candidates
- * via the submit_candidates function.
+ * Sentiment/thematic opportunity discovery (Addendum A) — stage A research prompt. Scouts the wider
+ * market via Google Search for high-potential US equities credible professionals/communities flag.
  */
-export function buildDiscoveryPrompt(ctx: MarketContext, count: number): string {
+export function buildDiscoveryResearchPrompt(ctx: MarketContext, count: number): string {
   return [
     `You are a research analyst scouting the wider US equity market for breakthrough, high-potential`,
-    `opportunities. Use Google Search to find up to ${count} US-listed equities that credible`,
-    `professionals and high-signal communities are currently flagging.`,
+    `opportunities. Use Google Search to find ${count} US-listed equities that credible professionals`,
+    `and high-signal communities are currently flagging as opportunities.`,
     ``,
     `Current market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
     ``,
-    `Weight reputable analysts, notable investors, and substantive Reddit/X/financial-press`,
-    `discussion over anonymous hype. Favor high-potential industries and secular tech / market /`,
-    `economy tailwinds (e.g. AI infrastructure, energy transition, biotech breakthroughs) aligned`,
-    `with the current regime above.`,
+    `Weight reputable analysts, notable investors, and substantive Reddit/X/financial-press discussion`,
+    `over anonymous hype. Favor high-potential industries and secular tech / market / economy tailwinds`,
+    `(e.g. AI infrastructure, energy transition, biotech breakthroughs) aligned with the regime above.`,
+    `Exclude pump-and-dump / low-quality hype; prefer liquid, established names over thin microcaps.`,
     ``,
-    `Return your picks via the submit_candidates function. For each, provide:`,
+    `For each pick, note: the ticker, whether it is sentiment-driven or theme-driven, and a one-line`,
+    `credibility-aware rationale naming the kind of source behind it. This is research, not advice.`,
+  ].join("\n");
+}
+
+export function buildDiscoveryStructurePrompt(ctx: MarketContext, count: number, research: string): string {
+  return [
+    `From the research below, return up to ${count} opportunity candidates by calling the`,
+    `submit_candidates function. For each candidate provide:`,
     `  - symbol: the US ticker`,
     `  - screen: "sentiment" (credible-source sentiment driven) or "thematic" (secular theme driven)`,
     `  - reason: a one-line, credibility-aware rationale naming the kind of source behind it`,
-    `Cite your sources via grounding.`,
     ``,
-    `This is research, not investment advice. Exclude pump-and-dump / low-quality hype. Prefer`,
-    `liquid, established names over thinly-traded microcaps.`,
+    `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
+    ``,
+    `Research findings (sources already captured separately):`,
+    research || "(no external research available)",
   ].join("\n");
 }
