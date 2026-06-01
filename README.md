@@ -47,6 +47,38 @@ the paper brokerage (AI portfolio) and stock pricing (equity curves + SPY benchm
 > Security: keys live in `.env` only (gitignored), never in source. The app refuses to start with
 > `MARKET_ADAPTER=alpaca` unless `ALPACA_PAPER=true`. There is no live-money path.
 
+## Phase 2: analysis (Gemini + FMP)
+
+Phase 2 replaces the deterministic fake report with a real LLM analysis step.  Two free API keys are
+required:
+
+1. **Gemini** — get a free key at <https://aistudio.google.com/apikey>
+2. **FMP (Financial Modeling Prep)** — get a free key at <https://site.financialmodelingprep.com/developer/docs>
+
+Add both to `.env`:
+
+```
+GEMINI_API_KEY=your_gemini_key
+FMP_API_KEY=your_fmp_key
+```
+
+Verify each key before running the full pipeline:
+
+```bash
+bun run gemini:smoke   # calls Gemini API with a single test prompt
+bun run fmp:smoke      # fetches a sample FMP endpoint
+```
+
+> **No key? No problem.** If `GEMINI_API_KEY` is absent the app falls back to the deterministic fake
+> report, so the dashboard still works end-to-end without any credentials.
+
+The Phase 2 analysis covers:
+
+- **Held positions** — valuation + conviction score for every ticker you own
+- **Watchlist** — the same analysis for tickers you are tracking but do not hold
+- **Opportunity scan** — top daily movers (via market adapter), FMP screener results, and
+  LLM-driven sentiment / thematic discovery across the combined universe
+
 ## Scripts
 
 | Command | What it does |
@@ -55,6 +87,8 @@ the paper brokerage (AI portfolio) and stock pricing (equity curves + SPY benchm
 | `bun run server` | Backend API only (:8787) |
 | `bun run db:migrate` | Create/upgrade the SQLite schema |
 | `bun run alpaca:smoke` | Verify Alpaca paper credentials |
+| `bun run gemini:smoke` | Verify Gemini API key |
+| `bun run fmp:smoke` | Verify FMP API key |
 | `bun test` | Unit + integration tests (fake adapter) |
 | `bunx playwright install chromium && bun run test:e2e` | Browser E2E (one-time browser install) |
 | `bun run build:web` | Production frontend build |

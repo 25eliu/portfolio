@@ -39,3 +39,11 @@ test("rejects an invalid holding", async ({ page }) => {
   await page.getByRole("button", { name: "Add" }).click();
   await expect(page.getByText(/positive share count/)).toBeVisible();
 });
+
+test("add a watchlist symbol", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Manage" }).click();
+  await page.getByPlaceholder("Add to watchlist").fill("TSLA");
+  await page.getByRole("button", { name: "Watch" }).click();
+  await expect(page.getByText("TSLA").first()).toBeVisible();
+});
