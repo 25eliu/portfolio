@@ -2,3 +2,5 @@
 # Playwright E2E specs live in e2e/ and run via `bun run test:e2e` (playwright test).
 [test]
 root = "src"
+# Mask real .env credentials so tests stay hermetic (no live API calls).
+preload = ["./test-setup.ts"]
