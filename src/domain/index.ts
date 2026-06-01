@@ -6,3 +6,4 @@ export * from "./technicals.ts";
 export * from "./recommendation.ts";
 export * from "./risk.ts";
 export * from "./fundamentals.ts";
+export * from "./scan.ts";
