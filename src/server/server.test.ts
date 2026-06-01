@@ -84,8 +84,17 @@ describe("seed + run + state", () => {
     expect(portfolios.user.positions).toHaveLength(1);
     expect(portfolios.ai.positions).toHaveLength(1);
 
+    // /run is fire-and-poll: it returns immediately, then the run completes in the background.
     const run = (await (await req("/api/run", { method: "POST" })).json()) as { status: string };
-    expect(run.status).toBe("ok");
+    expect(["started", "already_running"]).toContain(run.status);
+
+    let lastStatus = "running";
+    for (let i = 0; i < 100 && lastStatus === "running"; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      const s = (await (await req("/api/status")).json()) as { lastRun: { status: string } | null };
+      lastStatus = s.lastRun?.status ?? "running";
+    }
+    expect(lastStatus).toBe("ok");
 
     const snaps = (await (await req("/api/snapshots")).json()) as {
       user: unknown[];

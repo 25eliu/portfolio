@@ -6,7 +6,18 @@ import { dailyRun } from "../../pipeline/index.ts";
 export function runRoutes(app: App): Hono {
   const r = new Hono();
 
-  r.post("/run", async (c) => c.json(await dailyRun(app)));
+  // Fire-and-poll: a real LLM run takes minutes, far longer than any HTTP idle timeout. Start it in
+  // the background (it records itself in the runs table + writes the report on completion) and return
+  // immediately; the client polls GET /status until the run leaves the "running" state.
+  r.post("/run", (c) => {
+    if (app.repos.runs.latest()?.status === "running") {
+      return c.json({ status: "already_running" });
+    }
+    void dailyRun(app).catch((err) =>
+      console.error("dailyRun failed:", err instanceof Error ? err.message : err),
+    );
+    return c.json({ status: "started" });
+  });
 
   r.get("/status", (c) => c.json({ lastRun: app.repos.runs.latest() }));
 

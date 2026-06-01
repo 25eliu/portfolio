@@ -43,9 +43,32 @@ export function useSeedAi() {
   return useMutation({ mutationFn: () => client.seedAi(), onSuccess: invalidate });
 }
 
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+/**
+ * /run is fire-and-poll: it starts the run server-side and returns immediately. We then poll
+ * /status until the run leaves "running" so `isPending` (the "Analyzing" state) stays true for the
+ * whole run, and the success/error toast fires at the right time.
+ */
 export function useRunNow() {
   const invalidate = useInvalidateAll();
-  return useMutation({ mutationFn: () => client.run(), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: async () => {
+      await client.run(); // "started" or "already_running" — either way, poll the in-flight run
+      await sleep(500); // let the background run register its "running" row
+      for (let i = 0; i < 300; i++) {
+        // up to ~10 minutes
+        const { lastRun } = await client.status();
+        if (lastRun && lastRun.status !== "running") {
+          if (lastRun.status === "error") throw new Error(lastRun.error ?? "Run failed");
+          return lastRun;
+        }
+        await sleep(2000);
+      }
+      throw new Error("Run timed out");
+    },
+    onSuccess: invalidate,
+  });
 }
 
 export function useSetRisk() {

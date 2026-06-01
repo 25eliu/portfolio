@@ -7,7 +7,8 @@ const app = createApp();
 const server = createServer(app);
 const port = env().PORT;
 
-Bun.serve({ port, fetch: server.fetch });
+// idleTimeout is a safety net; /run is fire-and-poll so requests stay short regardless.
+Bun.serve({ port, fetch: server.fetch, idleTimeout: 255 });
 console.log(
   `→ Portfolio API on http://localhost:${port}  (adapter: ${app.gateway.kind}, db: ${app.env.DATABASE_PATH})`,
 );
