@@ -52,10 +52,10 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
     async getQuotes(symbols: string[]): Promise<Quote[]> {
       return symbols.map((s) => ({ symbol: s, price: priceNow(s) }));
     },
-    async getBars(symbol: string, days: number): Promise<Bar[]> {
+    async getBars(symbol: string, lookbackDays: number): Promise<Bar[]> {
       const out: Bar[] = [];
       const end = new Date(`${now()}T00:00:00Z`);
-      for (let i = days - 1; i >= 0; i--) {
+      for (let i = lookbackDays - 1; i >= 0; i--) {
         const d = new Date(end);
         d.setUTCDate(d.getUTCDate() - i);
         const date = d.toISOString().slice(0, 10);
@@ -63,6 +63,20 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
         out.push({ date, open: close, high: close, low: close, close, volume: 1_000_000 });
       }
       return out;
+    },
+    async getMovers(limit: number): Promise<import("../types.ts").Mover[]> {
+      const pool = ["NVDA", "TSLA", "AMD", "AAPL", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AVGO"];
+      return pool.slice(0, limit).map((symbol) => {
+        const today = now();
+        const prev = fakePrice(symbol, `${today}~prev`);
+        const price = fakePrice(symbol, today);
+        return {
+          symbol,
+          price,
+          changePct: Math.round(((price - prev) / prev) * 10000) / 100,
+          volume: 5_000_000,
+        };
+      });
     },
   };
 

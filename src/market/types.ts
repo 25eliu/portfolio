@@ -46,10 +46,13 @@ export type Order = {
   status: string;
 };
 
+export type Mover = { symbol: string; price: number; changePct: number; volume: number };
+
 export interface MarketData {
   getQuote(symbol: string): Promise<Quote>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
-  getBars(symbol: string, days: number): Promise<Bar[]>;
+  getBars(symbol: string, lookbackDays: number): Promise<Bar[]>;
+  getMovers(limit: number): Promise<Mover[]>;
 }
 
 export interface Broker {

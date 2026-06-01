@@ -80,10 +80,11 @@ export function createAlpacaGateway(env: Env): MarketGateway {
       return q ?? { symbol, price: 0 };
     },
     getQuotes,
-    async getBars(symbol: string, days: number): Promise<Bar[]> {
+    async getBars(symbol: string, lookbackDays: number): Promise<Bar[]> {
+      const start = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
       const raw = await request(
         env.ALPACA_DATA_BASE_URL,
-        `/v2/stocks/${symbol}/bars?timeframe=1Day&limit=${days}&feed=iex`,
+        `/v2/stocks/${symbol}/bars?timeframe=1Day&start=${start}&limit=10000&feed=iex&adjustment=split`,
       );
       const parsed = BarsRes.parse(raw);
       return (parsed.bars ?? []).map((b) => ({
@@ -94,6 +95,19 @@ export function createAlpacaGateway(env: Env): MarketGateway {
         close: b.c,
         volume: b.v,
       }));
+    },
+    async getMovers(limit: number): Promise<import("../types.ts").Mover[]> {
+      const raw = await request(
+        env.ALPACA_DATA_BASE_URL,
+        `/v1beta1/screener/stocks/most-actives?top=${limit}`,
+      );
+      const Schema = z.object({
+        most_actives: z.array(z.object({ symbol: z.string(), volume: z.number(), trade_count: z.number().optional() })).default([]),
+      });
+      const actives = Schema.parse(raw).most_actives.slice(0, limit);
+      const quotes = await getQuotes(actives.map((a) => a.symbol));
+      const priceOf = new Map(quotes.map((q) => [q.symbol, q.price]));
+      return actives.map((a) => ({ symbol: a.symbol, price: priceOf.get(a.symbol) ?? 0, changePct: 0, volume: a.volume }));
     },
 
     async getAccount(): Promise<Account> {

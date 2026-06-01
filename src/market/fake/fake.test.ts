@@ -33,6 +33,25 @@ describe("fake gateway market data", () => {
   });
 });
 
+describe("fake gateway market data — extended", () => {
+  test("getBars returns the full lookback window of history", async () => {
+    const gw = createFakeGateway({ now: clock });
+    const bars = await gw.getBars("AAPL", 250);
+    expect(bars.length).toBe(250);
+    expect(bars[0]!.date < bars[249]!.date).toBe(true);
+    expect(bars[249]!.date).toBe(FIXED);
+  });
+
+  test("getMovers returns a deterministic candidate set", async () => {
+    const gw = createFakeGateway({ now: clock });
+    const movers = await gw.getMovers(5);
+    expect(movers.length).toBe(5);
+    expect(movers.every((m) => typeof m.symbol === "string" && m.changePct != null)).toBe(true);
+    const again = await gw.getMovers(5);
+    expect(again.map((m) => m.symbol)).toEqual(movers.map((m) => m.symbol));
+  });
+});
+
 describe("fake gateway brokerage", () => {
   test("buy reduces cash and creates a position", async () => {
     const gw = createFakeGateway({ now: clock, startingCash: 100_000 });
