@@ -12,6 +12,8 @@
     "build:web": "vite build --config web/vite.config.ts",
     "db:migrate": "bun run src/db/migrate.ts",
     "alpaca:smoke": "bun run scripts/alpaca-smoke.ts",
+    "gemini:smoke": "bun run scripts/gemini-smoke.ts",
+    "fmp:smoke": "bun run scripts/fmp-smoke.ts",
     "test": "bun test",
     "test:e2e": "playwright test"
   },

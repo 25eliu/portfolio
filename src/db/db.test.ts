@@ -101,6 +101,7 @@ describe("reports", () => {
       generatedAt: "2026-06-01T20:00:00.000Z",
       source: "fake",
       recommendations: [],
+      marketContext: null,
     });
     expect(repos.reports.latest()?.date).toBe("2026-06-01");
   });

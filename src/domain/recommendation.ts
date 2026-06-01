@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { Symbol } from "./holding.ts";
 import { Technicals } from "./technicals.ts";
+import { Fundamentals } from "./fundamentals.ts";
+import { MarketContext, Source } from "./marketContext.ts";
 
 export const Action = z.enum(["BUY", "SELL", "HOLD", "WATCH"]);
 export type Action = z.infer<typeof Action>;
@@ -38,6 +40,14 @@ export const Recommendation = z.object({
   thesis: z.string(),
   signals: z.array(z.string()),
   technicals: Technicals,
+  /** Fundamental snapshot used in the analysis (null until the LLM/FMP step populates it). */
+  fundamentals: Fundamentals.nullable().default(null),
+  /** Analyst price-target upside vs latest price, as a percentage (null when unavailable). */
+  priceTargetUpside: z.number().nullable().default(null),
+  /** Grounding citations backing the recommendation. */
+  sources: z.array(Source).default([]),
+  /** Originating opportunity screen for scan candidates (null for held/watchlist). */
+  screen: z.string().nullable().default(null),
   catalyst: Catalyst.nullable().default(null),
   tradePlan: TradePlan.nullable().default(null),
   briefingNote: z.string().nullable().default(null),
@@ -53,5 +63,7 @@ export const DailyReport = z.object({
   generatedAt: z.string().datetime(),
   source: z.enum(["fake", "llm"]),
   recommendations: z.array(Recommendation),
+  /** Daily market regime context (null until the LLM step builds it). */
+  marketContext: MarketContext.nullable().default(null),
 });
 export type DailyReport = z.infer<typeof DailyReport>;

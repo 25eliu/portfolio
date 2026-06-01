@@ -16,9 +16,9 @@ export async function runOpportunityScan(
     fundamentals.screen({ roeMoreThan: 15, marketCapMoreThan: 2e9, limit: per }).catch(() => []),
   ]);
   const out: ScanCandidate[] = [];
-  for (const m of movers) out.push({ symbol: m.symbol, screen: "momentum", reason: `most active, vol ${m.volume.toLocaleString()}` });
-  for (const s of value) out.push({ symbol: s, screen: "value", reason: "low P/E, mid+ cap" });
-  for (const s of quality) out.push({ symbol: s, screen: "quality_growth", reason: "ROE > 15%" });
+  for (const m of movers) out.push({ symbol: m.symbol, screen: "momentum", reason: `most active, vol ${m.volume.toLocaleString()}`, sources: [] });
+  for (const s of value) out.push({ symbol: s, screen: "value", reason: "low P/E, mid+ cap", sources: [] });
+  for (const s of quality) out.push({ symbol: s, screen: "quality_growth", reason: "ROE > 15%", sources: [] });
   // dedupe by symbol, keep first occurrence, cap
   const seen = new Set<string>();
   return out.filter((c) => (seen.has(c.symbol) ? false : (seen.add(c.symbol), true))).slice(0, limit);

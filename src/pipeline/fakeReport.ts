@@ -55,6 +55,10 @@ function makeRecommendation(symbol: string, date: string): Recommendation {
       : null,
     briefingNote: null,
     watchTrigger: action === "WATCH" ? `reclaims ${target}` : null,
+    fundamentals: null,
+    priceTargetUpside: null,
+    sources: [],
+    screen: null,
   };
 }
 
@@ -66,5 +70,6 @@ export function generateFakeReport(symbols: string[], date: string): DailyReport
     generatedAt: new Date().toISOString(),
     source: "fake",
     recommendations: universe.map((sym) => makeRecommendation(sym, date)),
+    marketContext: null,
   };
 }

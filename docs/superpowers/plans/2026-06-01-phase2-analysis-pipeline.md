@@ -1901,3 +1901,73 @@ git commit -m "test(e2e): watchlist flow; docs: Phase 2 setup"
 - **Spec coverage:** technicals (Task 3), fundamentals + FMP + cache (Task 4), opportunity scan + universe (Task 5), LLM grounded analysis + schema + spike (Task 6), market context (Task 7), watchlist (Task 8), pipeline swap + fake fallback + resilience (Task 9), UI: banner/card/watchlist/analyzing (Task 10), config + E2E safety (Task 1), market data history+movers (Task 2), live verification (Task 11). All spec sections map to a task.
 - **Type consistency:** `Analyzer.analyzeTicker(TickerInput, MarketContext)`, `FundamentalsSource.get/screen`, `MarketData.getBars(symbol, days)/getMovers(limit)`, `buildUniverse({held,watchlist,scan})→{symbols,bySymbol}`, `computeTechnicals(bars, beta)→Technicals` are used consistently across tasks.
 - **Known uncertainty (handled, not a placeholder):** the exact `@google/genai` config shape for `thinkingLevel` and the grounding+function-tool single-call behavior on `gemini-3.1-pro-preview` are confirmed by the Task 6 Step 1–2 spike before `gemini.ts` is finalized; two-stage fallback documented. FMP field names confirmed by `fmp:smoke`; unknown fields stay null by design.
+
+---
+
+## Addendum A — Sentiment / thematic opportunity discovery (user-requested)
+
+The opportunity scan must do more than quantitative screening. In addition to Task 5's movers + FMP
+fundamental screens, add an **LLM-grounded sentiment/thematic discovery** pass that scouts the wider
+market for breakthrough, high-potential opportunities — the kind credible professionals are pointing
+at — and folds them into the universe as additional candidates. It runs on Gemini 3.1 Pro + Google
+Search grounding (no new API key); a dedicated social API can be added later if deeper real-time
+social data is wanted.
+
+**What it surfaces (credibility-filtered, research not advice):**
+- Sentiment from credible sources: reputable analysts/investors, high-signal Reddit/X discussion,
+  reputable financial press — aggregated, with the source cited.
+- Where trusted professionals are scouting opportunity; conviction from named, reputable voices over
+  anonymous hype.
+- High-potential industries and the direction technology / markets / the economy are heading
+  (secular themes: AI infra, energy transition, biotech breakthroughs, etc.).
+
+**Design changes (implement in Task 6, wire in Task 9):**
+
+1. **`ScreenType` (extend `src/domain/scan.ts`)** — add `"sentiment"` and `"thematic"` to the enum
+   (now: `momentum | mean_reversion | value | quality_growth | catalyst | sentiment | thematic`).
+   Add an optional `sources` field to `ScanCandidate`:
+   ```ts
+   import { Source } from "./marketContext.ts"; // {title,url}
+   export const ScanCandidate = z.object({
+     symbol: z.string(),
+     screen: ScreenType,
+     reason: z.string(),
+     sources: z.array(Source).default([]),
+   });
+   ```
+
+2. **`Analyzer` interface (extend in `src/llm/analyze.ts`)** — add:
+   ```ts
+   discoverOpportunities(ctx: MarketContext, count: number): Promise<ScanCandidate[]>;
+   ```
+   - **Mock** returns a deterministic list (e.g. 2 candidates tagged `thematic`/`sentiment` with a
+     reason and empty `sources`), so pipeline tests stay offline + deterministic.
+   - **Gemini** implementation: one grounded `generateContent` call (Search enabled) using a
+     `submit_candidates` function-tool whose params are `{ candidates: [{ symbol, screen, reason }] }`.
+     Extract args + grounding citations → attach `sources` to each candidate. Validate each through
+     `ScanCandidate`. On failure return `[]` (never fatal).
+
+3. **Discovery prompt (`src/llm/prompts.ts`, `buildDiscoveryPrompt(ctx, count)`)** — instruct the
+   model to: use Google Search to find up to `count` high-potential US-listed equities that credible
+   professionals / high-signal communities are currently flagging as breakthrough opportunities;
+   weight reputable analysts, notable investors, and substantive Reddit/X/press discussion over hype;
+   favor high-potential industries and secular tech/market/economy tailwinds aligned with the current
+   market regime (`ctx`); for each return `{symbol, screen: "sentiment"|"thematic", reason}` with a
+   one-line credibility-aware reason; cite sources. Explicitly: this is research, not advice; exclude
+   pump-and-dump / low-quality hype; prefer liquid names.
+
+4. **Config (`src/config/env.ts`)** — add `MAX_THEMATIC_CANDIDATES` (coerce int nonnegative, default
+   5). Append to `.env.example`. (0 disables the thematic pass.)
+
+5. **Universe wiring (Task 9, `src/pipeline/llmReport.ts`)** — after building `ctx` and the quant
+   `scan`, also run `const thematic = analyzer ? await analyzer.discoverOpportunities(ctx, app.env.MAX_THEMATIC_CANDIDATES).catch(() => []) : [];`
+   then `buildUniverse({ held, watchlist, scan: [...scan, ...thematic] })`. Precedence unchanged
+   (held > watchlist > scan/thematic). Dedupe already handled by `buildUniverse` + `runOpportunityScan`'s
+   own dedupe; ensure combined scan list is deduped by symbol before universe build.
+
+6. **Tests** — mock `discoverOpportunities` returns deterministic candidates; assert they appear in
+   the report's universe (Task 9 test) and that a thematic candidate with no held/watchlist overlap
+   shows `source: "scan"` in the universe. Keep everything offline (mock analyzer).
+
+7. **UI (Task 10)** — recommendation cards already show `screen`; ensure `sentiment`/`thematic`
+   candidates render their `reason` + `sources` (the card's citations block already covers sources).

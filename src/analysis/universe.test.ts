@@ -21,7 +21,7 @@ describe("buildUniverse", () => {
     const u = buildUniverse({
       held: ["AAPL", "NVDA"],
       watchlist: ["NVDA", "MSFT"],
-      scan: [{ symbol: "AAPL", screen: "momentum", reason: "x" }, { symbol: "TSLA", screen: "value", reason: "y" }],
+      scan: [{ symbol: "AAPL", screen: "momentum", reason: "x", sources: [] }, { symbol: "TSLA", screen: "value", reason: "y", sources: [] }],
     });
     expect(u.symbols.sort()).toEqual(["AAPL", "MSFT", "NVDA", "TSLA"]);
     expect(u.bySymbol.get("AAPL")?.source).toBe("held"); // held wins over scan

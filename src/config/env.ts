@@ -25,6 +25,7 @@ const EnvSchema = z.object({
   FMP_API_KEY: z.string().default(""),
   LLM_CONCURRENCY: z.coerce.number().int().positive().default(4),
   MAX_SCAN_CANDIDATES: z.coerce.number().int().nonnegative().default(8),
+  MAX_THEMATIC_CANDIDATES: z.coerce.number().int().nonnegative().default(5),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
