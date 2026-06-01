@@ -1,0 +1,46 @@
+{
+  "name": "portfolio-intel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portfolio Intelligence Platform — Phase 0+1 (foundations + dual portfolio mirror)",
+  "scripts": {
+    "server": "bun run src/server/index.ts",
+    "dev:server": "bun --watch src/server/index.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "dev": "bun run scripts/dev.ts",
+    "build:web": "vite build --config web/vite.config.ts",
+    "db:migrate": "bun run src/db/migrate.ts",
+    "alpaca:smoke": "bun run scripts/alpaca-smoke.ts",
+    "test": "bun test",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-toggle-group": "^1.1.11",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@tanstack/react-query": "^5.62.7",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.40.0",
+    "hono": "^4.6.14",
+    "lucide-react": "^1.17.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/bun": "^1.1.14",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

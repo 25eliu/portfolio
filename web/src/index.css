@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  /* Token mirror — chart code reads these so SVG fills match the Tailwind palette exactly. */
+  --canvas: #0b0d10;
+  --surface: #14171c;
+  --surface-2: #181c22;
+  --hairline: #232830;
+  --hairline-strong: #2e343d;
+  --text: #e6e9ee;
+  --text-secondary: #9ba3ae;
+  --text-muted: #646b76;
+  --accent: #4f8dfd;
+  --pos: #2fb574;
+  --neg: #e5484d;
+  --warn: #e3b341;
+}
+
+* {
+  border-color: theme("colors.hairline.DEFAULT");
+}
+
+body {
+  @apply bg-canvas text-text font-sans antialiased;
+  margin: 0;
+  font-feature-settings: "ss01", "cv01", "tnum";
+  font-variant-numeric: tabular-nums;
+  /* Subtle top-of-page atmosphere so the canvas isn't a flat void. */
+  background-image: radial-gradient(
+    120% 80% at 50% -10%,
+    rgba(79, 141, 253, 0.06) 0%,
+    rgba(11, 13, 16, 0) 55%
+  );
+  background-attachment: fixed;
+}
+
+/* Tabular figures everywhere numbers live. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(79, 141, 253, 0.28);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
+  border-radius: 6px;
+}
+
+/* Thin, unobtrusive scrollbar. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #262c35;
+  border: 2px solid var(--canvas);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #323a45;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-hairline bg-surface shadow-card;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

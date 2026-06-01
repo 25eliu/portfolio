@@ -1,0 +1,4 @@
+# Keep `bun test` scoped to the backend unit/integration suite.
+# Playwright E2E specs live in e2e/ and run via `bun run test:e2e` (playwright test).
+[test]
+root = "src"
