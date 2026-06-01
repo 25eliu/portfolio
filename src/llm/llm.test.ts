@@ -15,6 +15,7 @@ describe("mock analyzer", () => {
       {
         symbol: "AAPL",
         source: "held",
+        screen: null,
         price: 200,
         technicals: emptyTechnicals(),
         fundamentals: emptyFundamentals("AAPL"),

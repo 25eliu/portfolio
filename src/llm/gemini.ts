@@ -61,7 +61,7 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         fundamentals: input.fundamentals,
         priceTargetUpside: upside,
         sources: citations(res),
-        screen: input.screenReason ? input.source : null,
+        screen: input.screen,
       });
     },
 

@@ -2,6 +2,7 @@ import type { App } from "../app.ts";
 import { newId } from "../domain/index.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "./pricing.ts";
 import { generateFakeReport } from "./fakeReport.ts";
+import { generateLlmReport } from "./llmReport.ts";
 import type { PricedPortfolio, RunResult } from "./types.ts";
 
 function persistSnapshot(app: App, p: PricedPortfolio, date: string): void {
@@ -28,11 +29,10 @@ export async function dailyRun(app: App): Promise<RunResult> {
     // Steps 1+2 — sync + price both portfolios.
     const [user, ai] = await Promise.all([priceUserPortfolio(app), priceAiPortfolio(app)]);
 
-    // Step 3 — placeholder for the Phase 2 LLM analysis.
-    const report = generateFakeReport(
-      user.positions.map((p) => p.symbol),
-      date,
-    );
+    // Step 3 — analysis: real LLM report when an analyzer is configured, else fake fallback.
+    const report = app.analyzer
+      ? await generateLlmReport(app)
+      : generateFakeReport(user.positions.map((p) => p.symbol), date);
 
     // Step 4 — persist snapshots, SPY benchmark, report.
     persistSnapshot(app, user, date);

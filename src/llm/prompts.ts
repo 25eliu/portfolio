@@ -1,8 +1,9 @@
-import type { Fundamentals, MarketContext, Technicals } from "../domain/index.ts";
+import type { Fundamentals, MarketContext, ScreenType, Technicals } from "../domain/index.ts";
 
 export type TickerInput = {
   symbol: string;
   source: "held" | "watchlist" | "scan";
+  screen: ScreenType | null;
   screenReason?: string;
   price: number;
   technicals: Technicals;

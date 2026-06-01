@@ -39,7 +39,7 @@ export function createMockAnalyzer(): Analyzer {
         fundamentals: input.fundamentals,
         priceTargetUpside: null,
         sources: [],
-        screen: input.source === "scan" ? "momentum" : null,
+        screen: input.screen,
       };
     },
     async marketMacro() {
