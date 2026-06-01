@@ -5,6 +5,7 @@ import type {
   Bar,
   BrokerPosition,
   MarketGateway,
+  Mover,
   Order,
   OrderInput,
   Quote,
@@ -39,6 +40,11 @@ const BarsRes = z.object({
   bars: z
     .array(z.object({ t: z.string(), o: z.number(), h: z.number(), l: z.number(), c: z.number(), v: z.number() }))
     .nullable()
+    .default([]),
+});
+const MoversRes = z.object({
+  most_actives: z
+    .array(z.object({ symbol: z.string(), volume: z.number(), trade_count: z.number().optional(), percent_change: z.number().optional() }))
     .default([]),
 });
 
@@ -80,6 +86,8 @@ export function createAlpacaGateway(env: Env): MarketGateway {
       return q ?? { symbol, price: 0 };
     },
     getQuotes,
+    // lookbackDays is CALENDAR days; Alpaca returns only trading days so the returned bar count is
+    // smaller than lookbackDays (roughly 0.69×). Callers needing N trading days should pass ~1.5×N.
     async getBars(symbol: string, lookbackDays: number): Promise<Bar[]> {
       const start = new Date(Date.now() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
       const raw = await request(
@@ -96,18 +104,22 @@ export function createAlpacaGateway(env: Env): MarketGateway {
         volume: b.v,
       }));
     },
-    async getMovers(limit: number): Promise<import("../types.ts").Mover[]> {
+    async getMovers(limit: number): Promise<Mover[]> {
       const raw = await request(
         env.ALPACA_DATA_BASE_URL,
         `/v1beta1/screener/stocks/most-actives?top=${limit}`,
       );
-      const Schema = z.object({
-        most_actives: z.array(z.object({ symbol: z.string(), volume: z.number(), trade_count: z.number().optional() })).default([]),
-      });
-      const actives = Schema.parse(raw).most_actives.slice(0, limit);
+      const actives = MoversRes.parse(raw).most_actives;
       const quotes = await getQuotes(actives.map((a) => a.symbol));
       const priceOf = new Map(quotes.map((q) => [q.symbol, q.price]));
-      return actives.map((a) => ({ symbol: a.symbol, price: priceOf.get(a.symbol) ?? 0, changePct: 0, volume: a.volume }));
+      // most-actives is volume-ranked; percent_change may be absent (then 0), and momentum is
+      // refined downstream from computed technicals.
+      return actives.map((a) => ({
+        symbol: a.symbol,
+        price: priceOf.get(a.symbol) ?? 0,
+        changePct: a.percent_change ?? 0,
+        volume: a.volume,
+      }));
     },
 
     async getAccount(): Promise<Account> {

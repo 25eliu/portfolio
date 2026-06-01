@@ -5,6 +5,7 @@ import type {
   Broker,
   BrokerPosition,
   MarketGateway,
+  Mover,
   Order,
   OrderInput,
   Quote,
@@ -52,6 +53,7 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
     async getQuotes(symbols: string[]): Promise<Quote[]> {
       return symbols.map((s) => ({ symbol: s, price: priceNow(s) }));
     },
+    // Returns one bar per calendar day as a deterministic approximation (no market-close filtering).
     async getBars(symbol: string, lookbackDays: number): Promise<Bar[]> {
       const out: Bar[] = [];
       const end = new Date(`${now()}T00:00:00Z`);
@@ -64,7 +66,8 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
       }
       return out;
     },
-    async getMovers(limit: number): Promise<import("../types.ts").Mover[]> {
+    async getMovers(limit: number): Promise<Mover[]> {
+      // Candidate pool caps at 10 symbols; requests for more are truncated to 10.
       const pool = ["NVDA", "TSLA", "AMD", "AAPL", "META", "AMZN", "MSFT", "GOOGL", "NFLX", "AVGO"];
       return pool.slice(0, limit).map((symbol) => {
         const today = now();
