@@ -7,6 +7,7 @@ type Row = {
   generated_at: string;
   source: string;
   recommendations_json: string;
+  market_context_json: string | null;
 };
 
 const toDomain = (r: Row): DailyReport =>
@@ -16,6 +17,7 @@ const toDomain = (r: Row): DailyReport =>
     generatedAt: r.generated_at,
     source: r.source,
     recommendations: JSON.parse(r.recommendations_json),
+    marketContext: r.market_context_json ? JSON.parse(r.market_context_json) : null,
   });
 
 export function reportsRepo(db: DB) {
@@ -23,14 +25,15 @@ export function reportsRepo(db: DB) {
     insert(report: DailyReport): DailyReport {
       const valid = DailyReport.parse(report);
       db.query(
-        `INSERT INTO reports (id, date, generated_at, source, recommendations_json)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO reports (id, date, generated_at, source, recommendations_json, market_context_json)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       ).run(
         valid.id,
         valid.date,
         valid.generatedAt,
         valid.source,
         JSON.stringify(valid.recommendations),
+        JSON.stringify(valid.marketContext ?? null),
       );
       return valid;
     },

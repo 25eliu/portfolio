@@ -105,6 +105,27 @@ describe("reports", () => {
     });
     expect(repos.reports.latest()?.date).toBe("2026-06-01");
   });
+
+  test("round-trips marketContext", () => {
+    repos.reports.insert({
+      id: newId(),
+      date: "2026-06-02",
+      generatedAt: "2026-06-02T20:00:00.000Z",
+      source: "llm",
+      recommendations: [],
+      marketContext: {
+        date: "2026-06-02",
+        spyTrend: "up",
+        spyPctFromSma200: 3.2,
+        macroSummary: "risk-on",
+        sources: [{ title: "X", url: "https://example.com" }],
+      },
+    });
+    const latest = repos.reports.latest();
+    expect(latest?.marketContext?.spyTrend).toBe("up");
+    expect(latest?.marketContext?.macroSummary).toBe("risk-on");
+    expect(latest?.marketContext?.sources).toHaveLength(1);
+  });
 });
 
 describe("runs", () => {

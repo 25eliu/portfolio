@@ -80,4 +80,8 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
       );
     `,
   },
+  {
+    name: "003_report_market_context",
+    sql: `ALTER TABLE reports ADD COLUMN market_context_json TEXT;`,
+  },
 ];
