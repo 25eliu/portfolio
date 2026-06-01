@@ -118,6 +118,20 @@ describe("watchlist", () => {
     const del = await req(`/api/watchlist/${created.id}`, { method: "DELETE" });
     expect(del.status).toBe(200);
   });
+
+  test("rejects invalid input with 400", async () => {
+    const res = await req("/api/watchlist", {
+      method: "POST",
+      body: JSON.stringify({ symbol: "1NV@LID" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("404 when deleting a missing watchlist item", async () => {
+    const res = await req("/api/watchlist/nope", { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("risk", () => {
