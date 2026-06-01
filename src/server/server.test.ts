@@ -106,6 +106,20 @@ describe("seed + run + state", () => {
   });
 });
 
+describe("watchlist", () => {
+  test("add, list, delete", async () => {
+    const add = await req("/api/watchlist", {
+      method: "POST", body: JSON.stringify({ symbol: "tsla" }), headers: { "Content-Type": "application/json" },
+    });
+    expect(add.status).toBe(201);
+    const created = (await add.json()) as { id: string; symbol: string };
+    expect(created.symbol).toBe("TSLA");
+    expect(((await (await req("/api/watchlist")).json()) as unknown[]).length).toBe(1);
+    const del = await req(`/api/watchlist/${created.id}`, { method: "DELETE" });
+    expect(del.status).toBe(200);
+  });
+});
+
 describe("risk", () => {
   test("put then get a preset", async () => {
     const put = await req("/api/risk", {
