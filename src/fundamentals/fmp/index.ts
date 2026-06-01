@@ -12,7 +12,8 @@ export function createFmpFundamentals(env: Env): FundamentalsSource {
   async function fmp(path: string, params = ""): Promise<unknown> {
     const sep = params ? "&" : "";
     const res = await fetch(`${BASE}${path}?apikey=${key}${sep}${params}`);
-    if (!res.ok) throw new Error(`FMP ${path} → ${res.status}: ${await res.text()}`);
+    // Fix 3: redact API key from error message — only include path + status
+    if (!res.ok) throw new Error(`FMP ${path} → ${res.status}`);
     return res.json();
   }
   const first = (x: unknown): any => (Array.isArray(x) ? x[0] ?? {} : x ?? {});
@@ -20,7 +21,6 @@ export function createFmpFundamentals(env: Env): FundamentalsSource {
   return {
     kind: "fmp",
     async get(symbol: string): Promise<Fundamentals> {
-      const out = emptyFundamentals(symbol);
       try {
         const [profile, ratios, metrics, growth, target] = await Promise.all([
           fmp(`/profile/${symbol}`).then(first).catch(() => ({})),
@@ -29,26 +29,51 @@ export function createFmpFundamentals(env: Env): FundamentalsSource {
           fmp(`/financial-growth/${symbol}`, "limit=1").then(first).catch(() => ({})),
           fmp(`/price-target-consensus/${symbol}`).then(first).catch(() => ({})),
         ]);
-        out.name = typeof profile.companyName === "string" ? profile.companyName : null;
-        out.sector = typeof profile.sector === "string" ? profile.sector : null;
-        out.marketCap = n(profile.mktCap);
-        out.peTrailing = n(ratios.priceEarningsRatioTTM);
-        out.ps = n(ratios.priceToSalesRatioTTM); out.pb = n(ratios.priceToBookRatioTTM);
-        out.peg = n(ratios.pegRatioTTM); out.evEbitda = n(metrics.enterpriseValueOverEBITDATTM);
-        out.dividendYield = n(ratios.dividendYielPercentageTTM) ?? n(ratios.dividendYieldTTM);
-        out.grossMargin = pct(ratios.grossProfitMarginTTM); out.operatingMargin = pct(ratios.operatingProfitMarginTTM);
-        out.netMargin = pct(ratios.netProfitMarginTTM); out.roe = pct(ratios.returnOnEquityTTM);
-        out.roa = pct(ratios.returnOnAssetsTTM); out.roic = pct(metrics.roicTTM);
-        out.debtToEquity = n(ratios.debtEquityRatioTTM); out.currentRatio = n(ratios.currentRatioTTM);
-        out.quickRatio = n(ratios.quickRatioTTM); out.freeCashFlow = n(metrics.freeCashFlowPerShareTTM);
-        out.fcfYield = pct(metrics.freeCashFlowYieldTTM);
-        out.revenueGrowthYoY = pct(growth.revenueGrowth); out.epsGrowthYoY = pct(growth.epsgrowth);
-        out.priceTargetMean = n(target.targetConsensus); out.priceTargetHigh = n(target.targetHigh);
-        out.priceTargetLow = n(target.targetLow);
+
+        // Fix 4: build result immutably as a single object literal
+        return Fundamentals.parse({
+          symbol,
+          name: typeof profile.companyName === "string" ? profile.companyName : null,
+          sector: typeof profile.sector === "string" ? profile.sector : null,
+          marketCap: n(profile.mktCap),
+          peTrailing: n(ratios.priceEarningsRatioTTM),
+          // Fix 2: forward PE — try likely field name variants defensively
+          peForward: n(ratios.forwardPriceToEarningsRatioTTM) ?? n(ratios.priceEarningsRatioForwardTTM) ?? null,
+          ps: n(ratios.priceToSalesRatioTTM),
+          pb: n(ratios.priceToBookRatioTTM),
+          peg: n(ratios.pegRatioTTM),
+          evEbitda: n(metrics.enterpriseValueOverEBITDATTM),
+          dividendYield: n(ratios.dividendYielPercentageTTM) ?? n(ratios.dividendYieldTTM),
+          grossMargin: pct(ratios.grossProfitMarginTTM),
+          operatingMargin: pct(ratios.operatingProfitMarginTTM),
+          netMargin: pct(ratios.netProfitMarginTTM),
+          roe: pct(ratios.returnOnEquityTTM),
+          roa: pct(ratios.returnOnAssetsTTM),
+          roic: pct(metrics.roicTTM),
+          revenueGrowthYoY: pct(growth.revenueGrowth),
+          epsGrowthYoY: pct(growth.epsgrowth),
+          debtToEquity: n(ratios.debtEquityRatioTTM),
+          currentRatio: n(ratios.currentRatioTTM),
+          quickRatio: n(ratios.quickRatioTTM),
+          // Fix 1: renamed to freeCashFlowPerShare — FMP value IS per-share
+          freeCashFlowPerShare: n(metrics.freeCashFlowPerShareTTM),
+          fcfYield: pct(metrics.freeCashFlowYieldTTM),
+          // Fix 2: interest coverage — try ratios first, then metrics
+          interestCoverage: n(ratios.interestCoverageTTM) ?? n(metrics.interestCoverageTTM) ?? null,
+          // analystRating and nextEarningsDate need endpoints not fetched here
+          analystRating: null,
+          priceTargetMean: n(target.targetConsensus),
+          priceTargetHigh: n(target.targetHigh),
+          priceTargetLow: n(target.targetLow),
+          // Fix 2: numAnalysts — try likely field name variants defensively
+          numAnalysts: n(target.numberOfAnalysts) ?? n(target.analystCount) ?? null,
+          nextEarningsDate: null,
+        });
       } catch (err) {
-        // Premium/blocked endpoints degrade to nulls; never fatal.
+        // Fix 3: log real bugs visibly with key redacted; premium/blocked endpoints degrade to null
+        console.error("[fmp] get failed:", String(err).replaceAll(key, "***"));
+        return emptyFundamentals(symbol);
       }
-      return Fundamentals.parse(out);
     },
     async screen(criteria: ScreenCriteria): Promise<string[]> {
       const parts: string[] = [];

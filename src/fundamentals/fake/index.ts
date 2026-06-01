@@ -25,7 +25,7 @@ export function createFakeFundamentals(): FundamentalsSource {
         roe: 5 + (s % 35), roa: 2 + (s % 18), roic: 4 + (s % 25),
         revenueGrowthYoY: -10 + (s % 60), epsGrowthYoY: -15 + (s % 70),
         debtToEquity: round2((s % 200) / 100), currentRatio: 1 + (s % 30) / 10,
-        quickRatio: 0.8 + (s % 25) / 10, freeCashFlow: (s % 500) * 1e7, interestCoverage: 2 + (s % 30),
+        quickRatio: 0.8 + (s % 25) / 10, freeCashFlowPerShare: round2((s % 200) / 10), interestCoverage: 2 + (s % 30),
         analystRating: ["Strong Buy", "Buy", "Hold", "Sell"][s % 4],
         priceTargetMean: 50 + (s % 300), priceTargetHigh: 60 + (s % 320), priceTargetLow: 40 + (s % 250),
         numAnalysts: 3 + (s % 25),

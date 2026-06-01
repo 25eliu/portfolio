@@ -10,7 +10,7 @@ export const Fundamentals = z.object({
   fcfYield: num, dividendYield: num,
   grossMargin: num, operatingMargin: num, netMargin: num, roe: num, roa: num, roic: num,
   revenueGrowthYoY: num, epsGrowthYoY: num,
-  debtToEquity: num, currentRatio: num, quickRatio: num, freeCashFlow: num, interestCoverage: num,
+  debtToEquity: num, currentRatio: num, quickRatio: num, freeCashFlowPerShare: num, interestCoverage: num,
   analystRating: z.string().nullable().default(null),
   priceTargetMean: num, priceTargetHigh: num, priceTargetLow: num, numAnalysts: num,
   nextEarningsDate: z.string().nullable().default(null),
