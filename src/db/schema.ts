@@ -63,4 +63,21 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
       );
     `,
   },
+  {
+    name: "002_phase2",
+    sql: `
+      CREATE TABLE fundamentals_cache (
+        symbol     TEXT NOT NULL,
+        date       TEXT NOT NULL,
+        payload    TEXT NOT NULL,
+        PRIMARY KEY (symbol, date)
+      );
+
+      CREATE TABLE watchlist (
+        id     TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL UNIQUE,
+        note   TEXT
+      );
+    `,
+  },
 ];

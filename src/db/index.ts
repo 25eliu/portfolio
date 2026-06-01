@@ -6,6 +6,7 @@ import { marketSnapshotsRepo } from "./repositories/marketSnapshots.ts";
 import { reportsRepo } from "./repositories/reports.ts";
 import { runsRepo } from "./repositories/runs.ts";
 import { riskProfilesRepo } from "./repositories/riskProfiles.ts";
+import { fundamentalsCacheRepo } from "./repositories/fundamentalsCache.ts";
 
 export { openDb, openMemoryDb, migrate, type DB } from "./connection.ts";
 
@@ -19,6 +20,7 @@ export function repositories(db: DB) {
     reports: reportsRepo(db),
     runs: runsRepo(db),
     risk: riskProfilesRepo(db),
+    fundamentalsCache: fundamentalsCacheRepo(db),
   };
 }
 export type Repositories = ReturnType<typeof repositories>;
