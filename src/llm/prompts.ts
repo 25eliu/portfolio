@@ -49,12 +49,27 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
 }
 
 export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+  const macroLine = ctx.macro
+    ? [
+        ctx.macro.vix != null ? `VIX ${ctx.macro.vix.toFixed(1)}` : null,
+        ctx.macro.tenYearYield != null ? `10y ${ctx.macro.tenYearYield.toFixed(2)}%` : null,
+        ctx.macro.twoYearYield != null ? `2y ${ctx.macro.twoYearYield.toFixed(2)}%` : null,
+        ctx.macro.yieldCurveSpread != null
+          ? `curve ${ctx.macro.yieldCurveSpread > 0 ? "+" : ""}${ctx.macro.yieldCurveSpread.toFixed(2)}%`
+          : null,
+        ctx.macro.cpiYoY != null ? `CPI ${ctx.macro.cpiYoY.toFixed(1)}% YoY` : null,
+        ctx.macro.fedFunds != null ? `Fed Funds ${ctx.macro.fedFunds.toFixed(2)}%` : null,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : null;
+
   return [
     `You are an equity analyst. Using the research findings and quantitative data below, return ONE`,
     `recommendation for ${t.symbol} by calling the submit_recommendation function.`,
     `Base any numeric facts ONLY on the provided technicals/fundamentals; do not invent figures.`,
     ``,
-    `Market context (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
+    `Market context (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}${macroLine ? ` | Macro: ${macroLine}` : ""}`,
     `Risk profile: ${t.riskPreset}.`,
     ``,
     `Research findings (sources already captured separately):`,

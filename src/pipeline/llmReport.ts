@@ -48,7 +48,7 @@ export async function generateLlmReport(app: App, emit: Emit = () => {}): Promis
   };
 
   emit({ type: "phase", phase: "context", label: "Reading the market" });
-  const ctx = await buildMarketContext(app.gateway, analyzer, date, contextSink);
+  const ctx = await buildMarketContext(app.gateway, analyzer, date, app.macro, contextSink);
   emit({ type: "context:done", summary: ctx.macroSummary });
 
   emit({ type: "phase", phase: "scan", label: "Scanning for opportunities" });

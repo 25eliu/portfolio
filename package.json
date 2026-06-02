@@ -14,6 +14,7 @@
     "alpaca:smoke": "bun run scripts/alpaca-smoke.ts",
     "gemini:smoke": "bun run scripts/gemini-smoke.ts",
     "fmp:smoke": "bun run scripts/fmp-smoke.ts",
+    "fred:smoke": "bun run scripts/fred-smoke.ts",
     "test": "bun test",
     "test:e2e": "playwright test"
   },

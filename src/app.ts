@@ -7,6 +7,7 @@ import { cached, createFundamentals, type FundamentalsSource } from "./fundament
 import { createGeminiAnalyzer } from "./llm/gemini.ts";
 import type { Analyzer } from "./llm/analyze.ts";
 import { newId, today, type Portfolio } from "./domain/index.ts";
+import { createMacro, type MacroSource } from "./macro/index.ts";
 
 /** Everything the pipeline and server need, wired once. */
 export type App = {
@@ -19,6 +20,7 @@ export type App = {
   ai: Portfolio;
   analyzer: Analyzer | null;
   fundamentals: FundamentalsSource;
+  macro: MacroSource;
 };
 
 export type CreateAppOptions = {
@@ -28,6 +30,7 @@ export type CreateAppOptions = {
   now?: () => string;
   analyzer?: Analyzer | null;
   fundamentals?: FundamentalsSource;
+  macro?: MacroSource;
 };
 
 /** Ensure the two first-class portfolios exist; return them. */
@@ -69,7 +72,8 @@ export function createApp(opts: CreateAppOptions = {}): App {
     opts.fundamentals ?? cached(createFundamentals(env), repos, opts.now ?? (() => today()));
   const analyzer =
     opts.analyzer ?? (env.GEMINI_API_KEY ? createGeminiAnalyzer(env) : null);
+  const macro = opts.macro ?? createMacro(env);
   repos.runs.abandonRunning(); // clear stale "running" rows from a previously-killed process
   const { user, ai } = bootstrapPortfolios(repos);
-  return { env, db, repos, gateway, now: opts.now ?? (() => today()), user, ai, analyzer, fundamentals };
+  return { env, db, repos, gateway, now: opts.now ?? (() => today()), user, ai, analyzer, fundamentals, macro };
 }

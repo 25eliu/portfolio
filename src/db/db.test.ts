@@ -120,6 +120,7 @@ describe("reports", () => {
         spyPctFromSma200: 3.2,
         macroSummary: "risk-on",
         sources: [{ title: "X", url: "https://example.com" }],
+        macro: null,
       },
     });
     const latest = repos.reports.latest();

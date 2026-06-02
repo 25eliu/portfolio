@@ -11,5 +11,17 @@ export const MarketContext = z.object({
   spyPctFromSma200: z.number().nullable().default(null),
   macroSummary: z.string().default(""),
   sources: z.array(Source).default([]),
+  macro: z
+    .object({
+      tenYearYield: z.number().nullable().default(null),
+      twoYearYield: z.number().nullable().default(null),
+      yieldCurveSpread: z.number().nullable().default(null),
+      fedFunds: z.number().nullable().default(null),
+      cpiYoY: z.number().nullable().default(null),
+      unemployment: z.number().nullable().default(null),
+      vix: z.number().nullable().default(null),
+    })
+    .nullable()
+    .default(null),
 });
 export type MarketContext = z.infer<typeof MarketContext>;
