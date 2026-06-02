@@ -145,6 +145,20 @@ export function scoredForecastsRepo(db: DB) {
       return rows.map(safeToDomain).filter((f): f is ScoredForecast => f !== null);
     },
 
+    /** Active theses: forecasts whose horizon has NOT elapsed (resolve_at > asOf) and have no outcome. */
+    listOpen(asOfDate: string, limit = 100): ScoredForecast[] {
+      const rows = db
+        .query<Row, [string, number]>(
+          `SELECT * FROM scored_forecasts
+           WHERE resolve_at > ?
+             AND id NOT IN (SELECT forecast_id FROM forecast_outcomes)
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .all(asOfDate, limit);
+      return rows.map(safeToDomain).filter((f): f is ScoredForecast => f !== null);
+    },
+
     listAll(opts: { limit?: number; offset?: number } = {}): ScoredForecast[] {
       const rows = db
         .query<Row, [number, number]>(
