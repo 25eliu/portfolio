@@ -165,6 +165,7 @@ export async function generateLlmReport(
             date: prior.date,
             action: prior.action,
             conviction: prior.conviction,
+            entry: prior.recommendation.prediction.entry,
             target: prior.recommendation.prediction.target,
             stop: prior.recommendation.prediction.stop,
             thesis: prior.recommendation.thesis,

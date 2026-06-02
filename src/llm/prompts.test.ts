@@ -44,7 +44,7 @@ function input(over: Partial<TickerInput> = {}): TickerInput {
 describe("buildTickerStructurePrompt — prior thesis continuity", () => {
   test("renders the prior call when present", () => {
     const prompt = buildTickerStructurePrompt(
-      input({ priorThesis: { date: "2026-06-07", action: "BUY", conviction: 0.74, target: 142, stop: 110, thesis: "AI demand inflection" } }),
+      input({ priorThesis: { date: "2026-06-07", action: "BUY", conviction: 0.74, entry: null, target: 142, stop: 110, thesis: "AI demand inflection" } }),
       ctx2, "research text",
     );
     expect(prompt).toContain("Your prior call on NVDA (2026-06-07): BUY");
@@ -55,5 +55,15 @@ describe("buildTickerStructurePrompt — prior thesis continuity", () => {
   test("omits the prior-call line cleanly when absent", () => {
     const prompt = buildTickerStructurePrompt(input(), ctx2, "research text");
     expect(prompt).not.toContain("Your prior call on");
+  });
+
+  test("renders the price move and a revise instruction when entry is present", () => {
+    const prompt = buildTickerStructurePrompt(
+      input({ price: 120, priorThesis: { date: "2026-06-07", action: "BUY", conviction: 0.7, entry: 100, target: 142, stop: 90, thesis: "AI demand" } }),
+      ctx2, "research text",
+    );
+    expect(prompt).toContain("Since that call (entry ~$100)");
+    expect(prompt).toContain("price is now $120");
+    expect(prompt).toContain("Revise your target/stop/stance");
   });
 });

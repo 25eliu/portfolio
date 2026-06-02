@@ -6,6 +6,7 @@ export type PriorThesis = {
   date: string;
   action: string;
   conviction: number;
+  entry: number | null;
   target: number | null;
   stop: number | null;
   thesis: string;
@@ -114,7 +115,9 @@ export function buildTickerStructurePrompt(
           ``,
           `Your prior call on ${t.symbol} (${t.priorThesis.date}): ${t.priorThesis.action}, conviction ${t.priorThesis.conviction.toFixed(2)}` +
             `${t.priorThesis.target != null ? `, target ${t.priorThesis.target}` : ""}${t.priorThesis.stop != null ? ` / stop ${t.priorThesis.stop}` : ""} — "${t.priorThesis.thesis}".`,
-          `This is your own earlier reasoning (trusted continuity). Build on it or revise it as the evidence now warrants — do not ignore it.`,
+          t.priorThesis.entry != null && t.priorThesis.entry !== 0
+            ? `Since that call (entry ~$${t.priorThesis.entry}), price is now $${t.price} (${(((t.price - t.priorThesis.entry) / t.priorThesis.entry) * 100).toFixed(1)}%). Revise your target/stop/stance to reflect how price has moved vs your plan — do not restate a stale thesis.`
+            : `This is your own earlier reasoning (trusted continuity). Build on it or revise it as the evidence now warrants — do not ignore it.`,
         ]
       : []),
     ``,
