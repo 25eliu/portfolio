@@ -105,14 +105,19 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             {pred.horizon}
           </span>
           {pred.expectedReturnPct != null && (
-            <span
-              className={cn(
-                "tnum font-mono font-semibold",
-                pred.expectedReturnPct >= 0 ? "text-pos" : "text-neg",
-              )}
-            >
-              {pred.expectedReturnPct >= 0 ? "+" : ""}
-              {pred.expectedReturnPct.toFixed(1)}%
+            <span className="flex items-center gap-1">
+              <Term k="expectedReturnPct">
+                <span className="text-text-muted">exp. return</span>
+              </Term>
+              <span
+                className={cn(
+                  "tnum font-mono font-semibold",
+                  pred.expectedReturnPct >= 0 ? "text-pos" : "text-neg",
+                )}
+              >
+                {pred.expectedReturnPct >= 0 ? "+" : ""}
+                {pred.expectedReturnPct.toFixed(1)}%
+              </span>
             </span>
           )}
         </div>
@@ -121,7 +126,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         {r.action === "WATCH" && pred.trigger && (
           <p className="text-[12px] leading-snug text-text-secondary">
             <span className="font-medium text-accent">
-              {pred.actionIfTriggered ?? "Act"} if
+              {pred.actionIfTriggered ?? "Act"} <Term k="trigger">if</Term>
             </span>{" "}
             {pred.trigger}
             {pred.target != null && (
@@ -143,7 +148,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
               <Plan label="Target" value={usd(pred.target)} tone="text-pos" />
             )}
             {pred.rMultiple != null && (
-              <Plan label="R" value={`${pred.rMultiple.toFixed(1)}×`} />
+              <Plan label={<Term k="rMultiple">R</Term>} value={`${pred.rMultiple.toFixed(1)}×`} />
             )}
           </div>
         )}
@@ -268,7 +273,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
   );
 }
 
-function Plan({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Plan({ label, value, tone }: { label: ReactNode; value: string; tone?: string }) {
   return (
     <div>
       <div className="text-[9px] uppercase tracking-wide text-text-muted">{label}</div>

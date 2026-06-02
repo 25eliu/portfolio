@@ -34,10 +34,12 @@ function StreamBox({ text, active, className }: { text: string; active: boolean;
 
 function ToolChips({ tools }: { tools: ToolHit[] }) {
   if (tools.length === 0) return null;
+  const recent = tools.slice(-4);
+  const offset = tools.length - recent.length;
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
-      {tools.slice(-4).map((t, i) => (
-        <Tooltip key={i} content={t.sources.length ? t.sources.join(", ") : "searching…"}>
+      {recent.map((t, i) => (
+        <Tooltip key={offset + i} content={t.sources.length ? t.sources.join(", ") : "searching…"}>
           <span className="inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-[11px] text-accent cursor-help">
             <Search className="h-3.5 w-3.5" />
             <span className="font-medium">Searched:</span>
