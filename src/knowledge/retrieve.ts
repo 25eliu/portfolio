@@ -59,7 +59,12 @@ export function retrieveEvidence(
 
   const scoped = app.repos.knowledge.scopedActiveChunks(ticker, MAX_EXCERPTS);
   const graphLinked = app.repos.knowledge.activeChunksForSources(linkedSourceIds, MAX_EXCERPTS);
-  const lexical = app.repos.knowledge.searchActiveChunks(ftsQuery, { ticker, limit: MAX_EXCERPTS });
+  // Lexical hits must clear the relevance floor (bm25 lower = better), so weak/incidental matches
+  // never pad the prompt. Ticker-scoped and graph-linked hits are exact-by-construction and bypass it.
+  const floor = app.env.KNOWLEDGE_RELEVANCE_FLOOR;
+  const lexical = app.repos.knowledge
+    .searchActiveChunks(ftsQuery, { ticker, limit: MAX_EXCERPTS })
+    .filter((h) => (h.score ?? 0) <= floor);
 
   const seen = new Set<string>();
   const out: RetrievedExcerpt[] = [];

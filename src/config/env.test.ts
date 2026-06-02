@@ -68,7 +68,7 @@ describe("loadEnv", () => {
     expect(e.MAX_SCAN_CANDIDATES).toBe(12); // widened from 8
     expect(e.AI_THESIS_LOOKBACK_DAYS).toBe(7);
     expect(e.MAX_AI_THESIS).toBe(15);
-    expect(e.KNOWLEDGE_RELEVANCE_FLOOR).toBe(-0.1);
+    expect(e.KNOWLEDGE_RELEVANCE_FLOOR).toBe(0); // fully permissive default; tighten via env var
   });
 
   test("coerces the new AI-universe knobs", () => {

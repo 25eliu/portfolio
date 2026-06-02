@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { createApp, type App } from "../app.ts";
+import { loadEnv } from "../config/env.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
 import { edgeId, nodeId } from "../domain/index.ts";
@@ -47,6 +48,32 @@ describe("graph-aware retrieval", () => {
     await ingestSource(app, { kind: "note", title: "setup", text, scope: "global", useInAnalysis: true });
     expect(retrieveEvidence(app, "XYZ")).toHaveLength(0); // ticker not present
     expect(retrieveEvidence(app, "XYZ", { extraTerms: ["momentum"] }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("relevance floor", () => {
+  test("a strict floor drops a purely-lexical hit but keeps ticker-scoped evidence", async () => {
+    // Strict floor: no bm25 score will be ≤ -1000, so all LEXICAL hits are dropped.
+    const strict: App = createApp({
+      db: openMemoryDb(),
+      gateway: createFakeGateway(),
+      now: () => "2026-06-01",
+      env: loadEnv({ KNOWLEDGE_RELEVANCE_FLOOR: "-1000" }),
+    });
+
+    // Purely lexical: a global note matched only via an extraTerm → dropped under the strict floor.
+    await ingestSource(strict, { kind: "note", title: "setup", text: "A classic momentum setup as price clears resistance on volume.", scope: "global", useInAnalysis: true });
+    expect(retrieveEvidence(strict, "XYZ", { extraTerms: ["momentum"] })).toHaveLength(0);
+
+    // Ticker-scoped evidence bypasses the floor entirely.
+    await ingestSource(strict, { kind: "note", title: "XYZ note", text: "XYZ has a durable services moat compounding over time.", scope: "ticker", scopeTicker: "XYZ", useInAnalysis: true });
+    expect(retrieveEvidence(strict, "XYZ").length).toBeGreaterThan(0);
+  });
+
+  test("the default floor keeps a solid lexical match", async () => {
+    const a = makeApp(); // default floor -0.1
+    await ingestSource(a, { kind: "note", title: "setup", text: "A classic momentum setup as price clears resistance on volume.", scope: "global", useInAnalysis: true });
+    expect(retrieveEvidence(a, "XYZ", { extraTerms: ["momentum"] }).length).toBeGreaterThan(0);
   });
 });
 

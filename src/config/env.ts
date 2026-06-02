@@ -37,8 +37,10 @@ const EnvSchema = z.object({
   AI_THESIS_LOOKBACK_DAYS: z.coerce.number().int().nonnegative().default(7),
   MAX_AI_THESIS: z.coerce.number().int().nonnegative().default(15),
   // BM25 relevance floor for LEXICAL knowledge hits (bm25 is lower-is-better; more negative = stricter).
-  // Ticker-scoped and graph-linked hits bypass it. Tighten (e.g. -0.5) to cut more token waste.
-  KNOWLEDGE_RELEVANCE_FLOOR: z.coerce.number().default(-0.1),
+  // Ticker-scoped and graph-linked hits bypass it. Default 0 = fully permissive (keeps all hits).
+  // Tighten (e.g. -0.5) to cut weak lexical matches; SQLite FTS5 scores are near-zero for short
+  // single-document corpora, so any negative floor will drop most hits in small knowledge bases.
+  KNOWLEDGE_RELEVANCE_FLOOR: z.coerce.number().default(0),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

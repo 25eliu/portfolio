@@ -46,6 +46,7 @@ export type SearchHit = {
   version: number;
   created_at: string;
   text: string;
+  score?: number; // bm25 relevance (lower = better); set by searchActiveChunks only
 };
 
 export function knowledgeRepo(db: DB) {
@@ -171,7 +172,8 @@ export function knowledgeRepo(db: DB) {
       return db
         .query<SearchHit, [string, string | null, number]>(
           `SELECT c.id AS chunk_id, c.source_id AS source_id, s.title AS title,
-                  s.trust_class AS trust_class, v.version AS version, v.created_at AS created_at, c.text AS text
+                  s.trust_class AS trust_class, v.version AS version, v.created_at AS created_at, c.text AS text,
+                  bm25(knowledge_chunks_fts) AS score
              FROM knowledge_chunks_fts f
              JOIN knowledge_chunks c ON c.id = f.chunk_id
              JOIN knowledge_sources s ON s.id = c.source_id
