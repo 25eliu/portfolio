@@ -59,6 +59,7 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
           : null,
         ctx.macro.cpiYoY != null ? `CPI ${ctx.macro.cpiYoY.toFixed(1)}% YoY` : null,
         ctx.macro.fedFunds != null ? `Fed Funds ${ctx.macro.fedFunds.toFixed(2)}%` : null,
+        ctx.macro.unemployment != null ? `unemployment ${ctx.macro.unemployment.toFixed(1)}%` : null,
       ]
         .filter(Boolean)
         .join(", ")

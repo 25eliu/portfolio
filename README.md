@@ -47,35 +47,50 @@ the paper brokerage (AI portfolio) and stock pricing (equity curves + SPY benchm
 > Security: keys live in `.env` only (gitignored), never in source. The app refuses to start with
 > `MARKET_ADAPTER=alpaca` unless `ALPACA_PAPER=true`. There is no live-money path.
 
-## Phase 2: analysis (Gemini + FMP)
+## Phase 2: analysis (Gemini + FMP + FRED + Finnhub)
 
-Phase 2 replaces the deterministic fake report with a real LLM analysis step.  Two free API keys are
-required:
+Phase 2 replaces the deterministic fake report with a real LLM analysis step.  All four API keys
+are **free** and the app degrades gracefully without any of them:
 
 1. **Gemini** — get a free key at <https://aistudio.google.com/apikey>
 2. **FMP (Financial Modeling Prep)** — get a free key at <https://site.financialmodelingprep.com/developer/docs>
+3. **FRED** — get a free key at <https://fred.stlouisfed.org/docs/api/api_key.html> (macro rates, CPI, unemployment, VIX)
+4. **Finnhub** — get a free key at <https://finnhub.io> (analyst consensus + next earnings date)
 
-Add both to `.env`:
+Add all four to `.env`:
 
 ```
 GEMINI_API_KEY=your_gemini_key
 FMP_API_KEY=your_fmp_key
+FRED_API_KEY=your_fred_key
+FINNHUB_API_KEY=your_finnhub_key
 ```
 
 Verify each key before running the full pipeline:
 
 ```bash
-bun run gemini:smoke   # calls Gemini API with a single test prompt
-bun run fmp:smoke      # fetches a sample FMP endpoint
+bun run gemini:smoke    # calls Gemini API with a single test prompt
+bun run fmp:smoke       # fetches a sample FMP endpoint
+bun run fred:smoke      # fetches latest FRED macro series (10y, 2y, VIX, CPI, unemployment)
+bun run finnhub:smoke   # fetches analyst consensus + earnings calendar for a sample ticker
 ```
 
-> **No key? No problem.** If `GEMINI_API_KEY` is absent the app falls back to the deterministic fake
-> report, so the dashboard still works end-to-end without any credentials.
+> **No key? No problem.** Each data source degrades gracefully when its key is absent: Gemini falls
+> back to the deterministic fake report; FRED falls back to a fake macro snapshot; Finnhub simply
+> skips analyst/earnings enrichment. The dashboard works end-to-end without any credentials.
 
 The Phase 2 analysis covers:
 
-- **Held positions** — valuation + conviction score for every ticker you own
-- **Watchlist** — the same analysis for tickers you are tracking but do not hold
+- **Your positions** — for every ticker you hold, the AI returns exactly one of: **ADD** (buy more),
+  **TRIM** (reduce), **HOLD** (keep), or **SELL** (exit). It never returns WATCH/BUY on a held name.
+- **Opportunities** — for tickers you are tracking or discovered via scan, the AI returns **BUY**
+  (enter now), **WATCH** (clear thesis, needs a concrete trigger), or filters out **PASS** results
+  so only actionable ideas surface.
+- **Forward-looking predictions** — every recommendation carries a structured prediction with
+  direction (bullish/bearish/neutral), horizon (1d → 1y), entry, target, stop, expected return %,
+  R-multiple, trigger + action-if-triggered (for WATCH), and an invalidation condition.
+- **Macro context** — FRED feeds live 10y/2y yields, yield curve spread, Fed Funds rate, CPI YoY,
+  unemployment rate, and VIX into both the market-regime summary and each per-ticker analysis.
 - **Opportunity scan** — top daily movers (via market adapter), FMP screener results, and
   LLM-driven sentiment / thematic discovery across the combined universe
 
@@ -89,6 +104,8 @@ The Phase 2 analysis covers:
 | `bun run alpaca:smoke` | Verify Alpaca paper credentials |
 | `bun run gemini:smoke` | Verify Gemini API key |
 | `bun run fmp:smoke` | Verify FMP API key |
+| `bun run fred:smoke` | Verify FRED API key (prints latest macro snapshot) |
+| `bun run finnhub:smoke` | Verify Finnhub API key (analyst consensus + earnings) |
 | `bun test` | Unit + integration tests (fake adapter) |
 | `bunx playwright install chromium && bun run test:e2e` | Browser E2E (one-time browser install) |
 | `bun run build:web` | Production frontend build |
