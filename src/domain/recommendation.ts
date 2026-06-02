@@ -5,20 +5,29 @@ import { Fundamentals } from "./fundamentals.ts";
 import { MarketContext, Source } from "./marketContext.ts";
 import { ScreenType } from "./scan.ts";
 
-export const Action = z.enum(["BUY", "SELL", "HOLD", "WATCH"]);
+export const Action = z.enum(["ADD", "TRIM", "HOLD", "SELL", "BUY", "WATCH", "PASS"]);
 export type Action = z.infer<typeof Action>;
 
-export const Horizon = z.enum(["30m", "1d", "5d", "30d"]);
+export const Horizon = z.enum(["1d", "1w", "1mo", "3mo", "6mo", "1y"]);
 export type Horizon = z.infer<typeof Horizon>;
 
-export const TradePlan = z.object({
-  entry: z.number(),
-  stop: z.number(),
-  target: z.number(),
-  rMultiple: z.number(),
+export const Direction = z.enum(["bullish", "bearish", "neutral"]);
+export type Direction = z.infer<typeof Direction>;
+
+export const Prediction = z.object({
+  direction: Direction,
+  horizon: Horizon,
+  entry: z.number().nullable().default(null),
+  target: z.number().nullable().default(null),
+  stop: z.number().nullable().default(null),
+  expectedReturnPct: z.number().nullable().default(null),
+  rMultiple: z.number().nullable().default(null),
+  trigger: z.string().nullable().default(null),
+  actionIfTriggered: z.string().nullable().default(null),
   invalidation: z.string(),
+  rationale: z.string(),
 });
-export type TradePlan = z.infer<typeof TradePlan>;
+export type Prediction = z.infer<typeof Prediction>;
 
 export const Catalyst = z.object({
   kind: z.string(),
@@ -34,12 +43,15 @@ export type Catalyst = z.infer<typeof Catalyst>;
  */
 export const Recommendation = z.object({
   ticker: Symbol,
+  /** Whether the portfolio currently holds this ticker (drives the position-aware verb set). */
+  held: z.boolean(),
   action: Action,
   conviction: z.number().min(0).max(1),
-  horizon: Horizon,
   strategyFamily: z.string(),
   thesis: z.string(),
   signals: z.array(z.string()),
+  /** Forward-looking, structured prediction backing the recommendation. */
+  prediction: Prediction,
   technicals: Technicals,
   /** Fundamental snapshot used in the analysis (null until the LLM/FMP step populates it). */
   fundamentals: Fundamentals.nullable().default(null),
@@ -50,10 +62,7 @@ export const Recommendation = z.object({
   /** Originating opportunity screen for scan candidates (null for held/watchlist). */
   screen: ScreenType.nullable().default(null),
   catalyst: Catalyst.nullable().default(null),
-  tradePlan: TradePlan.nullable().default(null),
   briefingNote: z.string().nullable().default(null),
-  /** For WATCH cards: the condition that would promote it to BUY. */
-  watchTrigger: z.string().nullable().default(null),
 });
 export type Recommendation = z.infer<typeof Recommendation>;
 

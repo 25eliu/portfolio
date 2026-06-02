@@ -11,6 +11,8 @@ export type TickerInput = {
   riskPreset: string;
   /** Uninvested cash the portfolio has available to deploy (its buying-power limit). */
   availableCash: number;
+  /** Whether the portfolio currently holds this ticker (drives the position-aware verb set). */
+  held: boolean;
 };
 
 /**
@@ -54,9 +56,14 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     `assume unlimited capital. When cash is scarce, reserve BUYs for the highest-conviction ideas and`,
     `size any trade plan within this cash; prefer WATCH over BUY if there isn't cash to act on it.`,
     ``,
-    `Decide BUY / SELL / HOLD / WATCH with a concise thesis, conviction (0..1), horizon, a strategy`,
-    `family, the signals you used, an optional catalyst (with sentiment), and an optional trade plan`,
-    `(entry/stop/target/rMultiple/invalidation). For WATCH, give the trigger to promote to BUY.`,
+    t.held
+      ? `You HOLD ${t.symbol}. Choose exactly one: ADD (buy more), TRIM (reduce), HOLD (keep), SELL (exit).`
+      : `${t.symbol} is a CANDIDATE you do not own. Choose exactly one: BUY (enter now), WATCH (wait for a trigger), PASS (skip).`,
+    `Do not hedge — commit to the verdict the evidence supports.`,
+    `Return conviction (0..1), a strategyFamily, the signals you used, an optional catalyst, and a`,
+    `REQUIRED prediction object: { direction, horizon (1d|1w|1mo|3mo|6mo|1y), entry, target, stop,`,
+    `expectedReturnPct, rMultiple, trigger, actionIfTriggered, invalidation, rationale }. For WATCH,`,
+    `the trigger is the specific condition to act on and actionIfTriggered is what it becomes (e.g. "BUY").`,
   ].join("\n");
 }
 

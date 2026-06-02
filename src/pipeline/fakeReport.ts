@@ -1,4 +1,4 @@
-import { newId, type Action, type DailyReport, type Horizon, type Recommendation, emptyTechnicals } from "../domain/index.ts";
+import { newId, type Action, type DailyReport, type Recommendation, emptyTechnicals } from "../domain/index.ts";
 import { fakePrice } from "../market/fake/pricing.ts";
 
 /**
@@ -16,32 +16,44 @@ function seed(str: string): number {
   return h >>> 0;
 }
 
-const ACTIONS: Action[] = ["BUY", "SELL", "HOLD", "WATCH"];
-const HORIZONS: Horizon[] = ["1d", "5d", "30d"];
+const HELD_ACTIONS: Action[] = ["HOLD", "ADD", "TRIM", "HOLD"];
+const OPP_ACTIONS: Action[] = ["BUY", "WATCH"];
 const FAMILIES = ["momentum_breakout", "mean_reversion", "news_reaction", "trend"];
 const SIGNALS = ["vwap_reclaim", "unusual_volume", "breakout", "gap_up", "earnings_reaction"];
 const DEFAULT_WATCHLIST = ["AAPL", "NVDA", "MSFT"];
 
-function makeRecommendation(symbol: string, date: string): Recommendation {
+function makeRecommendation(symbol: string, date: string, symbols: string[]): Recommendation {
   const s = seed(`${symbol}@${date}`);
   const price = fakePrice(symbol, date);
-  const action = ACTIONS[s % ACTIONS.length]!;
+  const held = symbols.includes(symbol);
+  const action = held ? HELD_ACTIONS[s % HELD_ACTIONS.length]! : OPP_ACTIONS[s % OPP_ACTIONS.length]!;
   const conviction = Math.round((0.5 + (s % 50) / 100) * 100) / 100;
-  const horizon = HORIZONS[s % HORIZONS.length]!;
   const family = FAMILIES[s % FAMILIES.length]!;
   const signals = [SIGNALS[s % SIGNALS.length]!, SIGNALS[(s >>> 3) % SIGNALS.length]!];
   const stop = Math.round(price * 0.97 * 100) / 100;
   const target = Math.round(price * 1.06 * 100) / 100;
 
-  const actionable = action === "BUY" || action === "SELL";
   return {
     ticker: symbol,
+    held,
     action,
     conviction,
-    horizon,
     strategyFamily: family,
     thesis: `[demo] ${family.replace(/_/g, " ")} setup on ${symbol}; placeholder thesis until the LLM step lands.`,
     signals: [...new Set(signals)],
+    prediction: {
+      direction: held ? "neutral" : "bullish",
+      horizon: "1mo",
+      entry: price,
+      target: Math.round(price * 1.06 * 100) / 100,
+      stop: Math.round(price * 0.97 * 100) / 100,
+      expectedReturnPct: 6,
+      rMultiple: 2,
+      trigger: held ? null : `close above ${Math.round(price * 1.02 * 100) / 100}`,
+      actionIfTriggered: held ? null : "BUY",
+      invalidation: `close below ${Math.round(price * 0.95 * 100) / 100}`,
+      rationale: `[demo] ${symbol} ${held ? "position review" : "opportunity"}`,
+    },
     technicals: {
       ...emptyTechnicals(),
       rsi14: 30 + (s % 40),
@@ -50,11 +62,7 @@ function makeRecommendation(symbol: string, date: string): Recommendation {
       resistance: target,
     },
     catalyst: null,
-    tradePlan: actionable
-      ? { entry: price, stop, target, rMultiple: 2, invalidation: `close below ${stop}` }
-      : null,
     briefingNote: null,
-    watchTrigger: action === "WATCH" ? `reclaims ${target}` : null,
     fundamentals: null,
     priceTargetUpside: null,
     sources: [],
@@ -69,7 +77,7 @@ export function generateFakeReport(symbols: string[], date: string): DailyReport
     date,
     generatedAt: new Date().toISOString(),
     source: "fake",
-    recommendations: universe.map((sym) => makeRecommendation(sym, date)),
+    recommendations: universe.map((sym) => makeRecommendation(sym, date, symbols)),
     marketContext: null,
   };
 }

@@ -5,8 +5,8 @@ import { SegmentedControl } from "./ui/SegmentedControl.tsx";
 import { RecommendationCard } from "./RecommendationCard.tsx";
 
 const SECTIONS: { title: string; actions: Action[] }[] = [
-  { title: "Buy", actions: ["BUY"] },
-  { title: "Sell / Trim", actions: ["SELL"] },
+  { title: "Buy", actions: ["BUY", "ADD"] },
+  { title: "Sell / Trim", actions: ["SELL", "TRIM"] },
   { title: "Hold", actions: ["HOLD"] },
   { title: "Watch", actions: ["WATCH"] },
 ];

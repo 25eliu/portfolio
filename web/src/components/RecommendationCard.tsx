@@ -17,17 +17,11 @@ function screenLabel(screen: string): string {
 }
 
 const ACTION_TONE: Record<Action, "pos" | "neg" | "neutral" | "accent"> = {
-  BUY: "pos",
-  SELL: "neg",
-  HOLD: "neutral",
-  WATCH: "accent",
+  ADD: "pos", BUY: "pos", TRIM: "neg", SELL: "neg", HOLD: "neutral", WATCH: "accent", PASS: "neutral",
 };
 
 const CONVICTION_COLOR: Record<Action, string> = {
-  BUY: "bg-pos",
-  SELL: "bg-neg",
-  HOLD: "bg-text-muted",
-  WATCH: "bg-accent",
+  ADD: "bg-pos", BUY: "bg-pos", TRIM: "bg-neg", SELL: "bg-neg", HOLD: "bg-text-muted", WATCH: "bg-accent", PASS: "bg-text-muted",
 };
 
 /** Map catalyst sentiment (-1..1) to a tone + label. */
@@ -53,7 +47,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
           <span className="font-semibold tracking-tight text-text">{r.ticker}</span>
           <Badge tone={ACTION_TONE[r.action]}>{r.action}</Badge>
           <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
-            {r.horizon}
+            {r.prediction.horizon}
           </span>
           {r.screen && (
             <Badge tone={screenTone(r.screen)}>
@@ -102,18 +96,18 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         </div>
       )}
 
-      {r.tradePlan && (
+      {(r.prediction.target != null || r.prediction.stop != null) && (
         <div className="grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5">
-          <Plan label="Entry" value={usd(r.tradePlan.entry)} />
-          <Plan label="Stop" value={usd(r.tradePlan.stop)} tone="text-neg" />
-          <Plan label="Target" value={usd(r.tradePlan.target)} tone="text-pos" />
-          <Plan label="R" value={`${r.tradePlan.rMultiple.toFixed(1)}×`} />
+          {r.prediction.entry != null && <Plan label="Entry" value={usd(r.prediction.entry)} />}
+          {r.prediction.stop != null && <Plan label="Stop" value={usd(r.prediction.stop)} tone="text-neg" />}
+          {r.prediction.target != null && <Plan label="Target" value={usd(r.prediction.target)} tone="text-pos" />}
+          {r.prediction.rMultiple != null && <Plan label="R" value={`${r.prediction.rMultiple.toFixed(1)}×`} />}
         </div>
       )}
 
-      {r.watchTrigger && (
+      {r.prediction.trigger && (
         <div className="mt-3 rounded-lg border border-accent/20 bg-accent-soft px-2.5 py-2 text-[11px] text-text-secondary">
-          <span className="font-medium text-accent">Trigger</span> · {r.watchTrigger}
+          <span className="font-medium text-accent">{r.prediction.actionIfTriggered ?? "Trigger"}</span> · {r.prediction.trigger}
         </div>
       )}
 

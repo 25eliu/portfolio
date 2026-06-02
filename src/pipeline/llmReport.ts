@@ -96,6 +96,7 @@ export async function generateLlmReport(app: App, emit: Emit = () => {}): Promis
           fundamentals,
           riskPreset,
           availableCash,
+          held: entry.source === "held",
         },
         ctx,
         tickerSink,
@@ -110,6 +111,8 @@ export async function generateLlmReport(app: App, emit: Emit = () => {}): Promis
     }
   });
 
-  const recommendations = results.filter((r): r is Recommendation => r !== null);
+  const recommendations = results.filter(
+    (r): r is Recommendation => r !== null && !(r.held === false && r.action === "PASS"),
+  );
   return { id: newId(), date, generatedAt: new Date().toISOString(), source: "llm", recommendations, marketContext: ctx };
 }

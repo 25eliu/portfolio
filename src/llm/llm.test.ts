@@ -21,6 +21,7 @@ describe("mock analyzer", () => {
         fundamentals: emptyFundamentals("AAPL"),
         riskPreset: "balanced",
         availableCash: 0,
+        held: true,
       },
       MarketContext.parse({ date: "2026-06-01" }),
     );

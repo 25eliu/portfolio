@@ -93,17 +93,28 @@ describe("Snapshot", () => {
 describe("Recommendation / DailyReport", () => {
   const rec = {
     ticker: "NVDA",
+    held: false,
     action: "BUY",
     conviction: 0.64,
-    horizon: "5d",
     strategyFamily: "momentum_breakout",
     thesis: "Reclaimed VWAP on volume.",
     signals: ["vwap_reclaim", "unusual_volume"],
+    prediction: {
+      direction: "bullish",
+      horizon: "1mo",
+      entry: 172.5,
+      target: 184,
+      stop: 167,
+      expectedReturnPct: 6.7,
+      rMultiple: 2.1,
+      trigger: null,
+      actionIfTriggered: null,
+      invalidation: "close below 167",
+      rationale: "momentum continuation after VWAP reclaim",
+    },
     technicals: { rsi14: 58, macd: 0.5, support: 168.4, resistance: 182 },
     catalyst: { kind: "upgrade", summary: "analyst upgrade", sentiment: 0.7 },
-    tradePlan: { entry: 172.5, stop: 167, target: 184, rMultiple: 2.1, invalidation: "close below 167" },
     briefingNote: null,
-    watchTrigger: null,
   };
 
   test("parses a full recommendation", () => {

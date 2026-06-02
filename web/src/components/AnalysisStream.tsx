@@ -6,10 +6,7 @@ import { Badge } from "./ui/Badge.tsx";
 import { cn } from "../lib/cn.ts";
 
 const ACTION_TONE: Record<string, "pos" | "neg" | "neutral" | "accent"> = {
-  BUY: "pos",
-  SELL: "neg",
-  HOLD: "neutral",
-  WATCH: "accent",
+  ADD: "pos", BUY: "pos", TRIM: "neg", SELL: "neg", HOLD: "neutral", WATCH: "accent", PASS: "neutral",
 };
 
 const STATUS_RANK: Record<Lane["status"], number> = {

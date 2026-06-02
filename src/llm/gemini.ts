@@ -8,9 +8,10 @@
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
-import { Recommendation, ScanCandidate } from "../domain/index.ts";
+import { Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { Analyzer, StreamSink } from "./analyze.ts";
+import { normalizeAction } from "./normalize.ts";
 import {
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
@@ -136,9 +137,27 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         input.fundamentals.priceTargetMean && input.price
           ? Math.round(((input.fundamentals.priceTargetMean - input.price) / input.price) * 10000) / 100
           : null;
+      const rawPred = (args.prediction ?? {}) as Record<string, unknown>;
+      const price = input.price;
+      const target = typeof rawPred.target === "number" ? rawPred.target : null;
+      const prediction = Prediction.parse({
+        ...rawPred,
+        entry: typeof rawPred.entry === "number" ? rawPred.entry : price,
+        expectedReturnPct:
+          typeof rawPred.expectedReturnPct === "number"
+            ? rawPred.expectedReturnPct
+            : target && price
+              ? Math.round(((target - price) / price) * 10000) / 100
+              : null,
+        invalidation: typeof rawPred.invalidation === "string" ? rawPred.invalidation : "thesis no longer supported",
+        rationale: typeof rawPred.rationale === "string" ? rawPred.rationale : input.symbol,
+      });
       return Recommendation.parse({
         ...args,
         ticker: input.symbol,
+        held: input.held,
+        action: normalizeAction(String(args.action ?? (input.held ? "HOLD" : "PASS")), input.held),
+        prediction,
         technicals: input.technicals,
         fundamentals: input.fundamentals,
         priceTargetUpside: upside,
