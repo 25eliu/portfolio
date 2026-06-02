@@ -59,12 +59,10 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
 
     // Step 2c — compile the performance wiki from resolved outcomes (after resolution, before analysis)
     // so the freshest, evidence-gated briefing is injected into this run. Degrades gracefully.
-    const wiki = await Promise.resolve()
-      .then(() => compileWiki(app))
-      .catch((err) => {
-        console.warn(`[wiki] compile failed: ${err instanceof Error ? err.message : String(err)}`);
-        return { metrics: 0, lessons: 0, briefing: "" };
-      });
+    const wiki = await compileWiki(app).catch((err) => {
+      console.warn(`[wiki] compile failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { metrics: 0, lessons: 0, briefing: "" };
+    });
     if (wiki.lessons > 0) console.log(`[wiki] metrics=${wiki.metrics} lessons=${wiki.lessons}`);
 
     // Step 3 — analysis: real LLM report (streamed) when an analyzer is configured, else fake fallback.
