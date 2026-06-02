@@ -25,15 +25,25 @@ export type TickerInput = {
 
 export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): string {
   return [
-    `You are an equity analyst researching ${t.symbol}. Use Google Search to find the most recent`,
-    `catalysts, news, earnings/guidance, analyst opinions, and credible sentiment (reputable analysts,`,
-    `notable investors, substantive financial press / Reddit / X). Weight credible voices over hype.`,
+    `You are a senior equity analyst building a rigorous research brief on ${t.symbol}.`,
+    `Use Google Search to gather and synthesize the most recent information across all factors below.`,
+    `Weight credible voices (reputable analysts, notable investors, substantive financial press) over hype.`,
     ``,
     `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
     `Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
     ``,
-    `Summarize your findings in 4-6 sentences: the key catalysts, the prevailing sentiment and who`,
-    `holds it, and the main risks. Do not give a recommendation yet — just the researched facts.`,
+    `Research the following in order and include each in your brief:`,
+    `1. Business update & news catalysts — recent developments, product/regulatory news, M&A.`,
+    `2. Earnings & guidance — most recent results vs. expectations, management forward guidance.`,
+    `3. Analyst actions & price targets — recent upgrades/downgrades, consensus target range.`,
+    `4. Valuation context — how current multiples compare to history and peers.`,
+    `5. Technical posture — trend direction, key levels, momentum signals.`,
+    `6. Credible-source sentiment — what reputable analysts or notable investors are saying right now.`,
+    `7. Bear case / counter-thesis — state the strongest argument against acting on this ticker,`,
+    `   the specific conditions that would make this call wrong, and the realistic base rate of failure.`,
+    ``,
+    `Summarize your findings concisely (6-10 sentences covering all seven factors).`,
+    `Do not give a recommendation yet — just the researched facts.`,
   ].join("\n");
 }
 
@@ -57,13 +67,13 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     `size any trade plan within this cash; prefer WATCH over BUY if there isn't cash to act on it.`,
     ``,
     t.held
-      ? `You HOLD ${t.symbol}. Choose exactly one: ADD (buy more), TRIM (reduce), HOLD (keep), SELL (exit).`
-      : `${t.symbol} is a CANDIDATE you do not own. Choose exactly one: BUY (enter now), WATCH (wait for a trigger), PASS (skip).`,
-    `Do not hedge — commit to the verdict the evidence supports.`,
-    `Return conviction (0..1), a strategyFamily, the signals you used, an optional catalyst, and a`,
-    `REQUIRED prediction object: { direction, horizon (1d|1w|1mo|3mo|6mo|1y), entry, target, stop,`,
-    `expectedReturnPct, rMultiple, trigger, actionIfTriggered, invalidation, rationale }. For WATCH,`,
-    `the trigger is the specific condition to act on and actionIfTriggered is what it becomes (e.g. "BUY").`,
+      ? `You HOLD ${t.symbol}. Decide exactly one — and do not default to HOLD to avoid committing:\n  ADD (high-quality dip / thesis strengthening), TRIM (overextended / risk management), HOLD (thesis intact & fairly valued), SELL (thesis broken or better uses of capital).`
+      : `${t.symbol} is a CANDIDATE you do not own. Decide exactly one — passing is a valid, expected outcome:\n  BUY (you would act at today's price), WATCH (clear thesis but needs a concrete trigger), PASS (not compelling).`,
+    `Weigh the bull and bear cases from the research; commit to the verdict the evidence supports.`,
+    `Do not hedge — a non-committal verdict is a failure; pick the action the evidence demands.`,
+    `Conviction (0..1) must be a calibrated probability — reserve high values for genuinely high-confidence calls; neutral is allowed.`,
+    `Return a REQUIRED prediction: { direction, horizon (1d|1w|1mo|3mo|6mo|1y), entry, target, stop, expectedReturnPct, rMultiple, trigger, actionIfTriggered, invalidation, rationale }.`,
+    `For WATCH: trigger = the specific, testable condition to act on; actionIfTriggered = what it becomes (e.g. "BUY"); also state the bearish branch in invalidation. Base every number ONLY on the provided technicals/fundamentals.`,
   ].join("\n");
 }
 
