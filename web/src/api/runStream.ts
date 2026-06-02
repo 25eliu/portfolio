@@ -25,7 +25,7 @@ type StreamEvent = {
 };
 
 export type LaneStatus = "queued" | "researching" | "structuring" | "done" | "error";
-export type ToolHit = { query?: string; sourceCount: number };
+export type ToolHit = { query?: string; sources: string[] };
 export type Lane = {
   symbol: string;
   source: string;
@@ -105,7 +105,7 @@ function reduce(s: StreamState, e: StreamEvent): StreamState {
         ? { ...s, contextThinking: s.contextThinking + (e.text ?? "") }
         : { ...s, contextText: s.contextText + (e.text ?? "") };
     case "context:tool":
-      return { ...s, contextTools: [...s.contextTools, { query: e.query, sourceCount: e.sources?.length ?? 0 }] };
+      return { ...s, contextTools: [...s.contextTools, { query: e.query, sources: e.sources?.map((src) => src.title) ?? [] }] };
     case "ticker:start": {
       const l = lane(e.symbol!, s);
       return withLane(s, e.symbol!, { ...l, status: e.stage === "structure" ? "structuring" : "researching" });
@@ -120,7 +120,7 @@ function reduce(s: StreamState, e: StreamEvent): StreamState {
       const l = lane(e.symbol!, s);
       return withLane(s, e.symbol!, {
         ...l,
-        tools: [...l.tools, { query: e.query, sourceCount: e.sources?.length ?? 0 }],
+        tools: [...l.tools, { query: e.query, sources: e.sources?.map((src) => src.title) ?? [] }],
       });
     }
     case "ticker:done": {

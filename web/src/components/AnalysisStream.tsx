@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
 import { useRunStream, type Lane, type ToolHit } from "../api/runStream.ts";
 import { Badge } from "./ui/Badge.tsx";
+import { Tooltip } from "./ui/Tooltip.tsx";
 import { cn } from "../lib/cn.ts";
 
 const ACTION_TONE: Record<string, "pos" | "neg" | "neutral" | "accent"> = {
@@ -36,14 +37,14 @@ function ToolChips({ tools }: { tools: ToolHit[] }) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
       {tools.slice(-4).map((t, i) => (
-        <span
-          key={i}
-          className="inline-flex items-center gap-1 rounded-md border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-secondary"
-        >
-          <Search className="h-3 w-3 text-accent" />
-          {t.query ? <span className="max-w-[200px] truncate">{t.query}</span> : "search"}
-          {t.sourceCount > 0 && <span className="text-text-muted">· {t.sourceCount}</span>}
-        </span>
+        <Tooltip key={i} content={t.sources.length ? t.sources.join(", ") : "searching…"}>
+          <span className="inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-[11px] text-accent cursor-help">
+            <Search className="h-3.5 w-3.5" />
+            <span className="font-medium">Searched:</span>
+            <span className="max-w-[240px] truncate text-text-secondary">{t.query ?? "…"}</span>
+            {t.sources.length > 0 && <span className="text-text-muted">· {t.sources.length} sources</span>}
+          </span>
+        </Tooltip>
       ))}
     </div>
   );

@@ -1,9 +1,24 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Action, Recommendation } from "../api/types.ts";
 import { cn } from "../lib/cn.ts";
 import { usd } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
+import { Tooltip } from "./ui/Tooltip.tsx";
+import { GLOSSARY } from "../lib/glossary.ts";
+
+function Term({ k, children }: { k: string; children: ReactNode }) {
+  const def = GLOSSARY[k];
+  if (!def) return <>{children}</>;
+  return (
+    <Tooltip content={def}>
+      <span className="cursor-help underline decoration-dotted decoration-text-muted underline-offset-2">
+        {children}
+      </span>
+    </Tooltip>
+  );
+}
 
 /** Screen types from the discovery layer get a visually distinct (accent) tone. */
 const DISCOVERY_SCREENS = new Set(["sentiment", "thematic"]);
@@ -59,13 +74,13 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
       <header className="mb-2.5 flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold tracking-tight text-text">{r.ticker}</span>
-          <Badge tone={ACTION_TONE[r.action]}>{r.action}</Badge>
+          <Badge tone={ACTION_TONE[r.action]}><Term k={r.action}>{r.action}</Term></Badge>
           {r.screen && (
             <Badge tone={screenTone(r.screen)}>{screenLabel(r.screen)}</Badge>
           )}
         </div>
         <div className="text-right">
-          <div className="eyebrow">Conviction</div>
+          <div className="eyebrow"><Term k="conviction">Conviction</Term></div>
           <div className="tnum text-sm font-semibold text-text">
             {(r.conviction * 100).toFixed(0)}%
           </div>
@@ -136,7 +151,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         {/* Invalidation */}
         {pred.invalidation && (
           <p className="mt-1.5 text-[11px] text-text-muted">
-            <span className="font-medium">Invalid:</span> {pred.invalidation}
+            <span className="font-medium"><Term k="invalidation">Invalid</Term>:</span> {pred.invalidation}
           </p>
         )}
       </div>
@@ -170,7 +185,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
       {r.fundamentals && (
         <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5 text-[11px]">
           <FundStat
-            label="P/E"
+            label={<Term k="peTrailing">P/E</Term>}
             value={r.fundamentals.peTrailing != null ? r.fundamentals.peTrailing.toFixed(1) : "—"}
           />
           <FundStat
@@ -230,10 +245,10 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             <div className="mt-2.5 space-y-2 text-[11px]">
               <div className="grid grid-cols-2 gap-2">
                 {r.technicals.rsi14 != null && (
-                  <Detail label="RSI" value={r.technicals.rsi14.toFixed(0)} />
+                  <Detail label={<Term k="rsi14">RSI</Term>} value={r.technicals.rsi14.toFixed(0)} />
                 )}
                 {r.technicals.macd != null && (
-                  <Detail label="MACD" value={r.technicals.macd.toFixed(2)} />
+                  <Detail label={<Term k="macd">MACD</Term>} value={r.technicals.macd.toFixed(2)} />
                 )}
                 {r.technicals.support != null && (
                   <Detail label="Support" value={usd(r.technicals.support)} />
@@ -262,7 +277,7 @@ function Plan({ label, value, tone }: { label: string; value: string; tone?: str
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div className="flex items-center justify-between rounded-md bg-surface-2 px-2 py-1">
       <span className="text-text-muted">{label}</span>
@@ -271,7 +286,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FundStat({ label, value }: { label: string; value: string }) {
+function FundStat({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div>
       <div className="text-[9px] uppercase tracking-wide text-text-muted">{label}</div>
