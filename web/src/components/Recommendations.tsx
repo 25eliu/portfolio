@@ -7,7 +7,7 @@ const OPP_ORDER: Action[] = ["BUY", "WATCH"];
 
 const rank = (order: Action[]) => (r: Recommendation) => {
   const i = order.indexOf(r.action);
-  return (i < 0 ? 99 : i) - r.conviction; // action group first, then conviction desc
+  return (i < 0 ? 99 : i) * 2 - r.conviction; // action group first, then conviction desc
 };
 
 function Group({

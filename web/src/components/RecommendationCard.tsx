@@ -117,7 +117,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
 
         {/* Held/Buy positions: entry / target / stop row */}
         {r.action !== "WATCH" && (pred.entry != null || pred.target != null || pred.stop != null) && (
-          <div className="grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(4rem,1fr))] gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5">
             {pred.entry != null && (
               <Plan label="Entry" value={usd(pred.entry)} />
             )}
@@ -134,9 +134,11 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         )}
 
         {/* Invalidation */}
-        <p className="mt-1.5 text-[11px] text-text-muted">
-          <span className="font-medium">Invalid:</span> {pred.invalidation}
-        </p>
+        {pred.invalidation && (
+          <p className="mt-1.5 text-[11px] text-text-muted">
+            <span className="font-medium">Invalid:</span> {pred.invalidation}
+          </p>
+        )}
       </div>
 
       <p className="mb-3 text-[13px] leading-relaxed text-text-secondary">{r.thesis}</p>
@@ -216,6 +218,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         <>
           <button
             onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
             className="mt-3 flex w-full items-center justify-center gap-1 border-t border-hairline pt-2.5 text-[11px] text-text-muted transition-colors hover:text-text-secondary"
           >
             {open ? "Hide" : "Details"}
