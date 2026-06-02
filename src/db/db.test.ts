@@ -165,6 +165,15 @@ describe("runs", () => {
     expect(latest?.status).toBe("ok");
     expect(latest?.finishedAt).not.toBeNull();
   });
+
+  test("abandonRunning clears stale running rows (so a new run isn't blocked)", () => {
+    repos.runs.start();
+    repos.runs.start(); // two leftover "running" rows from killed processes
+    expect(repos.runs.abandonRunning()).toBe(2);
+    expect(repos.runs.latest()?.status).toBe("error");
+    expect(repos.runs.latest()?.error).toContain("abandoned");
+    expect(repos.runs.abandonRunning()).toBe(0); // nothing left to clear
+  });
 });
 
 describe("risk profiles", () => {

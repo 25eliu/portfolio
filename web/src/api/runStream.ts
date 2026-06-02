@@ -157,7 +157,17 @@ export function useRunStream(runId: string | null, onFinished?: (status: "done" 
   useEffect(() => {
     if (!runId) return;
     finishedRef.current = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
     const es = new EventSource(`/api/run/${runId}/stream`);
+
+    const finish = (status: "done" | "error", message?: string) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      es.close();
+      if (poll) clearInterval(poll);
+      onFinished?.(status, message);
+    };
+
     es.onmessage = (msg) => {
       let ev: StreamEvent;
       try {
@@ -166,23 +176,32 @@ export function useRunStream(runId: string | null, onFinished?: (status: "done" 
         return;
       }
       dispatch(ev);
-      if ((ev.type === "run:done" || ev.type === "run:error") && !finishedRef.current) {
-        finishedRef.current = true;
-        es.close();
-        onFinished?.(ev.type === "run:error" ? "error" : "done", ev.message);
-      }
+      if (ev.type === "run:done") finish("done");
+      else if (ev.type === "run:error") finish("error", ev.message);
     };
-    es.onerror = () => {
-      // Network blip / server close. If we never saw a terminal event, treat as finished so the UI
-      // doesn't hang; the dashboard's /status poll is the backstop.
-      if (!finishedRef.current) {
-        finishedRef.current = true;
-        es.close();
-        onFinished?.("done");
+
+    // IMPORTANT: do NOT finish on `onerror`. EventSource fires it on transient hiccups and will
+    // auto-reconnect; treating it as "done" would falsely end the run instantly. The /status poll
+    // below is the authoritative completion signal, so the run resolves correctly even if SSE drops.
+    es.onerror = () => {};
+
+    poll = setInterval(async () => {
+      try {
+        const res = await fetch("/api/status");
+        const { lastRun } = (await res.json()) as { lastRun: { status: string; error?: string | null } | null };
+        if (lastRun && lastRun.status !== "running") {
+          finish(lastRun.status === "error" ? "error" : "done", lastRun.error ?? undefined);
+        }
+      } catch {
+        /* ignore — keep polling */
       }
+    }, 2500);
+
+    return () => {
+      es.close();
+      if (poll) clearInterval(poll);
     };
-    return () => es.close();
-    // onFinished intentionally excluded — we capture it once per runId.
+    // onFinished intentionally excluded — captured once per runId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 

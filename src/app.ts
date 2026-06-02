@@ -69,6 +69,7 @@ export function createApp(opts: CreateAppOptions = {}): App {
     opts.fundamentals ?? cached(createFundamentals(env), repos, opts.now ?? (() => today()));
   const analyzer =
     opts.analyzer ?? (env.GEMINI_API_KEY ? createGeminiAnalyzer(env) : null);
+  repos.runs.abandonRunning(); // clear stale "running" rows from a previously-killed process
   const { user, ai } = bootstrapPortfolios(repos);
   return { env, db, repos, gateway, now: opts.now ?? (() => today()), user, ai, analyzer, fundamentals };
 }

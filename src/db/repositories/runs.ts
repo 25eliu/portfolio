@@ -48,6 +48,18 @@ export function runsRepo(db: DB) {
       );
     },
 
+    /**
+     * Mark any still-"running" runs as abandoned. Runs live in an in-memory bus tied to the server
+     * process, so on a fresh boot no run is actually in flight — a leftover "running" row is stale
+     * (the server was killed mid-run) and would otherwise block all new runs via the concurrency
+     * guard. Returns the number of runs cleared.
+     */
+    abandonRunning(): number {
+      return db
+        .query("UPDATE runs SET finished_at = ?, status = 'error', error = 'abandoned (server restart)' WHERE status = 'running'")
+        .run(new Date().toISOString()).changes;
+    },
+
     latest(): Run | null {
       const row = db.query<Row, []>("SELECT * FROM runs ORDER BY started_at DESC LIMIT 1").get();
       return row ? toDomain(row) : null;
