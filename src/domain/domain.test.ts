@@ -4,6 +4,7 @@ import { Portfolio } from "./portfolio.ts";
 import { Snapshot } from "./snapshot.ts";
 import { DailyReport, Recommendation } from "./recommendation.ts";
 import { RiskProfile } from "./risk.ts";
+import { Schedule } from "./schedule.ts";
 
 describe("Symbol", () => {
   test("uppercases and trims", () => {
@@ -131,5 +132,23 @@ describe("RiskProfile", () => {
   });
   test("rejects an unknown preset", () => {
     expect(() => RiskProfile.parse({ portfolioId: "p1", preset: "yolo" })).toThrow();
+  });
+});
+
+describe("Schedule", () => {
+  test("accepts a valid 24h time", () => {
+    expect(Schedule.parse({ enabled: true, time: "09:30" }).time).toBe("09:30");
+    expect(Schedule.parse({ enabled: false, time: "23:59" }).time).toBe("23:59");
+    expect(Schedule.parse({ enabled: true, time: "00:00" }).time).toBe("00:00");
+  });
+  test("rejects out-of-range or malformed times", () => {
+    expect(() => Schedule.parse({ enabled: true, time: "25:00" })).toThrow();
+    expect(() => Schedule.parse({ enabled: true, time: "12:60" })).toThrow();
+    expect(() => Schedule.parse({ enabled: true, time: "9:5" })).toThrow();
+    expect(() => Schedule.parse({ enabled: true, time: "0930" })).toThrow();
+  });
+  test("rejects missing fields", () => {
+    expect(() => Schedule.parse({ time: "09:30" })).toThrow();
+    expect(() => Schedule.parse({ enabled: true })).toThrow();
   });
 });

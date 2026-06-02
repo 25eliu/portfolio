@@ -1,6 +1,7 @@
-import { Activity, Pencil, Play, Sparkles } from "lucide-react";
-import { useRisk, useSetRisk, useStatus } from "../api/hooks.ts";
+import { Activity, Clock, Pencil, Play } from "lucide-react";
+import { useRisk, useSchedule, useSetRisk, useStatus } from "../api/hooks.ts";
 import type { RiskPreset } from "../api/types.ts";
+import { time12h } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Button } from "./ui/Button.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
@@ -13,23 +14,24 @@ const RISK_OPTIONS: { value: RiskPreset; label: string }[] = [
 
 type Props = {
   onManage: () => void;
-  onSeed: () => void;
+  onSchedule: () => void;
   onRun: () => void;
-  seeding: boolean;
   running: boolean;
 };
 
-export function Header({ onManage, onSeed, onRun, seeding, running }: Props) {
+export function Header({ onManage, onSchedule, onRun, running }: Props) {
   const status = useStatus();
   const risk = useRisk();
   const setRisk = useSetRisk();
+  const schedule = useSchedule();
 
   const lastRun = status.data?.lastRun;
   const preset = risk.data?.risk?.preset ?? "balanced";
   const ok = lastRun?.status === "ok";
+  const sched = schedule.data?.schedule;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-glass-edge bg-glass-strong shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-2xl backdrop-saturate-150">
+    <header className="sticky top-0 z-30 border-b border-hairline bg-surface-2">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-6 py-3.5">
         <div className="mr-auto flex items-center gap-3">
           <div className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl border border-accent/40 bg-gradient-to-b from-accent/25 to-accent-soft text-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
@@ -76,17 +78,17 @@ export function Header({ onManage, onSeed, onRun, seeding, running }: Props) {
         <div className="h-6 w-px bg-hairline" aria-hidden />
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Clock className="h-4 w-4" />}
+            onClick={onSchedule}
+            title="Schedule automatic runs"
+          >
+            {sched?.enabled ? time12h(sched.time) : "Schedule"}
+          </Button>
           <Button variant="ghost" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={onManage}>
             Manage
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<Sparkles className="h-4 w-4" />}
-            onClick={onSeed}
-            loading={seeding}
-          >
-            Seed AI
           </Button>
           <Button
             variant="primary"

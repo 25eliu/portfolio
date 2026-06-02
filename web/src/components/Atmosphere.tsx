@@ -1,7 +1,8 @@
 /**
  * Ambient background mesh — a few large, heavily-blurred color blobs drifting slowly
- * behind everything. Gives the liquid-glass surfaces something to refract instead of a
- * flat void. Purely decorative: fixed, behind all content, and non-interactive.
+ * behind everything, so the canvas reads as softly lit rather than a flat void. The blobs
+ * show through the page gutters around the solid panels. Purely decorative: fixed, behind
+ * all content, and non-interactive.
  *
  * Motion is paused automatically under `prefers-reduced-motion` (see index.css), and the
  * whole layer is invisible to assistive tech.

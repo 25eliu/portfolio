@@ -7,6 +7,7 @@ import type {
   RiskPreset,
   RiskProfile,
   Run,
+  Schedule,
   Snapshot,
   WatchlistItem,
 } from "./types.ts";
@@ -31,7 +32,6 @@ export const client = {
   deleteHolding: (id: string) => api<{ ok: boolean }>(`/holdings/${id}`, { method: "DELETE" }),
   setCash: (cash: number) =>
     api<{ cash: number }>("/portfolios/cash", { method: "PUT", body: JSON.stringify({ cash }) }),
-  seedAi: () => api<{ seeded: boolean }>("/portfolios/ai/seed", { method: "POST" }),
   run: () => api<{ runId: string; status: string }>("/run", { method: "POST" }),
   recommendations: () => api<{ report: DailyReport | null }>("/recommendations"),
   snapshots: () =>
@@ -40,6 +40,9 @@ export const client = {
   risk: () => api<{ risk: RiskProfile | null }>("/risk"),
   setRisk: (preset: RiskPreset) =>
     api<RiskProfile>("/risk", { method: "PUT", body: JSON.stringify({ preset }) }),
+  schedule: () => api<{ schedule: Schedule }>("/schedule"),
+  setSchedule: (s: Schedule) =>
+    api<Schedule>("/schedule", { method: "PUT", body: JSON.stringify(s) }),
   watchlist: () => api<WatchlistItem[]>("/watchlist"),
   addWatch: (symbol: string) =>
     api<WatchlistItem>("/watchlist", { method: "POST", body: JSON.stringify({ symbol }) }),

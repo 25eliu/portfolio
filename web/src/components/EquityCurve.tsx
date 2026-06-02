@@ -13,8 +13,14 @@ import type { MarketSnapshot, Snapshot } from "../api/types.ts";
 import { cn } from "../lib/cn.ts";
 import { chart, tooltipStyle } from "../lib/chartTheme.ts";
 import { compactUsd, pct, usd } from "../lib/format.ts";
+import { type HorizonKey, horizonDays, latestDate, withinHorizon } from "../lib/horizon.ts";
+import { TimeHorizon } from "./ui/TimeHorizon.tsx";
 
-type Props = { user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] };
+type SeriesData = { user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] };
+type Props = SeriesData & {
+  horizon: HorizonKey;
+  onHorizonChange: (h: HorizonKey) => void;
+};
 type SeriesKey = "you" | "ai" | "spy";
 
 const SERIES: { key: SeriesKey; name: string; color: string; dashed?: boolean }[] = [
@@ -23,29 +29,30 @@ const SERIES: { key: SeriesKey; name: string; color: string; dashed?: boolean }[
   { key: "spy", name: "SPY", color: chart.muted, dashed: true },
 ];
 
-const RANGES = [
-  { label: "1M", days: 31 },
-  { label: "3M", days: 92 },
-  { label: "All", days: Infinity },
-] as const;
+/** Stock value of a snapshot (cash excluded), so cash deposits don't distort the curve. */
+const stockValue = (s: Snapshot) => s.totalValue - s.cash;
 
-/** Build a merged, date-aligned series of You / AI / SPY (SPY normalized to your start equity). */
-function buildSeries({ user, ai, spy }: Props) {
+/** Build a merged, date-aligned series of You / AI / SPY (SPY normalized to your start stock value). */
+function buildSeries({ user, ai, spy }: SeriesData) {
   const dates = [...new Set([...user, ...ai, ...spy].map((s) => s.date))].sort();
   const byDate = <T extends { date: string }>(rows: T[]) => new Map(rows.map((r) => [r.date, r]));
   const u = byDate(user);
   const a = byDate(ai);
   const s = byDate(spy);
 
-  const base = user[0]?.totalValue ?? ai[0]?.totalValue ?? 10_000;
+  const base = (user[0] ? stockValue(user[0]) : ai[0] ? stockValue(ai[0]) : 0) || 10_000;
   const firstSpy = spy[0]?.spyClose;
 
-  return dates.map((date) => ({
-    date,
-    you: u.get(date)?.totalValue ?? null,
-    ai: a.get(date)?.totalValue ?? null,
-    spy: firstSpy && s.get(date) ? (base * s.get(date)!.spyClose) / firstSpy : null,
-  }));
+  return dates.map((date) => {
+    const uRow = u.get(date);
+    const aRow = a.get(date);
+    return {
+      date,
+      you: uRow ? stockValue(uRow) : null,
+      ai: aRow ? stockValue(aRow) : null,
+      spy: firstSpy && s.get(date) ? (base * s.get(date)!.spyClose) / firstSpy : null,
+    };
+  });
 }
 
 function CurveTooltip({ active, payload, label }: any) {
@@ -87,15 +94,14 @@ function CurveTooltip({ active, payload, label }: any) {
   );
 }
 
-export function EquityCurve(props: Props) {
-  const [range, setRange] = useState<number>(Infinity);
+export function EquityCurve({ horizon, onHorizonChange, ...props }: Props) {
   const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set());
   const full = useMemo(() => buildSeries(props), [props]);
 
   const data = useMemo(() => {
-    if (range === Infinity || full.length === 0) return full;
-    return full.slice(Math.max(0, full.length - range));
-  }, [full, range]);
+    const ref = latestDate(full);
+    return withinHorizon(full, horizonDays(horizon), ref);
+  }, [full, horizon]);
 
   const toggle = (key: SeriesKey) =>
     setHidden((prev) => {
@@ -139,22 +145,7 @@ export function EquityCurve(props: Props) {
             );
           })}
         </div>
-        <div className="inline-flex items-center gap-0.5 rounded-xl border border-hairline bg-surface-2 p-0.5">
-          {RANGES.map((r) => (
-            <button
-              key={r.label}
-              onClick={() => setRange(r.days)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                range === r.days
-                  ? "bg-accent text-canvas"
-                  : "text-text-secondary hover:text-text",
-              )}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <TimeHorizon value={horizon} onChange={onHorizonChange} />
       </div>
 
       <ResponsiveContainer width="100%" height={300}>

@@ -4,9 +4,13 @@ import type { PricedPortfolio } from "./types.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function dayPnL(app: App, portfolioId: string, equity: number): number | null {
+/**
+ * Day P&L on stock value only (cash-neutral): compares the current positions value against the
+ * previous snapshot's stock value (`totalValue - cash`). Adding/withdrawing cash never shows as a gain.
+ */
+function dayPnL(app: App, portfolioId: string, positionsValue: number): number | null {
   const prev = app.repos.snapshots.latestBefore(portfolioId, app.now());
-  return prev ? round2(equity - prev.totalValue) : null;
+  return prev ? round2(positionsValue - (prev.totalValue - prev.cash)) : null;
 }
 
 /** Price My Portfolio from user-entered holdings plus user-entered sitting cash (advisory-only). */
@@ -40,7 +44,7 @@ export async function priceUserPortfolio(app: App): Promise<PricedPortfolio> {
     equity,
     costValue: round2(costValue),
     totalPnL: round2(totalPnL),
-    dayPnL: dayPnL(app, app.user.id, equity),
+    dayPnL: dayPnL(app, app.user.id, positionsValue),
   };
 }
 
@@ -71,6 +75,6 @@ export async function priceAiPortfolio(app: App): Promise<PricedPortfolio> {
     equity,
     costValue: round2(costValue),
     totalPnL: round2(totalPnL),
-    dayPnL: dayPnL(app, app.ai.id, equity),
+    dayPnL: dayPnL(app, app.ai.id, positionsValue),
   };
 }

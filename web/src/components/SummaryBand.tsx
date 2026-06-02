@@ -1,41 +1,43 @@
 import type { MarketSnapshot, PricedPortfolio, Snapshot } from "../api/types.ts";
 import { chart } from "../lib/chartTheme.ts";
 import { pct, pnlClass, signedUsd, usd } from "../lib/format.ts";
+import { type HorizonKey, horizonDays, latestDate, periodReturn, withinHorizon } from "../lib/horizon.ts";
 import { Card } from "./ui/Card.tsx";
 import { Sparkline } from "./ui/Sparkline.tsx";
 import { Stat } from "./ui/Stat.tsx";
+import { TimeHorizon } from "./ui/TimeHorizon.tsx";
 
 type Props = {
   user: PricedPortfolio;
   ai: PricedPortfolio;
   snapshots?: { user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] };
+  horizon: HorizonKey;
+  onHorizonChange: (h: HorizonKey) => void;
 };
 
-/** Total return % over the available series (first → last), or null if not enough data. */
-function totalReturn(values: number[]): number | null {
-  if (values.length < 2) return null;
-  const first = values[0];
-  const last = values[values.length - 1];
-  if (!first || last == null) return null;
-  return (last / first - 1) * 100;
-}
+/** Stock value of a snapshot (cash excluded) so cash deposits don't read as performance. */
+const stockValue = (s: Snapshot) => s.totalValue - s.cash;
 
-export function SummaryBand({ user, ai, snapshots }: Props) {
-  const userSeries = (snapshots?.user ?? []).map((s) => s.totalValue);
-  const aiSeries = (snapshots?.ai ?? []).map((s) => s.totalValue);
-  const spySeries = (snapshots?.spy ?? []).map((s) => s.spyClose);
+export function SummaryBand({ user, ai, snapshots, horizon, onHorizonChange }: Props) {
+  const userSnaps = snapshots?.user ?? [];
+  const aiSnaps = snapshots?.ai ?? [];
+  const spySnaps = snapshots?.spy ?? [];
 
-  const youReturn = totalReturn(userSeries);
-  const aiReturn = totalReturn(aiSeries);
-  const spyReturn = totalReturn(spySeries);
+  // All three returns are the % move over the selected window, so they respond to the horizon.
+  const days = horizonDays(horizon);
+  const ref = latestDate(userSnaps, aiSnaps, spySnaps);
+  const userSeries = withinHorizon(userSnaps, days, ref).map(stockValue);
+  const aiSeries = withinHorizon(aiSnaps, days, ref).map(stockValue);
+  const spySeries = withinHorizon(spySnaps, days, ref).map((s) => s.spyClose);
+
+  const youReturn = periodReturn(userSeries);
+  const aiReturn = periodReturn(aiSeries);
+  const spyReturn = periodReturn(spySeries);
 
   const fmtReturn = (r: number | null) => (r == null ? "—" : pct(r));
 
   return (
-    <Card
-      variant="glass"
-      className="glass-hover grid grid-cols-2 gap-x-6 gap-y-5 p-5 lg:grid-cols-4"
-    >
+    <Card className="grid grid-cols-2 gap-x-6 gap-y-5 p-5 lg:grid-cols-4">
       <Stat
         label="My equity"
         value={usd(user.equity)}
@@ -71,7 +73,10 @@ export function SummaryBand({ user, ai, snapshots }: Props) {
         }
       />
       <div>
-        <div className="eyebrow">Return · You vs AI vs SPY</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="eyebrow">Return · You vs AI vs SPY</div>
+          <TimeHorizon value={horizon} onChange={onHorizonChange} />
+        </div>
         <div className="mt-2 space-y-1.5">
           <ReturnRow label="You" value={fmtReturn(youReturn)} raw={youReturn} color={chart.accent} />
           <ReturnRow label="AI" value={fmtReturn(aiReturn)} raw={aiReturn} color={chart.pos} />

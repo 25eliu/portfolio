@@ -98,25 +98,22 @@ describe("portfolio cash", () => {
   });
 });
 
-describe("seed + run + state", () => {
-  test("full flow: add → seed → run → snapshots + recommendations", async () => {
+describe("run + state", () => {
+  test("full flow: add → run → snapshots + recommendations", async () => {
     await req("/api/holdings", {
       method: "POST",
       body: JSON.stringify({ symbol: "AAPL", shares: 10, costBasis: 150 }),
       headers: { "Content-Type": "application/json" },
     });
 
-    const seed = (await (await req("/api/portfolios/ai/seed", { method: "POST" })).json()) as {
-      seeded: boolean;
-    };
-    expect(seed.seeded).toBe(true);
-
     const portfolios = (await (await req("/api/portfolios")).json()) as {
       user: { equity: number; positions: unknown[] };
-      ai: { positions: unknown[] };
+      ai: { positions: unknown[]; equity: number };
     };
     expect(portfolios.user.positions).toHaveLength(1);
-    expect(portfolios.ai.positions).toHaveLength(1);
+    // AI starts flat — its paper account holds $100k cash and no positions until it trades.
+    expect(portfolios.ai.positions).toHaveLength(0);
+    expect(portfolios.ai.equity).toBeGreaterThan(0);
 
     // /run is fire-and-poll: it returns immediately, then the run completes in the background.
     const run = (await (await req("/api/run", { method: "POST" })).json()) as { status: string };
@@ -218,6 +215,37 @@ describe("risk", () => {
     const res = await req("/api/risk", {
       method: "PUT",
       body: JSON.stringify({ preset: "yolo" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("schedule", () => {
+  test("defaults to disabled at 09:30", async () => {
+    const got = (await (await req("/api/schedule")).json()) as {
+      schedule: { enabled: boolean; time: string };
+    };
+    expect(got.schedule).toEqual({ enabled: false, time: "09:30" });
+  });
+
+  test("put then get a schedule", async () => {
+    const put = await req("/api/schedule", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: true, time: "16:00" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(put.status).toBe(200);
+    const got = (await (await req("/api/schedule")).json()) as {
+      schedule: { enabled: boolean; time: string };
+    };
+    expect(got.schedule).toEqual({ enabled: true, time: "16:00" });
+  });
+
+  test("rejects an invalid time", async () => {
+    const res = await req("/api/schedule", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: true, time: "25:00" }),
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(400);

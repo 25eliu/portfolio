@@ -1,17 +1,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { App } from "../../app.ts";
-import { dailyRun } from "../../pipeline/index.ts";
+import { startRunGuarded } from "../../pipeline/startRun.ts";
 import { runBus, type RunEvent } from "../../pipeline/events.ts";
-
-/** Start a run in the background and return its id (so the client can open the event stream for it). */
-function startRun(app: App): string {
-  const runId = app.repos.runs.start();
-  void dailyRun(app, { runId }).catch((err) =>
-    console.error("dailyRun failed:", err instanceof Error ? err.message : err),
-  );
-  return runId;
-}
 
 /** Manual trigger + live event stream + status + the latest report + equity series. */
 export function runRoutes(app: App): Hono {
@@ -19,13 +10,7 @@ export function runRoutes(app: App): Hono {
 
   // Fire-and-stream: start the run in the background (it publishes progress events to the run bus) and
   // return its runId immediately. The client opens GET /run/:runId/stream to watch it live.
-  r.post("/run", (c) => {
-    const active = app.repos.runs.latest();
-    if (active?.status === "running") {
-      return c.json({ runId: active.id, status: "already_running" });
-    }
-    return c.json({ runId: startRun(app), status: "started" });
-  });
+  r.post("/run", (c) => c.json(startRunGuarded(app)));
 
   // Server-Sent Events: replay this run's buffered events, then stream live ones until it finishes.
   r.get("/run/:runId/stream", (c) => {

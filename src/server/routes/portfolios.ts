@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { App } from "../../app.ts";
-import { priceAiPortfolio, priceUserPortfolio, seedAiAccount } from "../../pipeline/index.ts";
+import { priceAiPortfolio, priceUserPortfolio } from "../../pipeline/index.ts";
 
 const CashInput = z.object({ cash: z.number().nonnegative() });
 
-/** Dual-view portfolio state + AI account seeding. */
+/** Dual-view portfolio state. */
 export function portfolioRoutes(app: App): Hono {
   const r = new Hono();
 
@@ -22,9 +22,6 @@ export function portfolioRoutes(app: App): Hono {
     app.repos.portfolios.setCash(app.user.id, parsed.data.cash);
     return c.json({ cash: parsed.data.cash });
   });
-
-  // One-time seeding of the AI paper account to match My Portfolio.
-  r.post("/ai/seed", async (c) => c.json(await seedAiAccount(app)));
 
   return r;
 }

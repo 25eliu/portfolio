@@ -4,7 +4,6 @@ import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
 import { fakePrice } from "../market/fake/pricing.ts";
 import { dailyRun } from "./dailyRun.ts";
-import { seedAiAccount } from "./seed.ts";
 import { priceUserPortfolio } from "./pricing.ts";
 import { generateFakeReport } from "./fakeReport.ts";
 import { DailyReport } from "../domain/index.ts";
@@ -35,24 +34,6 @@ describe("priceUserPortfolio", () => {
   });
 });
 
-describe("seedAiAccount", () => {
-  test("buys to match user holdings, idempotently", async () => {
-    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
-    app.repos.holdings.upsert(app.user.id, { symbol: "NVDA", shares: 3 });
-
-    const first = await seedAiAccount(app);
-    expect(first.seeded).toBe(true);
-    expect(first.orders).toHaveLength(2);
-
-    const positions = await app.gateway.getPositions();
-    expect(positions.map((p) => p.symbol).sort()).toEqual(["AAPL", "NVDA"]);
-
-    const second = await seedAiAccount(app);
-    expect(second.seeded).toBe(false); // already has positions
-    expect(app.repos.portfolios.get(app.ai.id)?.alpacaAccount).toBe("FAKE-PAPER-0001");
-  });
-});
-
 describe("generateFakeReport", () => {
   test("is schema-valid and includes held + default symbols", () => {
     const report = generateFakeReport(["TSLA"], DATE);
@@ -66,7 +47,6 @@ describe("generateFakeReport", () => {
 describe("dailyRun", () => {
   test("end-to-end: prices both, persists snapshots + report + run", async () => {
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 10, costBasis: 150 });
-    await seedAiAccount(app);
 
     const result = await dailyRun(app);
     expect(result.status).toBe("ok");

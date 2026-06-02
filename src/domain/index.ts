@@ -6,6 +6,7 @@ export * from "./technicals.ts";
 export * from "./marketContext.ts";
 export * from "./recommendation.ts";
 export * from "./risk.ts";
+export * from "./schedule.ts";
 export * from "./fundamentals.ts";
 export * from "./scan.ts";
 export * from "./watchlist.ts";

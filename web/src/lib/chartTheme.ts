@@ -29,14 +29,11 @@ export const CHART_SERIES = [
 
 export const seriesColor = (i: number) => CHART_SERIES[i % CHART_SERIES.length];
 
-/** Shared tooltip container style for Recharts `contentStyle` — frosted glass to match the UI. */
+/** Shared tooltip container style for Recharts `contentStyle` — solid surface to match the UI. */
 export const tooltipStyle = {
-  background: "var(--glass-strong, rgba(18,21,26,0.72))",
-  border: "1px solid var(--glass-edge, rgba(255,255,255,0.08))",
+  background: "#181C22",
+  border: "1px solid #2E343D",
   borderRadius: 12,
-  boxShadow:
-    "inset 0 1px 0 0 rgba(255,255,255,0.10), 0 24px 64px -16px rgba(0,0,0,0.7)",
-  backdropFilter: "blur(20px) saturate(1.5)",
-  WebkitBackdropFilter: "blur(20px) saturate(1.5)",
+  boxShadow: "0 12px 40px -12px rgba(0,0,0,0.7)",
   padding: "10px 12px",
 } as const;

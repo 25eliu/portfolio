@@ -88,4 +88,15 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
     name: "004_portfolio_cash",
     sql: `ALTER TABLE portfolios ADD COLUMN cash REAL NOT NULL DEFAULT 0;`,
   },
+  {
+    name: "005_schedule",
+    sql: `
+      CREATE TABLE schedule_settings (
+        id            TEXT PRIMARY KEY DEFAULT 'singleton',
+        enabled       INTEGER NOT NULL DEFAULT 0,
+        time_of_day   TEXT NOT NULL DEFAULT '09:30',
+        last_run_date TEXT
+      );
+    `,
+  },
 ];

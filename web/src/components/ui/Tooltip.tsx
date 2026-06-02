@@ -15,7 +15,7 @@ export function Tooltip({
         <RadixTooltip.Portal>
           <RadixTooltip.Content
             sideOffset={6}
-            className="z-50 max-w-xs rounded-lg border border-glass-edge bg-glass-strong px-2.5 py-1.5 text-xs text-text-secondary shadow-glass-pop backdrop-blur-xl backdrop-saturate-150 data-[state=delayed-open]:animate-[fade-up_0.15s_ease-out]"
+            className="z-50 max-w-xs rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs text-text-secondary shadow-pop data-[state=delayed-open]:animate-[fade-up_0.15s_ease-out]"
           >
             {content}
             <RadixTooltip.Arrow className="fill-surface-2" />

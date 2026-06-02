@@ -5,7 +5,6 @@ import {
   useInvalidateAll,
   usePortfolios,
   useRecommendations,
-  useSeedAi,
   useSnapshots,
   useStartRun,
 } from "./api/hooks.ts";
@@ -17,10 +16,12 @@ import { JournalPlaceholder } from "./components/JournalPlaceholder.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
 import { PortfolioPanel } from "./components/PortfolioPanel.tsx";
 import { Recommendations } from "./components/Recommendations.tsx";
+import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { SummaryBand } from "./components/SummaryBand.tsx";
 import { TickerManager } from "./components/TickerManager.tsx";
 import { Card, CardHeader } from "./components/ui/Card.tsx";
 import { Skeleton } from "./components/ui/Skeleton.tsx";
+import type { HorizonKey } from "./lib/horizon.ts";
 
 function Section({
   title,
@@ -45,14 +46,15 @@ function Section({
 
 export default function App() {
   const [showManager, setShowManager] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [horizon, setHorizon] = useState<HorizonKey>("3M");
 
   const portfolios = usePortfolios();
   const recommendations = useRecommendations();
   const snapshots = useSnapshots();
   const startRun = useStartRun();
   const refresh = useInvalidateAll();
-  const seed = useSeedAi();
 
   const handleRun = async () => {
     try {
@@ -68,18 +70,6 @@ export default function App() {
     void refresh();
     if (status === "error") toast.error("Run failed", { description: message });
     else toast.success("Analysis complete", { description: "Report and snapshots updated." });
-  };
-
-  const handleSeed = async () => {
-    try {
-      const res = await seed.mutateAsync();
-      toast.success(
-        res.seeded ? "AI paper account seeded" : "AI account already seeded",
-        { description: res.seeded ? "Matched to My Portfolio holdings." : undefined },
-      );
-    } catch (e) {
-      toast.error("Seeding failed", { description: e instanceof Error ? e.message : undefined });
-    }
   };
 
   return (
@@ -99,9 +89,8 @@ export default function App() {
       />
       <Header
         onManage={() => setShowManager(true)}
-        onSeed={handleSeed}
+        onSchedule={() => setShowSchedule(true)}
         onRun={handleRun}
-        seeding={seed.isPending}
         running={activeRunId != null || startRun.isPending}
       />
 
@@ -112,6 +101,8 @@ export default function App() {
               user={portfolios.data.user}
               ai={portfolios.data.ai}
               snapshots={snapshots.data}
+              horizon={horizon}
+              onHorizonChange={setHorizon}
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -126,7 +117,13 @@ export default function App() {
               className="mb-5"
             />
             {snapshots.data ? (
-              <EquityCurve user={snapshots.data.user} ai={snapshots.data.ai} spy={snapshots.data.spy} />
+              <EquityCurve
+                user={snapshots.data.user}
+                ai={snapshots.data.ai}
+                spy={snapshots.data.spy}
+                horizon={horizon}
+                onHorizonChange={setHorizon}
+              />
             ) : (
               <Skeleton className="h-72 w-full" />
             )}
@@ -170,6 +167,7 @@ export default function App() {
       </main>
 
       {showManager && <TickerManager onClose={() => setShowManager(false)} />}
+      {showSchedule && <ScheduleDialog onClose={() => setShowSchedule(false)} />}
     </div>
   );
 }

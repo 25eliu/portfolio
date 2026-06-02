@@ -10,6 +10,7 @@ export type {
   MarketSnapshot,
   RiskProfile,
   RiskPreset,
+  Schedule,
   MarketContext,
   WatchlistItem,
 } from "@shared/domain/index.ts";

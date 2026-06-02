@@ -5,6 +5,7 @@ import { holdingsRoutes } from "./routes/holdings.ts";
 import { portfolioRoutes } from "./routes/portfolios.ts";
 import { runRoutes } from "./routes/run.ts";
 import { riskRoutes } from "./routes/risk.ts";
+import { scheduleRoutes } from "./routes/schedule.ts";
 import { watchlistRoutes } from "./routes/watchlist.ts";
 
 /** Build the HTTP API over an application context (injectable for tests). */
@@ -16,6 +17,7 @@ export function createServer(app: App): Hono {
   api.route("/holdings", holdingsRoutes(app));
   api.route("/portfolios", portfolioRoutes(app));
   api.route("/risk", riskRoutes(app));
+  api.route("/schedule", scheduleRoutes(app));
   api.route("/watchlist", watchlistRoutes(app));
   api.route("/", runRoutes(app)); // /run, /status, /recommendations, /snapshots
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "./client.ts";
-import type { HoldingInput, RiskPreset } from "./types.ts";
+import type { HoldingInput, RiskPreset, Schedule } from "./types.ts";
 
 const keys = {
   portfolios: ["portfolios"],
@@ -9,6 +9,7 @@ const keys = {
   snapshots: ["snapshots"],
   status: ["status"],
   risk: ["risk"],
+  schedule: ["schedule"],
   watchlist: ["watchlist"],
 };
 
@@ -19,6 +20,7 @@ export const useRecommendations = () =>
 export const useSnapshots = () => useQuery({ queryKey: keys.snapshots, queryFn: client.snapshots });
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: client.status });
 export const useRisk = () => useQuery({ queryKey: keys.risk, queryFn: client.risk });
+export const useSchedule = () => useQuery({ queryKey: keys.schedule, queryFn: client.schedule });
 export const useWatchlist = () => useQuery({ queryKey: keys.watchlist, queryFn: client.watchlist });
 
 /** Invalidate everything that a portfolio mutation / run can affect. */
@@ -43,11 +45,6 @@ export function useSetCash() {
   return useMutation({ mutationFn: (cash: number) => client.setCash(cash), onSuccess: invalidate });
 }
 
-export function useSeedAi() {
-  const invalidate = useInvalidateAll();
-  return useMutation({ mutationFn: () => client.seedAi(), onSuccess: invalidate });
-}
-
 /**
  * Start a run and return its `runId`. The run executes in the background and streams progress over
  * SSE (see `useRunStream`); the dashboard refreshes via `useInvalidateAll` when the stream finishes.
@@ -59,6 +56,11 @@ export function useStartRun() {
 export function useSetRisk() {
   const invalidate = useInvalidateAll();
   return useMutation({ mutationFn: (preset: RiskPreset) => client.setRisk(preset), onSuccess: invalidate });
+}
+
+export function useSetSchedule() {
+  const invalidate = useInvalidateAll();
+  return useMutation({ mutationFn: (s: Schedule) => client.setSchedule(s), onSuccess: invalidate });
 }
 
 export function useAddWatch() {
