@@ -29,11 +29,11 @@ export function Header({ onManage, onSeed, onRun, seeding, running }: Props) {
   const ok = lastRun?.status === "ok";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-glass-edge bg-glass-strong shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-2xl backdrop-saturate-150">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-6 py-3.5">
         <div className="mr-auto flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-accent/30 bg-accent-soft text-accent">
-            <Activity className="h-[18px] w-[18px]" strokeWidth={2.25} />
+          <div className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl border border-accent/40 bg-gradient-to-b from-accent/25 to-accent-soft text-accent shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+            <Activity className="h-[18px] w-[18px]" strokeWidth={2} />
           </div>
           <div>
             <h1 className="text-[15px] font-semibold leading-tight tracking-tight text-text">

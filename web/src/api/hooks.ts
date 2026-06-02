@@ -21,8 +21,8 @@ export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: client
 export const useRisk = () => useQuery({ queryKey: keys.risk, queryFn: client.risk });
 export const useWatchlist = () => useQuery({ queryKey: keys.watchlist, queryFn: client.watchlist });
 
-/** Invalidate everything that a portfolio mutation can affect. */
-function useInvalidateAll() {
+/** Invalidate everything that a portfolio mutation / run can affect. */
+export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
     Promise.all(Object.values(keys).map((key) => qc.invalidateQueries({ queryKey: key })));
@@ -38,37 +38,22 @@ export function useDeleteHolding() {
   return useMutation({ mutationFn: (id: string) => client.deleteHolding(id), onSuccess: invalidate });
 }
 
+export function useSetCash() {
+  const invalidate = useInvalidateAll();
+  return useMutation({ mutationFn: (cash: number) => client.setCash(cash), onSuccess: invalidate });
+}
+
 export function useSeedAi() {
   const invalidate = useInvalidateAll();
   return useMutation({ mutationFn: () => client.seedAi(), onSuccess: invalidate });
 }
 
-const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
 /**
- * /run is fire-and-poll: it starts the run server-side and returns immediately. We then poll
- * /status until the run leaves "running" so `isPending` (the "Analyzing" state) stays true for the
- * whole run, and the success/error toast fires at the right time.
+ * Start a run and return its `runId`. The run executes in the background and streams progress over
+ * SSE (see `useRunStream`); the dashboard refreshes via `useInvalidateAll` when the stream finishes.
  */
-export function useRunNow() {
-  const invalidate = useInvalidateAll();
-  return useMutation({
-    mutationFn: async () => {
-      await client.run(); // "started" or "already_running" — either way, poll the in-flight run
-      await sleep(500); // let the background run register its "running" row
-      for (let i = 0; i < 300; i++) {
-        // up to ~10 minutes
-        const { lastRun } = await client.status();
-        if (lastRun && lastRun.status !== "running") {
-          if (lastRun.status === "error") throw new Error(lastRun.error ?? "Run failed");
-          return lastRun;
-        }
-        await sleep(2000);
-      }
-      throw new Error("Run timed out");
-    },
-    onSuccess: invalidate,
-  });
+export function useStartRun() {
+  return useMutation({ mutationFn: () => client.run() });
 }
 
 export function useSetRisk() {

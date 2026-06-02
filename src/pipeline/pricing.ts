@@ -9,19 +9,20 @@ function dayPnL(app: App, portfolioId: string, equity: number): number | null {
   return prev ? round2(equity - prev.totalValue) : null;
 }
 
-/** Price My Portfolio from user-entered holdings (advisory-only; no cash account). */
+/** Price My Portfolio from user-entered holdings plus user-entered sitting cash (advisory-only). */
 export async function priceUserPortfolio(app: App): Promise<PricedPortfolio> {
   const holdings = app.repos.holdings.listByPortfolio(app.user.id);
+  const cash = app.repos.portfolios.get(app.user.id)?.cash ?? 0;
   const quotes = await app.gateway.getQuotes(holdings.map((h) => h.symbol));
   const priceOf = new Map(quotes.map((q) => [q.symbol, q.price]));
 
-  let equity = 0;
+  let positionsValue = 0;
   let costValue = 0;
   let totalPnL = 0;
   const positions: PricedPosition[] = holdings.map((h) => {
     const price = priceOf.get(h.symbol) ?? 0;
     const marketValue = round2(h.shares * price);
-    equity += marketValue;
+    positionsValue += marketValue;
     if (h.costBasis != null) {
       costValue += h.costBasis * h.shares;
       totalPnL += (price - h.costBasis) * h.shares;
@@ -29,16 +30,17 @@ export async function priceUserPortfolio(app: App): Promise<PricedPortfolio> {
     return { symbol: h.symbol, shares: h.shares, price, marketValue };
   });
 
+  const equity = round2(positionsValue + cash);
   return {
     portfolioId: app.user.id,
     kind: "user",
     name: app.user.name,
     positions,
-    cash: 0,
-    equity: round2(equity),
+    cash: round2(cash),
+    equity,
     costValue: round2(costValue),
     totalPnL: round2(totalPnL),
-    dayPnL: dayPnL(app, app.user.id, round2(equity)),
+    dayPnL: dayPnL(app, app.user.id, equity),
   };
 }
 

@@ -10,6 +10,7 @@ function seedUserPortfolio(repos: Repositories): string {
     kind: "user",
     decisionSource: "manual",
     alpacaAccount: null,
+    cash: 0,
     createdAt: new Date().toISOString(),
   });
   return id;

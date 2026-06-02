@@ -10,3 +10,4 @@ process.env.GEMINI_API_KEY = "";
 process.env.FMP_API_KEY = "";
 process.env.ALPACA_KEY_ID = "";
 process.env.ALPACA_SECRET = "";
+process.env.STREAM_LOG = "off"; // silence the run event terminal logger during tests

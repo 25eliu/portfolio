@@ -24,7 +24,7 @@ export function PortfolioPanel({
       />
 
       <div className="mt-5 grid grid-cols-3 gap-4 border-b border-hairline pb-5">
-        <Stat label="Equity" value={usd(p.equity)} />
+        <Stat label="Equity" value={usd(p.equity)} display />
         <Stat
           label="Total P&L"
           value={signedUsd(p.totalPnL)}
@@ -53,29 +53,42 @@ export function PortfolioPanel({
             </tr>
           </thead>
           <tbody>
-            {p.positions.length === 0 ? (
+            {p.positions.length === 0 && p.cash === 0 ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-sm text-text-muted">
                   No holdings yet — add positions to mirror your account.
                 </td>
               </tr>
             ) : (
-              p.positions.map((pos) => (
-                <tr
-                  key={pos.symbol}
-                  className="border-t border-hairline transition-colors hover:bg-surface-2"
-                >
-                  <td className="py-2 font-medium text-text">{pos.symbol}</td>
-                  <td className="tnum py-2 text-right font-mono text-text-secondary">{pos.shares}</td>
-                  <td className="tnum py-2 text-right font-mono text-text-secondary">
-                    {usd(pos.price)}
-                  </td>
-                  <td className="tnum py-2 text-right font-mono text-text">{usd(pos.marketValue)}</td>
-                  <td className="tnum py-2 text-right font-mono text-text-muted">
-                    {equity > 0 ? pctRaw((pos.marketValue / equity) * 100) : "—"}
-                  </td>
-                </tr>
-              ))
+              <>
+                {p.positions.map((pos) => (
+                  <tr
+                    key={pos.symbol}
+                    className="border-t border-hairline transition-colors hover:bg-surface-2"
+                  >
+                    <td className="py-2 font-medium text-text">{pos.symbol}</td>
+                    <td className="tnum py-2 text-right font-mono text-text-secondary">{pos.shares}</td>
+                    <td className="tnum py-2 text-right font-mono text-text-secondary">
+                      {usd(pos.price)}
+                    </td>
+                    <td className="tnum py-2 text-right font-mono text-text">{usd(pos.marketValue)}</td>
+                    <td className="tnum py-2 text-right font-mono text-text-muted">
+                      {equity > 0 ? pctRaw((pos.marketValue / equity) * 100) : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {p.cash > 0 && (
+                  <tr className="border-t border-hairline">
+                    <td className="py-2 font-medium text-text-secondary">Cash</td>
+                    <td className="py-2 text-right text-text-muted">—</td>
+                    <td className="py-2 text-right text-text-muted">—</td>
+                    <td className="tnum py-2 text-right font-mono text-text">{usd(p.cash)}</td>
+                    <td className="tnum py-2 text-right font-mono text-text-muted">
+                      {equity > 0 ? pctRaw((p.cash / equity) * 100) : "—"}
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>

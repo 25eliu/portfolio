@@ -84,4 +84,8 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
     name: "003_report_market_context",
     sql: `ALTER TABLE reports ADD COLUMN market_context_json TEXT;`,
   },
+  {
+    name: "004_portfolio_cash",
+    sql: `ALTER TABLE portfolios ADD COLUMN cash REAL NOT NULL DEFAULT 0;`,
+  },
 ];

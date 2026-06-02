@@ -64,6 +64,40 @@ describe("holdings CRUD", () => {
   });
 });
 
+describe("portfolio cash", () => {
+  test("set cash reflects in the priced user portfolio and its equity", async () => {
+    await req("/api/holdings", {
+      method: "POST",
+      body: JSON.stringify({ symbol: "AAPL", shares: 10, costBasis: 150 }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const put = await req("/api/portfolios/cash", {
+      method: "PUT",
+      body: JSON.stringify({ cash: 25_000 }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(put.status).toBe(200);
+
+    const { user } = (await (await req("/api/portfolios")).json()) as {
+      user: { cash: number; equity: number; positions: { marketValue: number }[] };
+    };
+    expect(user.cash).toBe(25_000);
+    // equity folds cash in on top of position value.
+    const positionsValue = user.positions.reduce((s, p) => s + p.marketValue, 0);
+    expect(user.equity).toBeCloseTo(positionsValue + 25_000, 2);
+  });
+
+  test("rejects negative cash with 400", async () => {
+    const res = await req("/api/portfolios/cash", {
+      method: "PUT",
+      body: JSON.stringify({ cash: -100 }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("seed + run + state", () => {
   test("full flow: add → seed → run → snapshots + recommendations", async () => {
     await req("/api/holdings", {
@@ -112,6 +146,31 @@ describe("seed + run + state", () => {
 
     const status = (await (await req("/api/status")).json()) as { lastRun: { status: string } };
     expect(status.lastRun.status).toBe("ok");
+  });
+
+  test("GET /run/:id/stream streams SSE run events", async () => {
+    const { runId } = (await (await req("/api/run", { method: "POST" })).json()) as { runId: string };
+    const res = await req(`/api/run/${runId}/stream`);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let out = "";
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      const { value, done } = await Promise.race([
+        reader.read(),
+        new Promise<{ value: undefined; done: true }>((r) =>
+          setTimeout(() => r({ value: undefined, done: true }), 250),
+        ),
+      ]);
+      if (done) break;
+      if (value) out += decoder.decode(value);
+      if (out.includes("run:done")) break;
+    }
+    await reader.cancel().catch(() => {});
+    expect(out).toContain("run:start");
+    expect(out).toContain("run:done");
   });
 });
 

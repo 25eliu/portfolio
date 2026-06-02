@@ -48,6 +48,39 @@ describe("generateLlmReport", () => {
     expect(tickers).toContain("MSFT");
   });
 
+  test("emits a live event stream: phase → universe → ticker:start/delta/tool/done", async () => {
+    const app = makeApp();
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
+    const events: import("./events.ts").RunEventInput[] = [];
+    await generateLlmReport(app, (e) => events.push(e));
+
+    const types = events.map((e) => e.type);
+    expect(types).toContain("phase");
+    expect(types).toContain("universe");
+    expect(types).toContain("ticker:start");
+    expect(types).toContain("ticker:delta"); // mock streams synthetic deltas
+    expect(types).toContain("ticker:tool");
+    expect(types).toContain("ticker:done");
+
+    // The AAPL lane reports a start (research stage) and a done with an action.
+    const aaplStart = events.find((e) => e.type === "ticker:start" && e.symbol === "AAPL");
+    expect(aaplStart).toBeDefined();
+    const aaplDone = events.find((e) => e.type === "ticker:done" && e.symbol === "AAPL");
+    expect(aaplDone && "action" in aaplDone ? aaplDone.action : null).toBe("HOLD");
+  });
+
+  test("a failing ticker emits ticker:error but the run still completes", async () => {
+    const flaky = createMockAnalyzer();
+    flaky.analyzeTicker = async () => {
+      throw new Error("boom");
+    };
+    const app = makeApp(flaky);
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
+    const events: import("./events.ts").RunEventInput[] = [];
+    await generateLlmReport(app, (e) => events.push(e));
+    expect(events.some((e) => e.type === "ticker:error")).toBe(true);
+  });
+
   test("thematic discovery candidates appear in the report", async () => {
     const analyzer = createMockAnalyzer();
     // The mock's discoverOpportunities returns deterministic candidates (e.g. PLTR, SOFI)

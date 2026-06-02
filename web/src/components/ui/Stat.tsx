@@ -12,6 +12,7 @@ export function Stat({
   subTone = "text-text-secondary",
   valueTone = "text-text",
   size = "md",
+  display = false,
   trailing,
   className,
 }: {
@@ -21,6 +22,8 @@ export function Stat({
   subTone?: string;
   valueTone?: string;
   size?: "sm" | "md" | "lg";
+  /** Render the value in the editorial display face — for hero KPI numerals. */
+  display?: boolean;
   trailing?: ReactNode;
   className?: string;
 }) {
@@ -29,9 +32,16 @@ export function Stat({
   return (
     <div className={cn("min-w-0", className)}>
       <div className="eyebrow">{label}</div>
-      <div className="mt-1 flex items-end justify-between gap-2">
+      <div className="mt-1.5 flex items-end justify-between gap-2">
         <div className="min-w-0">
-          <div className={cn("tnum font-semibold leading-tight", valueSize, valueTone)}>
+          <div
+            className={cn(
+              "tnum leading-tight",
+              display ? "font-display font-semibold" : "font-semibold",
+              valueSize,
+              valueTone,
+            )}
+          >
             {value}
           </div>
           {sub != null && <div className={cn("tnum mt-0.5 text-xs", subTone)}>{sub}</div>}

@@ -45,6 +45,7 @@ function bootstrapPortfolios(repos: Repositories): { user: Portfolio; ai: Portfo
       kind,
       decisionSource,
       alpacaAccount: null,
+      cash: 0,
       createdAt: new Date().toISOString(),
     });
   };

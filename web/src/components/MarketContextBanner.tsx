@@ -18,7 +18,7 @@ export function MarketContextBanner({ report }: { report: DailyReport | null }) 
   if (!ctx) return null;
 
   return (
-    <article className="card mb-4 p-4">
+    <article className="glass mb-4 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="eyebrow">Market context</span>
         {ctx.spyTrend && (

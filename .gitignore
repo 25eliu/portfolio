@@ -1,11 +1,50 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+build/
+*.tsbuildinfo
+
+# Runtime & local data (SQLite + WAL/SHM). data/.gitkeep stays tracked.
 data/*.sqlite
 data/*.sqlite-*
+data/*.db
+data/*.db-*
+
+# Environment & secrets (.env.example is committed as the template)
 .env
 .env.local
+.env.*.local
+.env.production
+
+# Logs
 *.log
-playwright-report/
+logs/
+
+# Test artifacts
 test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+
+# Personal docs, notes, wiki, stock-data dumps — NOT part of the template
+docs/
+wiki/
+notes/
+scratch/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Agent / tooling workspace caches
 .gstack/
+.claude/

@@ -5,12 +5,15 @@ export function Card({
   className,
   children,
   as: Tag = "section",
+  variant = "solid",
 }: {
   className?: string;
   children: ReactNode;
   as?: "section" | "article" | "div";
+  /** "glass" for hero/chrome surfaces; "solid" (default) for data-dense panels. */
+  variant?: "solid" | "glass";
 }) {
-  return <Tag className={cn("card", className)}>{children}</Tag>;
+  return <Tag className={cn(variant === "glass" ? "glass" : "card", className)}>{children}</Tag>;
 }
 
 export function CardHeader({

@@ -1,22 +1,73 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { App } from "../../app.ts";
 import { dailyRun } from "../../pipeline/index.ts";
+import { runBus, type RunEvent } from "../../pipeline/events.ts";
 
-/** Manual trigger for the daily pipeline + last-run status + the latest report + equity series. */
+/** Start a run in the background and return its id (so the client can open the event stream for it). */
+function startRun(app: App): string {
+  const runId = app.repos.runs.start();
+  void dailyRun(app, { runId }).catch((err) =>
+    console.error("dailyRun failed:", err instanceof Error ? err.message : err),
+  );
+  return runId;
+}
+
+/** Manual trigger + live event stream + status + the latest report + equity series. */
 export function runRoutes(app: App): Hono {
   const r = new Hono();
 
-  // Fire-and-poll: a real LLM run takes minutes, far longer than any HTTP idle timeout. Start it in
-  // the background (it records itself in the runs table + writes the report on completion) and return
-  // immediately; the client polls GET /status until the run leaves the "running" state.
+  // Fire-and-stream: start the run in the background (it publishes progress events to the run bus) and
+  // return its runId immediately. The client opens GET /run/:runId/stream to watch it live.
   r.post("/run", (c) => {
-    if (app.repos.runs.latest()?.status === "running") {
-      return c.json({ status: "already_running" });
+    const active = app.repos.runs.latest();
+    if (active?.status === "running") {
+      return c.json({ runId: active.id, status: "already_running" });
     }
-    void dailyRun(app).catch((err) =>
-      console.error("dailyRun failed:", err instanceof Error ? err.message : err),
-    );
-    return c.json({ status: "started" });
+    return c.json({ runId: startRun(app), status: "started" });
+  });
+
+  // Server-Sent Events: replay this run's buffered events, then stream live ones until it finishes.
+  r.get("/run/:runId/stream", (c) => {
+    const runId = c.req.param("runId");
+    c.header("X-Accel-Buffering", "no"); // disable proxy buffering (Vite/nginx)
+    c.header("Cache-Control", "no-cache");
+    return streamSSE(c, async (stream) => {
+      const queue: RunEvent[] = [];
+      let aborted = false;
+      const unsub = runBus.subscribe(runId, (evt) => queue.push(evt));
+      stream.onAbort(() => {
+        aborted = true;
+        unsub();
+      });
+
+      // Unknown / never-started run → tell the client to close.
+      if (!runBus.hasBuffer(runId)) {
+        await stream.writeSSE({ data: JSON.stringify({ type: "run:done", runId, seq: 0 }) });
+        unsub();
+        return;
+      }
+
+      let idle = 0;
+      try {
+        while (!aborted) {
+          if (queue.length > 0) {
+            idle = 0;
+            const evt = queue.shift()!;
+            await stream.writeSSE({ data: JSON.stringify(evt) });
+            if (evt.type === "run:done" || evt.type === "run:error") break;
+          } else {
+            await stream.sleep(200);
+            if (++idle >= 75) {
+              idle = 0;
+              await stream.writeSSE({ data: JSON.stringify({ type: "heartbeat", seq: 0 }) });
+            }
+          }
+        }
+      } finally {
+        unsub();
+      }
+    });
   });
 
   r.get("/status", (c) => c.json({ lastRun: app.repos.runs.latest() }));

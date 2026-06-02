@@ -29,8 +29,10 @@ export const client = {
   addHolding: (input: HoldingInput) =>
     api<Holding>("/holdings", { method: "POST", body: JSON.stringify(input) }),
   deleteHolding: (id: string) => api<{ ok: boolean }>(`/holdings/${id}`, { method: "DELETE" }),
+  setCash: (cash: number) =>
+    api<{ cash: number }>("/portfolios/cash", { method: "PUT", body: JSON.stringify({ cash }) }),
   seedAi: () => api<{ seeded: boolean }>("/portfolios/ai/seed", { method: "POST" }),
-  run: () => api<{ status: string }>("/run", { method: "POST" }),
+  run: () => api<{ runId: string; status: string }>("/run", { method: "POST" }),
   recommendations: () => api<{ report: DailyReport | null }>("/recommendations"),
   snapshots: () =>
     api<{ user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] }>("/snapshots"),

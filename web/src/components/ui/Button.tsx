@@ -13,10 +13,12 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const VARIANTS: Record<Variant, string> = {
+  // A "lit glass key" — top-down gradient with an inset specular highlight.
   primary:
-    "bg-accent text-canvas font-semibold hover:bg-accent-strong shadow-[0_4px_16px_-6px_rgba(79,141,253,0.6)]",
+    "bg-gradient-to-b from-accent-strong to-accent text-canvas font-semibold hover:to-accent-strong shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_6px_18px_-6px_rgba(79,141,253,0.65)]",
+  // Frosted glass surface — translucent, blurred over whatever sits behind it.
   secondary:
-    "border border-hairline-strong bg-surface-2 text-text hover:border-text-muted hover:bg-surface-3",
+    "border border-glass-edge bg-glass-tint text-text backdrop-blur-md hover:border-glass-edge-strong hover:bg-surface-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
   ghost: "text-text-secondary hover:bg-surface-2 hover:text-text",
 };
 

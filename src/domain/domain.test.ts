@@ -45,6 +45,18 @@ describe("Portfolio", () => {
     });
     expect(p.alpacaAccount).toBeNull();
   });
+  test("defaults cash to 0 and rejects negative cash", () => {
+    const base = {
+      id: "p1",
+      name: "My Portfolio",
+      kind: "user" as const,
+      decisionSource: "manual" as const,
+      createdAt: new Date().toISOString(),
+    };
+    expect(Portfolio.parse(base).cash).toBe(0);
+    expect(Portfolio.parse({ ...base, cash: 5000 }).cash).toBe(5000);
+    expect(() => Portfolio.parse({ ...base, cash: -1 })).toThrow();
+  });
   test("rejects an unknown kind", () => {
     expect(() =>
       Portfolio.parse({

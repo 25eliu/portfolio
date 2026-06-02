@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string>({
       value={value}
       onValueChange={(v) => v && onChange(v as T)}
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-xl border border-hairline bg-surface-2 p-0.5",
+        "inline-flex items-center gap-0.5 rounded-xl border border-glass-edge bg-glass-tint p-0.5 backdrop-blur-md",
         className,
       )}
     >
@@ -36,8 +36,8 @@ export function SegmentedControl<T extends string>({
           key={opt.value}
           value={opt.value}
           className={cn(
-            "rounded-lg font-medium capitalize text-text-secondary transition-colors",
-            "hover:text-text data-[state=on]:bg-accent data-[state=on]:text-canvas data-[state=on]:shadow-[0_2px_8px_-3px_rgba(79,141,253,0.7)]",
+            "rounded-lg font-medium capitalize text-text-secondary transition-all",
+            "hover:text-text data-[state=on]:bg-gradient-to-b data-[state=on]:from-accent-strong data-[state=on]:to-accent data-[state=on]:text-canvas data-[state=on]:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_2px_8px_-3px_rgba(79,141,253,0.7)]",
             pad,
           )}
         >

@@ -32,11 +32,15 @@ export function SummaryBand({ user, ai, snapshots }: Props) {
   const fmtReturn = (r: number | null) => (r == null ? "—" : pct(r));
 
   return (
-    <Card className="grid grid-cols-2 gap-x-6 gap-y-5 p-5 lg:grid-cols-4">
+    <Card
+      variant="glass"
+      className="glass-hover grid grid-cols-2 gap-x-6 gap-y-5 p-5 lg:grid-cols-4"
+    >
       <Stat
         label="My equity"
         value={usd(user.equity)}
         size="lg"
+        display
         sub={user.dayPnL == null ? "—" : `${signedUsd(user.dayPnL)} today`}
         subTone={pnlClass(user.dayPnL)}
         trailing={
@@ -50,12 +54,14 @@ export function SummaryBand({ user, ai, snapshots }: Props) {
         value={signedUsd(user.totalPnL)}
         valueTone={pnlClass(user.totalPnL)}
         size="lg"
+        display
         sub="vs cost basis"
       />
       <Stat
         label="AI equity"
         value={usd(ai.equity)}
         size="lg"
+        display
         sub={ai.dayPnL == null ? "—" : `${signedUsd(ai.dayPnL)} today`}
         subTone={pnlClass(ai.dayPnL)}
         trailing={

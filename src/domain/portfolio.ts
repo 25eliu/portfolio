@@ -17,6 +17,8 @@ export const Portfolio = z.object({
   decisionSource: DecisionSource,
   /** Alpaca account number, when this portfolio is backed by a brokerage account. */
   alpacaAccount: z.string().nullable().default(null),
+  /** Uninvested ("sitting") cash. For My Portfolio this is user-entered buying power. */
+  cash: z.number().nonnegative().default(0),
   createdAt: z.string().datetime(),
 });
 export type Portfolio = z.infer<typeof Portfolio>;

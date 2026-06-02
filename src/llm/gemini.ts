@@ -1,19 +1,16 @@
 /**
- * Gemini analyzer — TWO-STAGE design (confirmed against gemini-3.1-pro-preview via `bun run gemini:smoke`).
+ * Gemini analyzer — TWO-STAGE design, now STREAMING (confirmed against gemini-3.1-pro-preview).
  *
- * Gemini 3 CAN combine Google Search grounding with a function call in one request (set
- * `toolConfig.includeServerSideToolInvocations = true`), BUT in that combined mode the real grounding
- * citations are NOT returned (`groundingMetadata` is empty; the tool-response part only carries Search
- * "suggestion" chips, not source URLs). Since trustworthy source citations matter here, we instead run:
- *   Stage A — RESEARCH: Search-only call → research text + real `groundingMetadata.groundingChunks`.
- *   Stage B — STRUCTURE: function-tool-only call (mode ANY) over the research → schema-valid args.
- * marketMacro is a single Search-only call (it needs grounding + citations, no structured output).
+ * Stage A — RESEARCH: Search-only call → research text + real `groundingMetadata.groundingChunks`.
+ * Stage B — STRUCTURE: function-tool-only call (mode ANY) over the research → schema-valid args.
+ * Both use `generateContentStream` and emit token deltas, thinking, and Search tool activity through
+ * the optional `StreamSink` so the UI/terminal can show progress live. Returned values are unchanged.
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
 import { Recommendation, ScanCandidate } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
-import type { Analyzer } from "./analyze.ts";
+import type { Analyzer, StreamSink } from "./analyze.ts";
 import {
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
@@ -32,27 +29,81 @@ const THINKING: Record<Env["GEMINI_THINKING_LEVEL"], ThinkingLevel> = {
 
 type Source = { title: string; url: string };
 
+function citationsFrom(chunks: unknown[]): Source[] {
+  return (chunks as { web?: { title?: string; uri?: string } }[])
+    .map((c) => ({ title: c.web?.title ?? "", url: c.web?.uri ?? "" }))
+    .filter((s) => s.url);
+}
+
 export function createGeminiAnalyzer(env: Env): Analyzer {
   const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   const thinkingLevel = THINKING[env.GEMINI_THINKING_LEVEL];
 
-  /** Stage A: grounded research call (Search only). Returns the text + real citations. */
-  async function research(contents: string): Promise<{ text: string; sources: Source[] }> {
-    const res = await ai.models.generateContent({
-      model: env.GEMINI_MODEL,
-      contents,
-      config: { tools: [{ googleSearch: {} }], thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
-    });
-    return { text: res.text ?? "", sources: citations(res) };
+  /** Iterate a streamed response: emit deltas/thinking/tool via `sink`, accumulate text/sources/call. */
+  async function consume(
+    stream: AsyncGenerator<unknown>,
+    sink?: StreamSink,
+  ): Promise<{ text: string; sources: Source[]; call?: { name?: string; args?: Record<string, unknown> } }> {
+    let text = "";
+    let sources: Source[] = [];
+    let call: { name?: string; args?: Record<string, unknown> } | undefined;
+    const seenQueries = new Set<string>();
+
+    for await (const chunkUnknown of stream) {
+      const chunk = chunkUnknown as {
+        functionCalls?: { name?: string; args?: Record<string, unknown> }[];
+        candidates?: {
+          content?: { parts?: { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } }[] };
+          groundingMetadata?: { groundingChunks?: unknown[]; webSearchQueries?: string[] };
+        }[];
+      };
+      const cand = chunk.candidates?.[0];
+      for (const p of cand?.content?.parts ?? []) {
+        if (typeof p.text === "string" && p.text) {
+          if (p.thought) sink?.({ kind: "thinking", text: p.text });
+          else {
+            text += p.text;
+            sink?.({ kind: "text", text: p.text });
+          }
+        }
+        if (p.functionCall) call = p.functionCall;
+      }
+      const gm = cand?.groundingMetadata;
+      for (const q of gm?.webSearchQueries ?? []) {
+        if (!seenQueries.has(q)) {
+          seenQueries.add(q);
+          sink?.({ kind: "tool", query: q });
+        }
+      }
+      if (gm?.groundingChunks?.length) sources = citationsFrom(gm.groundingChunks);
+      if (!call && chunk.functionCalls?.length) call = chunk.functionCalls[0];
+    }
+    if (sources.length) sink?.({ kind: "tool", sources });
+    return { text, sources, call };
   }
 
-  /** Stage B: structuring call (function tool only, forced via mode ANY). Returns the function args. */
+  /** Stage A: grounded research (Search only), streamed. */
+  async function research(contents: string, sink?: StreamSink): Promise<{ text: string; sources: Source[] }> {
+    const stream = await ai.models.generateContentStream({
+      model: env.GEMINI_MODEL,
+      contents,
+      config: {
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW, includeThoughts: true },
+      },
+    });
+    const { text, sources } = await consume(stream, sink);
+    return { text, sources };
+  }
+
+  /** Stage B: structuring call (function tool only, forced via mode ANY), streamed. */
   async function structure(
     contents: string,
     fn: { name: string },
     declaration: unknown,
+    sink?: StreamSink,
   ): Promise<Record<string, unknown> | undefined> {
-    const res = await ai.models.generateContent({
+    const stream = await ai.models.generateContentStream({
       model: env.GEMINI_MODEL,
       contents,
       config: {
@@ -63,29 +114,22 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         thinkingConfig: { thinkingLevel },
       },
     });
-    return res.functionCalls?.find((c) => c.name === fn.name)?.args as
-      | Record<string, unknown>
-      | undefined;
-  }
-
-  function citations(res: { candidates?: unknown }): Source[] {
-    const chunks =
-      (res as { candidates?: { groundingMetadata?: { groundingChunks?: unknown[] } }[] }).candidates?.[0]
-        ?.groundingMetadata?.groundingChunks ?? [];
-    return (chunks as { web?: { title?: string; uri?: string } }[])
-      .map((c) => ({ title: c.web?.title ?? "", url: c.web?.uri ?? "" }))
-      .filter((s) => s.url);
+    const { call } = await consume(stream, sink);
+    return call?.name === fn.name ? call.args : call?.args;
   }
 
   return {
     kind: "gemini",
 
-    async analyzeTicker(input: TickerInput, ctx: MarketContext): Promise<Recommendation> {
-      const { text, sources } = await research(buildTickerResearchPrompt(input, ctx));
+    async analyzeTicker(input: TickerInput, ctx: MarketContext, sink?: StreamSink): Promise<Recommendation> {
+      sink?.({ kind: "stage", stage: "research" });
+      const { text, sources } = await research(buildTickerResearchPrompt(input, ctx), sink);
+      sink?.({ kind: "stage", stage: "structure" });
       const args = await structure(
         buildTickerStructurePrompt(input, ctx, text),
         { name: "submit_recommendation" },
         recommendationFunctionDeclaration,
+        sink,
       );
       if (!args) throw new Error(`No recommendation call for ${input.symbol}`);
       const upside =
@@ -103,19 +147,25 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
       });
     },
 
-    async marketMacro(date, spyTrend, spyPctFromSma200) {
-      const { text, sources } = await research(buildMarketContextPrompt(date, spyTrend, spyPctFromSma200));
+    async marketMacro(date, spyTrend, spyPctFromSma200, sink) {
+      const { text, sources } = await research(
+        buildMarketContextPrompt(date, spyTrend, spyPctFromSma200),
+        sink,
+      );
       return { summary: text, sources };
     },
 
-    async discoverOpportunities(ctx: MarketContext, count: number): Promise<ScanCandidate[]> {
+    async discoverOpportunities(ctx: MarketContext, count: number, sink?: StreamSink): Promise<ScanCandidate[]> {
       if (count <= 0) return [];
       try {
-        const { text, sources } = await research(buildDiscoveryResearchPrompt(ctx, count));
+        sink?.({ kind: "stage", stage: "research" });
+        const { text, sources } = await research(buildDiscoveryResearchPrompt(ctx, count), sink);
+        sink?.({ kind: "stage", stage: "structure" });
         const args = await structure(
           buildDiscoveryStructurePrompt(ctx, count, text),
           { name: "submit_candidates" },
           candidatesFunctionDeclaration,
+          sink,
         );
         const raw = (args as { candidates?: unknown[] } | undefined)?.candidates ?? [];
         const out: ScanCandidate[] = [];

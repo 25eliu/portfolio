@@ -2,12 +2,15 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Toaster, toast } from "sonner";
 import {
+  useInvalidateAll,
   usePortfolios,
   useRecommendations,
-  useRunNow,
   useSeedAi,
   useSnapshots,
+  useStartRun,
 } from "./api/hooks.ts";
+import { AnalysisStream } from "./components/AnalysisStream.tsx";
+import { Atmosphere } from "./components/Atmosphere.tsx";
 import { EquityCurve } from "./components/EquityCurve.tsx";
 import { Header } from "./components/Header.tsx";
 import { JournalPlaceholder } from "./components/JournalPlaceholder.tsx";
@@ -42,20 +45,29 @@ function Section({
 
 export default function App() {
   const [showManager, setShowManager] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const portfolios = usePortfolios();
   const recommendations = useRecommendations();
   const snapshots = useSnapshots();
-  const run = useRunNow();
+  const startRun = useStartRun();
+  const refresh = useInvalidateAll();
   const seed = useSeedAi();
 
   const handleRun = async () => {
     try {
-      await run.mutateAsync();
-      toast.success("Analysis complete", { description: "Report and snapshots updated." });
+      const { runId } = await startRun.mutateAsync();
+      setActiveRunId(runId);
     } catch (e) {
-      toast.error("Run failed", { description: e instanceof Error ? e.message : undefined });
+      toast.error("Couldn't start analysis", { description: e instanceof Error ? e.message : undefined });
     }
+  };
+
+  const handleStreamFinished = (status: "done" | "error", message?: string) => {
+    setActiveRunId(null);
+    void refresh();
+    if (status === "error") toast.error("Run failed", { description: message });
+    else toast.success("Analysis complete", { description: "Report and snapshots updated." });
   };
 
   const handleSeed = async () => {
@@ -72,6 +84,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      <Atmosphere />
       <Toaster
         theme="dark"
         position="bottom-right"
@@ -89,7 +102,7 @@ export default function App() {
         onSeed={handleSeed}
         onRun={handleRun}
         seeding={seed.isPending}
-        running={run.isPending}
+        running={activeRunId != null || startRun.isPending}
       />
 
       <main className="mx-auto max-w-[1400px] space-y-10 px-6 py-8">
@@ -140,9 +153,15 @@ export default function App() {
           </div>
         </Section>
 
-        <Section title="Daily recommendations" index={3}>
-          <MarketContextBanner report={recommendations.data?.report ?? null} />
-          <Recommendations report={recommendations.data?.report ?? null} />
+        <Section title={activeRunId ? "Live analysis" : "Daily recommendations"} index={3}>
+          {activeRunId ? (
+            <AnalysisStream runId={activeRunId} onFinished={handleStreamFinished} />
+          ) : (
+            <>
+              <MarketContextBanner report={recommendations.data?.report ?? null} />
+              <Recommendations report={recommendations.data?.report ?? null} />
+            </>
+          )}
         </Section>
 
         <Section title="Journal &amp; query" index={4}>

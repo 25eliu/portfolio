@@ -9,6 +9,8 @@ export type TickerInput = {
   technicals: Technicals;
   fundamentals: Fundamentals;
   riskPreset: string;
+  /** Uninvested cash the portfolio has available to deploy (its buying-power limit). */
+  availableCash: number;
 };
 
 /**
@@ -48,6 +50,9 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     `Technicals: ${JSON.stringify(t.technicals)}`,
     `Fundamentals: ${JSON.stringify(t.fundamentals)}`,
     `Latest price: ${t.price}.`,
+    `Portfolio buying power: $${t.availableCash} in uninvested cash. This is a hard limit — do not`,
+    `assume unlimited capital. When cash is scarce, reserve BUYs for the highest-conviction ideas and`,
+    `size any trade plan within this cash; prefer WATCH over BUY if there isn't cash to act on it.`,
     ``,
     `Decide BUY / SELL / HOLD / WATCH with a concise thesis, conviction (0..1), horizon, a strategy`,
     `family, the signals you used, an optional catalyst (with sentiment), and an optional trade plan`,

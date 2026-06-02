@@ -1,28 +1,49 @@
-import type { Recommendation, ScanCandidate } from "../domain/index.ts";
+import type { Recommendation, ScanCandidate, Source } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { TickerInput } from "./prompts.ts";
 
+/**
+ * A narrow streaming callback the analyzer calls as it works: stage transitions, thinking/text token
+ * deltas, and tool (Google Search) activity. The pipeline maps these onto bus events per ticker.
+ */
+export type StreamSink = (
+  e:
+    | { kind: "stage"; stage: "research" | "structure" }
+    | { kind: "thinking"; text: string }
+    | { kind: "text"; text: string }
+    | { kind: "tool"; query?: string; sources?: Source[] },
+) => void;
+
 export interface Analyzer {
   readonly kind: "gemini" | "mock";
-  analyzeTicker(input: TickerInput, ctx: MarketContext): Promise<Recommendation>;
+  analyzeTicker(input: TickerInput, ctx: MarketContext, sink?: StreamSink): Promise<Recommendation>;
   marketMacro(
     date: string,
     spyTrend: string,
     spyPctFromSma200: number | null,
-  ): Promise<{ summary: string; sources: { title: string; url: string }[] }>;
+    sink?: StreamSink,
+  ): Promise<{ summary: string; sources: Source[] }>;
   /**
    * Sentiment/thematic opportunity discovery (Addendum A): scout the wider market for high-potential
    * candidates credible professionals are flagging. Returns up to `count` ScanCandidates with cited
    * sources. Never fatal — returns [] on failure.
    */
-  discoverOpportunities(ctx: MarketContext, count: number): Promise<ScanCandidate[]>;
+  discoverOpportunities(ctx: MarketContext, count: number, sink?: StreamSink): Promise<ScanCandidate[]>;
 }
 
-/** Deterministic offline analyzer for tests — never calls the network. */
+/** Deterministic offline analyzer for tests — never calls the network; emits synthetic stream events. */
 export function createMockAnalyzer(): Analyzer {
   return {
     kind: "mock",
-    async analyzeTicker(input): Promise<Recommendation> {
+    async analyzeTicker(input, _ctx, sink): Promise<Recommendation> {
+      sink?.({ kind: "stage", stage: "research" });
+      sink?.({ kind: "text", text: `Researching ${input.symbol}… ` });
+      sink?.({
+        kind: "tool",
+        query: `${input.symbol} latest news`,
+        sources: [{ title: "example.com", url: "https://example.com" }],
+      });
+      sink?.({ kind: "stage", stage: "structure" });
       return {
         ticker: input.symbol,
         action: "HOLD",
@@ -42,10 +63,12 @@ export function createMockAnalyzer(): Analyzer {
         screen: input.screen,
       };
     },
-    async marketMacro() {
+    async marketMacro(_date, _trend, _pct, sink) {
+      sink?.({ kind: "text", text: "mock macro" });
       return { summary: "mock macro", sources: [] };
     },
-    async discoverOpportunities(_ctx, count): Promise<ScanCandidate[]> {
+    async discoverOpportunities(_ctx, count, sink): Promise<ScanCandidate[]> {
+      sink?.({ kind: "text", text: "scanning the market…" });
       const seed: ScanCandidate[] = [
         { symbol: "PLTR", screen: "thematic", reason: "mock thematic: AI infrastructure tailwind", sources: [] },
         { symbol: "SOFI", screen: "sentiment", reason: "mock sentiment: credible-investor interest", sources: [] },

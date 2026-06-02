@@ -7,6 +7,7 @@ type Row = {
   kind: string;
   decision_source: string;
   alpaca_account: string | null;
+  cash: number;
   created_at: string;
 };
 
@@ -17,6 +18,7 @@ const toDomain = (r: Row): Portfolio =>
     kind: r.kind,
     decisionSource: r.decision_source,
     alpacaAccount: r.alpaca_account,
+    cash: r.cash,
     createdAt: r.created_at,
   });
 
@@ -25,14 +27,15 @@ export function portfoliosRepo(db: DB) {
     insert(p: Portfolio): Portfolio {
       const valid = Portfolio.parse(p);
       db.query(
-        `INSERT INTO portfolios (id, name, kind, decision_source, alpaca_account, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO portfolios (id, name, kind, decision_source, alpaca_account, cash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         valid.id,
         valid.name,
         valid.kind,
         valid.decisionSource,
         valid.alpacaAccount,
+        valid.cash,
         valid.createdAt,
       );
       return valid;
@@ -59,6 +62,10 @@ export function portfoliosRepo(db: DB) {
 
     setAlpacaAccount(id: string, account: string | null): void {
       db.query("UPDATE portfolios SET alpaca_account = ? WHERE id = ?").run(account, id);
+    },
+
+    setCash(id: string, cash: number): void {
+      db.query("UPDATE portfolios SET cash = ? WHERE id = ?").run(cash, id);
     },
   };
 }

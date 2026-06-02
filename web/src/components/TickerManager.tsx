@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import { useAddHolding, useDeleteHolding, useHoldings, useAddWatch, useRemoveWatch, useWatchlist } from "../api/hooks.ts";
+import {
+  useAddHolding,
+  useDeleteHolding,
+  useHoldings,
+  useAddWatch,
+  useRemoveWatch,
+  useWatchlist,
+  usePortfolios,
+  useSetCash,
+} from "../api/hooks.ts";
 import { usd } from "../lib/format.ts";
 import { Button } from "./ui/Button.tsx";
 import { Dialog } from "./ui/Dialog.tsx";
@@ -17,6 +26,10 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
   const addWatch = useAddWatch();
   const removeWatch = useRemoveWatch();
 
+  const portfolios = usePortfolios();
+  const setCashMutation = useSetCash();
+  const currentCash = portfolios.data?.user.cash ?? 0;
+
   const [symbol, setSymbol] = useState("");
   const [shares, setShares] = useState("");
   const [costBasis, setCostBasis] = useState("");
@@ -24,6 +37,9 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
 
   const [watchSymbol, setWatchSymbol] = useState("");
   const [watchError, setWatchError] = useState<string | null>(null);
+
+  const [cash, setCash] = useState("");
+  const [cashError, setCashError] = useState<string | null>(null);
 
   const submit = async () => {
     setError(null);
@@ -43,6 +59,21 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
       setCostBasis("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add holding");
+    }
+  };
+
+  const saveCash = async () => {
+    setCashError(null);
+    const amount = Number(cash);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setCashError("Enter a cash amount of 0 or more.");
+      return;
+    }
+    try {
+      await setCashMutation.mutateAsync(amount);
+      setCash("");
+    } catch (e) {
+      setCashError(e instanceof Error ? e.message : "Failed to update cash");
     }
   };
 
@@ -141,6 +172,35 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
       </table>
 
       {error && <p className="mt-3 text-xs text-neg">{error}</p>}
+
+      {/* ── Cash section ──────────────────────────────────────────── */}
+      <div className="mt-6 border-t border-hairline pt-5">
+        <div className="eyebrow mb-3">Cash</div>
+        <p className="mb-3 text-xs text-text-muted">
+          Record uninvested cash so the AI knows how much buying power you actually have. Current:{" "}
+          <span className="font-mono text-text">{usd(currentCash)}</span>
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            value={cash}
+            onChange={(e) => setCash(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveCash()}
+            placeholder={String(currentCash)}
+            inputMode="decimal"
+            className={`${inputClass} flex-1 text-right font-mono`}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={saveCash}
+            loading={setCashMutation.isPending}
+          >
+            Set cash
+          </Button>
+        </div>
+        {cashError && <p className="mt-2 text-xs text-neg">{cashError}</p>}
+      </div>
 
       {/* ── Watchlist section ─────────────────────────────────────── */}
       <div className="mt-6 border-t border-hairline pt-5">
