@@ -17,11 +17,23 @@ function screenLabel(screen: string): string {
 }
 
 const ACTION_TONE: Record<Action, "pos" | "neg" | "neutral" | "accent"> = {
-  ADD: "pos", BUY: "pos", TRIM: "neg", SELL: "neg", HOLD: "neutral", WATCH: "accent", PASS: "neutral",
+  ADD: "pos",
+  BUY: "pos",
+  TRIM: "neg",
+  SELL: "neg",
+  HOLD: "neutral",
+  WATCH: "accent",
+  PASS: "neutral",
 };
 
 const CONVICTION_COLOR: Record<Action, string> = {
-  ADD: "bg-pos", BUY: "bg-pos", TRIM: "bg-neg", SELL: "bg-neg", HOLD: "bg-text-muted", WATCH: "bg-accent", PASS: "bg-text-muted",
+  ADD: "bg-pos",
+  BUY: "bg-pos",
+  TRIM: "bg-neg",
+  SELL: "bg-neg",
+  HOLD: "bg-text-muted",
+  WATCH: "bg-accent",
+  PASS: "bg-text-muted",
 };
 
 /** Map catalyst sentiment (-1..1) to a tone + label. */
@@ -40,19 +52,16 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
     r.technicals.resistance != null ||
     r.briefingNote != null;
 
+  const pred = r.prediction;
+
   return (
     <article className="card p-4 transition-colors hover:border-hairline-strong">
       <header className="mb-2.5 flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold tracking-tight text-text">{r.ticker}</span>
           <Badge tone={ACTION_TONE[r.action]}>{r.action}</Badge>
-          <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
-            {r.prediction.horizon}
-          </span>
           {r.screen && (
-            <Badge tone={screenTone(r.screen)}>
-              {screenLabel(r.screen)}
-            </Badge>
+            <Badge tone={screenTone(r.screen)}>{screenLabel(r.screen)}</Badge>
           )}
         </div>
         <div className="text-right">
@@ -68,6 +77,66 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
           className={cn("h-full rounded-full transition-all", CONVICTION_COLOR[r.action])}
           style={{ width: `${r.conviction * 100}%` }}
         />
+      </div>
+
+      {/* prediction — direction + horizon + expected return */}
+      <div className="mb-3 border-b border-hairline pb-3">
+        <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="capitalize font-medium text-text-secondary">
+            {pred.direction}
+          </span>
+          <span className="text-text-muted">·</span>
+          <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+            {pred.horizon}
+          </span>
+          {pred.expectedReturnPct != null && (
+            <span
+              className={cn(
+                "tnum font-mono font-semibold",
+                pred.expectedReturnPct >= 0 ? "text-pos" : "text-neg",
+              )}
+            >
+              {pred.expectedReturnPct >= 0 ? "+" : ""}
+              {pred.expectedReturnPct.toFixed(1)}%
+            </span>
+          )}
+        </div>
+
+        {/* WATCH: trigger → action line */}
+        {r.action === "WATCH" && pred.trigger && (
+          <p className="text-[12px] leading-snug text-text-secondary">
+            <span className="font-medium text-accent">
+              {pred.actionIfTriggered ?? "Act"} if
+            </span>{" "}
+            {pred.trigger}
+            {pred.target != null && (
+              <> → target <span className="tnum font-mono">{usd(pred.target)}</span></>
+            )}
+          </p>
+        )}
+
+        {/* Held/Buy positions: entry / target / stop row */}
+        {r.action !== "WATCH" && (pred.entry != null || pred.target != null || pred.stop != null) && (
+          <div className="grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5">
+            {pred.entry != null && (
+              <Plan label="Entry" value={usd(pred.entry)} />
+            )}
+            {pred.stop != null && (
+              <Plan label="Stop" value={usd(pred.stop)} tone="text-neg" />
+            )}
+            {pred.target != null && (
+              <Plan label="Target" value={usd(pred.target)} tone="text-pos" />
+            )}
+            {pred.rMultiple != null && (
+              <Plan label="R" value={`${pred.rMultiple.toFixed(1)}×`} />
+            )}
+          </div>
+        )}
+
+        {/* Invalidation */}
+        <p className="mt-1.5 text-[11px] text-text-muted">
+          <span className="font-medium">Invalid:</span> {pred.invalidation}
+        </p>
       </div>
 
       <p className="mb-3 text-[13px] leading-relaxed text-text-secondary">{r.thesis}</p>
@@ -96,27 +165,24 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         </div>
       )}
 
-      {(r.prediction.target != null || r.prediction.stop != null) && (
-        <div className="grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5">
-          {r.prediction.entry != null && <Plan label="Entry" value={usd(r.prediction.entry)} />}
-          {r.prediction.stop != null && <Plan label="Stop" value={usd(r.prediction.stop)} tone="text-neg" />}
-          {r.prediction.target != null && <Plan label="Target" value={usd(r.prediction.target)} tone="text-pos" />}
-          {r.prediction.rMultiple != null && <Plan label="R" value={`${r.prediction.rMultiple.toFixed(1)}×`} />}
-        </div>
-      )}
-
-      {r.prediction.trigger && (
-        <div className="mt-3 rounded-lg border border-accent/20 bg-accent-soft px-2.5 py-2 text-[11px] text-text-secondary">
-          <span className="font-medium text-accent">{r.prediction.actionIfTriggered ?? "Trigger"}</span> · {r.prediction.trigger}
-        </div>
-      )}
-
       {r.fundamentals && (
         <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-hairline bg-surface-2/50 p-2.5 text-[11px]">
-          <FundStat label="P/E" value={r.fundamentals.peTrailing != null ? r.fundamentals.peTrailing.toFixed(1) : "—"} />
-          <FundStat label="Rev YoY" value={r.fundamentals.revenueGrowthYoY != null ? `${r.fundamentals.revenueGrowthYoY.toFixed(0)}%` : "—"} />
-          <FundStat label="Net mgn" value={r.fundamentals.netMargin != null ? `${r.fundamentals.netMargin.toFixed(0)}%` : "—"} />
-          <FundStat label="Tgt up" value={r.priceTargetUpside != null ? `${r.priceTargetUpside.toFixed(0)}%` : "—"} />
+          <FundStat
+            label="P/E"
+            value={r.fundamentals.peTrailing != null ? r.fundamentals.peTrailing.toFixed(1) : "—"}
+          />
+          <FundStat
+            label="Rev YoY"
+            value={r.fundamentals.revenueGrowthYoY != null ? `${r.fundamentals.revenueGrowthYoY.toFixed(0)}%` : "—"}
+          />
+          <FundStat
+            label="Net mgn"
+            value={r.fundamentals.netMargin != null ? `${r.fundamentals.netMargin.toFixed(0)}%` : "—"}
+          />
+          <FundStat
+            label="Tgt up"
+            value={r.priceTargetUpside != null ? `${r.priceTargetUpside.toFixed(0)}%` : "—"}
+          />
         </div>
       )}
 
@@ -125,7 +191,11 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
           {r.sources.slice(0, 3).map((s) => {
             let label = s.title;
             if (!label) {
-              try { label = new URL(s.url).hostname; } catch { label = s.url; }
+              try {
+                label = new URL(s.url).hostname;
+              } catch {
+                label = s.url;
+              }
             }
             return (
               <a
@@ -149,13 +219,19 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             className="mt-3 flex w-full items-center justify-center gap-1 border-t border-hairline pt-2.5 text-[11px] text-text-muted transition-colors hover:text-text-secondary"
           >
             {open ? "Hide" : "Details"}
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
+            />
           </button>
           {open && (
             <div className="mt-2.5 space-y-2 text-[11px]">
               <div className="grid grid-cols-2 gap-2">
-                {r.technicals.rsi14 != null && <Detail label="RSI" value={r.technicals.rsi14.toFixed(0)} />}
-                {r.technicals.macd != null && <Detail label="MACD" value={r.technicals.macd.toFixed(2)} />}
+                {r.technicals.rsi14 != null && (
+                  <Detail label="RSI" value={r.technicals.rsi14.toFixed(0)} />
+                )}
+                {r.technicals.macd != null && (
+                  <Detail label="MACD" value={r.technicals.macd.toFixed(2)} />
+                )}
                 {r.technicals.support != null && (
                   <Detail label="Support" value={usd(r.technicals.support)} />
                 )}
