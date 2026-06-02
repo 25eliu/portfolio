@@ -47,6 +47,10 @@ beforeEach(() => {
 });
 
 describe("dailyRun → AI execution", () => {
+  test("the AI book is funded at exactly $100k before any run", () => {
+    expect(app.repos.portfolios.get(app.ai.id)?.cash).toBe(100_000);
+  });
+
   test("the AI trades from the analysis against its own $100k book, journal-linked", async () => {
     await dailyRun(app);
 

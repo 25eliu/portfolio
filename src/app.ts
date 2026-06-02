@@ -61,20 +61,10 @@ function bootstrapPortfolios(repos: Repositories): { user: Portfolio; ai: Portfo
       createdAt: new Date().toISOString(),
     });
   };
-  const user = ensure("user", "My Portfolio", "manual", 0);
-  const ai = ensure("ai_shadow", "AI Portfolio", "llm", AI_STARTING_CASH);
-
-  // Idempotent top-up for dev DBs created before the isolated $100k book: only ever fires on an AI
-  // portfolio that is genuinely fresh (no cash, no holdings, no snapshots) — never on a live book.
-  if (
-    ai.cash === 0 &&
-    repos.holdings.listByPortfolio(ai.id).length === 0 &&
-    repos.snapshots.listByPortfolio(ai.id).length === 0
-  ) {
-    repos.portfolios.setCash(ai.id, AI_STARTING_CASH);
-    return { user, ai: { ...ai, cash: AI_STARTING_CASH } };
-  }
-  return { user, ai };
+  return {
+    user: ensure("user", "My Portfolio", "manual", 0),
+    ai: ensure("ai_shadow", "AI Portfolio", "llm", AI_STARTING_CASH),
+  };
 }
 
 /** Build the application context. In-memory + fake by default when nothing is provided. */

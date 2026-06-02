@@ -416,4 +416,17 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
       CREATE INDEX idx_query_log_created ON query_log(created_at);
     `,
   },
+  {
+    // The AI portfolio is now a self-contained, always-on $100k DB-backed book. Reset any stale
+    // Alpaca-era state for it ONCE so its equity curve starts clean: drop its holdings + snapshots,
+    // clear the (AI-only) trade log, and fund it to $100k. On a fresh DB the ai_shadow row doesn't
+    // exist yet, so these no-op and bootstrap inserts it at $100k instead.
+    name: "016_reset_ai_book",
+    sql: `
+      DELETE FROM snapshots WHERE portfolio_id IN (SELECT id FROM portfolios WHERE kind = 'ai_shadow');
+      DELETE FROM holdings  WHERE portfolio_id IN (SELECT id FROM portfolios WHERE kind = 'ai_shadow');
+      DELETE FROM trade_decisions;
+      UPDATE portfolios SET cash = 100000 WHERE kind = 'ai_shadow';
+    `,
+  },
 ];
