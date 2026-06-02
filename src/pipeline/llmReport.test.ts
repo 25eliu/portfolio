@@ -23,7 +23,7 @@ describe("generateLlmReport", () => {
     const app = makeApp();
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
     app.repos.watchlist.add({ symbol: "MSFT" });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     expect(() => DailyReport.parse(report)).not.toThrow();
     expect(report.source).toBe("llm");
     const tickers = report.recommendations.map((r) => r.ticker);
@@ -42,7 +42,7 @@ describe("generateLlmReport", () => {
     const app = makeApp(flaky);
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
     app.repos.watchlist.add({ symbol: "MSFT" });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     const tickers = report.recommendations.map((r) => r.ticker);
     expect(tickers).not.toContain("AAPL");
     expect(tickers).toContain("MSFT");
@@ -89,7 +89,7 @@ describe("generateLlmReport", () => {
     expect(discovered.length).toBeGreaterThan(0);
     const app = makeApp(analyzer);
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     const tickers = report.recommendations.map((r) => r.ticker);
     expect(discovered.some((c) => tickers.includes(c.symbol))).toBe(true);
   });

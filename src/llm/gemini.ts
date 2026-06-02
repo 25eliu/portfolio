@@ -127,7 +127,7 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
       const { text, sources } = await research(buildTickerResearchPrompt(input, ctx), sink);
       sink?.({ kind: "stage", stage: "structure" });
       const args = await structure(
-        buildTickerStructurePrompt(input, ctx, text),
+        buildTickerStructurePrompt(input, ctx, text, sources),
         { name: "submit_recommendation" },
         recommendationFunctionDeclaration,
         sink,
@@ -200,8 +200,12 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
           const parsed = ScanCandidate.safeParse({ ...(item as object), sources });
           if (parsed.success) out.push(parsed.data);
         }
+        // Surface the funnel: if the model returned candidates but none parsed, that's a schema
+        // mismatch silently dropping every opportunity — log it rather than return a quiet [].
+        console.log(`[discovery] model returned ${raw.length} candidates, ${out.length} parsed`);
         return out.slice(0, count);
-      } catch {
+      } catch (err) {
+        console.warn(`[discovery] failed: ${err instanceof Error ? err.message : String(err)}`);
         return [];
       }
     },

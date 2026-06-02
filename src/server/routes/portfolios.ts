@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { App } from "../../app.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "../../pipeline/index.ts";
+import { backfillUntrackedEntries } from "../../pipeline/backfill.ts";
 
 const CashInput = z.object({ cash: z.number().nonnegative() });
 
@@ -9,8 +10,12 @@ const CashInput = z.object({ cash: z.number().nonnegative() });
 export function portfolioRoutes(app: App): Hono {
   const r = new Hono();
 
-  // Live-priced dual view for the side-by-side panels.
+  // Live-priced dual view for the side-by-side panels. Backfill any untracked holdings first so
+  // existing positions show a real cost basis (and Total P&L) on the next load, no run required.
   r.get("/", async (c) => {
+    await backfillUntrackedEntries(app).catch((err) =>
+      console.warn(`[backfill] failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
     const [user, ai] = await Promise.all([priceUserPortfolio(app), priceAiPortfolio(app)]);
     return c.json({ user, ai });
   });

@@ -28,6 +28,10 @@ const EnvSchema = z.object({
   LLM_CONCURRENCY: z.coerce.number().int().positive().default(4),
   MAX_SCAN_CANDIDATES: z.coerce.number().int().nonnegative().default(8),
   MAX_THEMATIC_CANDIDATES: z.coerce.number().int().nonnegative().default(5),
+  // Cap on non-held ideas surfaced as WATCH. Discovery/scan candidates the model didn't rate
+  // buy-now are still shown (as WATCH, with their prediction) up to this many — so Opportunities is
+  // never silently empty after a scan; only the low-conviction long tail is dropped.
+  MAX_WATCH_SURFACED: z.coerce.number().int().nonnegative().default(6),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

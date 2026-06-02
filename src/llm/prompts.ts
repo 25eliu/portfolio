@@ -1,4 +1,5 @@
-import type { Fundamentals, MarketContext, ScreenType, Technicals } from "../domain/index.ts";
+import type { Fundamentals, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
+import { renderEvidenceBlock } from "../knowledge/retrieve.ts";
 
 export type TickerInput = {
   symbol: string;
@@ -13,6 +14,13 @@ export type TickerInput = {
   availableCash: number;
   /** Whether the portfolio currently holds this ticker (drives the position-aware verb set). */
   held: boolean;
+  /** Retrieved knowledge-base excerpts injected into the research stage as untrusted evidence. */
+  evidence?: RetrievedExcerpt[];
+  /** Compiled performance-wiki briefing injected as trusted, computed context (Phase 4). */
+  wikiBriefing?: string;
+  /** Durable facts the system has already self-curated for this ticker — shown so the model only
+   *  proposes net-new facts (the key to keeping the self-curated library dense, not bloated). */
+  priorFacts?: string[];
 };
 
 /**
@@ -24,6 +32,7 @@ export type TickerInput = {
  */
 
 export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): string {
+  const evidenceBlock = renderEvidenceBlock(t.evidence ?? []);
   return [
     `You are a senior equity analyst building a rigorous research brief on ${t.symbol}.`,
     `Use Google Search to gather and synthesize the most recent information across all factors below.`,
@@ -32,6 +41,7 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
     ``,
     `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
     `Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
+    ...(evidenceBlock ? [``, evidenceBlock] : []),
     ``,
     `Research the following in order and include each in your brief:`,
     `1. Business update & news catalysts — recent developments, product/regulatory news, M&A.`,
@@ -48,7 +58,12 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
   ].join("\n");
 }
 
-export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+export function buildTickerStructurePrompt(
+  t: TickerInput,
+  ctx: MarketContext,
+  research: string,
+  sources: { title: string; url: string }[] = [],
+): string {
   const macroLine = ctx.macro
     ? [
         ctx.macro.vix != null ? `VIX ${ctx.macro.vix.toFixed(1)}` : null,
@@ -72,6 +87,16 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     ``,
     `Market context (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}${macroLine ? ` | Macro: ${macroLine}` : ""}`,
     `Risk profile: ${t.riskPreset}.`,
+    ...(t.wikiBriefing
+      ? [
+          ``,
+          `Performance wiki — this system's own calibrated track record (trusted, computed statistics).`,
+          `Use it to calibrate THIS call's conviction and position size — e.g. trim conviction in cohorts`,
+          `where stated conviction has run ahead of realized hit-rate, or that show negative expectancy.`,
+          `It informs how strongly to act, not whether to commit; still pick the verdict the evidence demands.`,
+          t.wikiBriefing,
+        ]
+      : []),
     ``,
     `Research findings (sources already captured separately):`,
     research || "(no external research available)",
@@ -104,6 +129,18 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     ...(!t.held
       ? [`For WATCH: trigger = the specific, testable condition to act on; actionIfTriggered = what it becomes (e.g. "BUY"); also state the bearish branch in invalidation. Base every number ONLY on the provided technicals/fundamentals.`]
       : [`Base every number ONLY on the provided technicals/fundamentals.`]),
+    ``,
+    `Long-term memory — durable, structural facts this system already knows about ${t.symbol}:`,
+    (t.priorFacts ?? []).length ? (t.priorFacts ?? []).map((f) => `  • ${f}`).join("\n") : `  (none yet)`,
+    `Optionally return up to 3 NEW durable facts in memorableFacts to add to this long-term memory.`,
+    `A durable fact has lasting decision value: competitive moats, secular theses, management track`,
+    `record, capital structure, regulatory shifts, structural unit economics. Do NOT add ephemeral`,
+    `price moves, daily news, today's quote, or anything already listed above. Each fact ≤140 chars,`,
+    `self-contained (name the company/ticker), and MUST cite one of the research source URLs below —`,
+    `if you cannot cite it, omit it. Add nothing (memorableFacts: []) if nothing durable qualifies.`,
+    sources.length
+      ? [`Research source URLs (set citationUrl to one of these):`, ...sources.slice(0, 12).map((s, i) => `  [${i + 1}] ${s.url}${s.title ? ` — ${s.title}` : ""}`)].join("\n")
+      : `(No research source URLs were captured this run — return memorableFacts: [].)`,
   ].join("\n");
 }
 

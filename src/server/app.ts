@@ -7,6 +7,12 @@ import { runRoutes } from "./routes/run.ts";
 import { riskRoutes } from "./routes/risk.ts";
 import { scheduleRoutes } from "./routes/schedule.ts";
 import { watchlistRoutes } from "./routes/watchlist.ts";
+import { journalRoutes } from "./routes/journal.ts";
+import { knowledgeRoutes } from "./routes/knowledge.ts";
+import { graphRoutes } from "./routes/graph.ts";
+import { wikiRoutes } from "./routes/wiki.ts";
+import { executionRoutes } from "./routes/execution.ts";
+import { queryRoutes } from "./routes/query.ts";
 
 /** Build the HTTP API over an application context (injectable for tests). */
 export function createServer(app: App): Hono {
@@ -19,6 +25,12 @@ export function createServer(app: App): Hono {
   api.route("/risk", riskRoutes(app));
   api.route("/schedule", scheduleRoutes(app));
   api.route("/watchlist", watchlistRoutes(app));
+  api.route("/journal", journalRoutes(app));
+  api.route("/knowledge", knowledgeRoutes(app));
+  api.route("/graph", graphRoutes(app));
+  api.route("/wiki", wikiRoutes(app));
+  api.route("/query", queryRoutes(app));
+  api.route("/", executionRoutes(app)); // /trades
   api.route("/", runRoutes(app)); // /run, /status, /recommendations, /snapshots
 
   api.onError((err, c) => {

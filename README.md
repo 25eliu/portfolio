@@ -1,17 +1,38 @@
 # Portfolio Intelligence Platform
 
-A locally-run dashboard that mirrors your real stock holdings and runs a daily analysis pipeline,
-benchmarked A/B against an AI-driven **paper** portfolio. **Paper trading only — not investment
-advice.**
+A locally run research dashboard that mirrors your stock holdings and runs a daily analysis
+pipeline, benchmarked A/B against an AI-driven **paper** portfolio. **Paper trading only — not
+investment advice.**
 
-This repo currently implements **Phase 0 + 1** (foundations + dual-portfolio mirror): the
-end-to-end skeleton, the `dailyRun` pipeline spine, the dual portfolio view with a You-vs-AI-vs-SPY
-equity curve, and a structured daily report. The LLM analysis, prediction journal, resolution, and
-learning loop arrive in later phases (see the design doc).
+The working architecture and ordered build roadmap live in
+[`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md). That document updates the
+original plan to match the codebase as it exists today.
 
-## Quickstart (no credentials needed)
+## Current status
 
-The app runs fully offline against a deterministic **fake** market adapter:
+The repository substantially implements **Phases 0–2**:
+
+- local SQLite persistence, typed domain schemas, migrations, and a Hono API
+- editable user holdings, cash, watchlist, risk preset, and automatic-run schedule
+- side-by-side user and AI-paper portfolio pricing with You-vs-AI-vs-SPY history
+- contribution-neutral portfolio returns and a daily scheduler catch-up path
+- Gemini analysis with a deterministic offline fallback
+- Alpaca market data and paper brokerage, FMP fundamentals, FRED macro context, and Finnhub
+  analyst-consensus / earnings enrichment
+- opportunity scanning, structured position-aware recommendations, forward predictions, and live
+  streamed analysis progress
+
+The main unbuilt product slice is the learning loop: prediction persistence, resolution,
+calibration, compiled briefing, guarded AI-paper execution, and grounded journal queries.
+
+> **AI portfolio status:** the app currently displays positions already present in the connected
+> Alpaca paper account, but it does not place orders yet. Journal persistence, explicit AI-paper
+> seeding, and guarded auto-execution are the next trading milestones. The user portfolio remains
+> advisory-only permanently.
+
+## Quickstart
+
+The app runs fully offline against deterministic fake adapters:
 
 ```bash
 bun install
@@ -20,116 +41,118 @@ bun run db:migrate
 bun run dev                   # backend :8787 + Vite :5173
 ```
 
-Open http://localhost:5173 → **Manage holdings** to add tickers → **Seed AI account** →
-**Run analysis now**. Both panels price up, the equity curve and recommendation cards render.
+Open <http://localhost:5173>, use **Manage** to add holdings or watchlist tickers, then select
+**Run analysis**. The dashboard works without external credentials.
 
-## Going live with Alpaca (paper account)
+## External services
 
-The only external service this slice needs is a **free Alpaca paper account**, which provides both
-the paper brokerage (AI portfolio) and stock pricing (equity curves + SPY benchmark).
+### Alpaca paper account
 
-1. Sign up free at <https://alpaca.markets>.
-2. Switch to **Paper Trading** (top-left account switcher), then generate an **API Key ID + Secret**.
-3. In `.env` set:
-   ```
+Alpaca provides market data and the **AI shadow portfolio's paper brokerage account**.
+
+1. Create an account at <https://alpaca.markets>.
+2. Switch to **Paper Trading**, then generate an API key and secret.
+3. Add the following to `.env`:
+
+   ```text
    MARKET_ADAPTER=alpaca
    ALPACA_KEY_ID=your_key_id
    ALPACA_SECRET=your_secret
    ALPACA_PAPER=true
    ```
-4. Verify the credentials before anything else:
+
+4. Verify the credentials:
+
    ```bash
-   bun run alpaca:smoke      # GET /v2/account → prints your paper balance
+   bun run alpaca:smoke
    ```
-5. `bun run dev`, then add holdings → **Seed AI account** (submits paper buy orders to match) →
-   **Run analysis now**. Re-run on later days and the equity curve accumulates points.
 
-> Security: keys live in `.env` only (gitignored), never in source. The app refuses to start with
-> `MARKET_ADAPTER=alpaca` unless `ALPACA_PAPER=true`. There is no live-money path.
+> The app refuses to start with `MARKET_ADAPTER=alpaca` unless `ALPACA_PAPER=true`. There is no
+> live-money adapter or real-portfolio execution path. AI account seeding and automated paper
+> execution are roadmap items, not current UI features.
 
-## Phase 2: analysis (Gemini + FMP + FRED + Finnhub)
+### Analysis enrichment
 
-Phase 2 replaces the deterministic fake report with a real LLM analysis step.  All four API keys
-are **free** and the app degrades gracefully without any of them:
+All enrichment keys are optional. Missing keys degrade gracefully.
 
-1. **Gemini** — get a free key at <https://aistudio.google.com/apikey>
-2. **FMP (Financial Modeling Prep)** — get a free key at <https://site.financialmodelingprep.com/developer/docs>
-3. **FRED** — get a free key at <https://fred.stlouisfed.org/docs/api/api_key.html> (macro rates, CPI, unemployment, VIX)
-4. **Finnhub** — get a free key at <https://finnhub.io> (analyst consensus + next earnings date)
+| Service | Purpose | Verify |
+|---|---|---|
+| Gemini | LLM analysis; falls back to deterministic reports without a key | `bun run gemini:smoke` |
+| FMP | Fundamentals and screener candidates | `bun run fmp:smoke` |
+| FRED | Rates, curve, CPI, unemployment, and VIX macro context | `bun run fred:smoke` |
+| Finnhub | Analyst consensus and upcoming earnings | `bun run finnhub:smoke` |
 
-Add all four to `.env`:
+Add keys to `.env`:
 
-```
+```text
 GEMINI_API_KEY=your_gemini_key
 FMP_API_KEY=your_fmp_key
 FRED_API_KEY=your_fred_key
 FINNHUB_API_KEY=your_finnhub_key
 ```
 
-Verify each key before running the full pipeline:
+## Analysis behavior
 
-```bash
-bun run gemini:smoke    # calls Gemini API with a single test prompt
-bun run fmp:smoke       # fetches a sample FMP endpoint
-bun run fred:smoke      # fetches latest FRED macro series (10y, 2y, VIX, CPI, unemployment)
-bun run finnhub:smoke   # fetches analyst consensus + earnings calendar for a sample ticker
-```
-
-> **No key? No problem.** Each data source degrades gracefully when its key is absent: Gemini falls
-> back to the deterministic fake report; FRED falls back to a fake macro snapshot; Finnhub simply
-> skips analyst/earnings enrichment. The dashboard works end-to-end without any credentials.
-
-The Phase 2 analysis covers:
-
-- **Your positions** — for every ticker you hold, the AI returns exactly one of: **ADD** (buy more),
-  **TRIM** (reduce), **HOLD** (keep), or **SELL** (exit). It never returns WATCH/BUY on a held name.
-- **Opportunities** — for tickers you are tracking or discovered via scan, the AI returns **BUY**
-  (enter now), **WATCH** (clear thesis, needs a concrete trigger), or filters out **PASS** results
-  so only actionable ideas surface.
-- **Forward-looking predictions** — every recommendation carries a structured prediction with
-  direction (bullish/bearish/neutral), horizon (1d → 1y), entry, target, stop, expected return %,
-  R-multiple, trigger + action-if-triggered (for WATCH), and an invalidation condition.
-- **Macro context** — FRED feeds live 10y/2y yields, yield curve spread, Fed Funds rate, CPI YoY,
-  unemployment rate, and VIX into both the market-regime summary and each per-ticker analysis.
-- **Opportunity scan** — top daily movers (via market adapter), FMP screener results, and
-  LLM-driven sentiment / thematic discovery across the combined universe
+- **Held positions** receive exactly one of **ADD**, **TRIM**, **HOLD**, or **SELL**.
+- **Opportunities** receive **BUY**, **WATCH**, or filtered-out **PASS** results.
+- **Predictions** include direction, horizon, entry, target, stop, expected return, R-multiple,
+  invalidation, and WATCH trigger details.
+- **Context** combines SPY technicals, macro observations, screeners, and thematic discovery.
+- **Streaming** shows context gathering, tool activity, ticker progress, and completion in the UI.
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Backend + Vite together |
-| `bun run server` | Backend API only (:8787) |
-| `bun run db:migrate` | Create/upgrade the SQLite schema |
+| `bun run dev` | Run backend and Vite together |
+| `bun run server` | Run backend API only on `:8787` |
+| `bun run db:migrate` | Create or upgrade the SQLite schema |
 | `bun run alpaca:smoke` | Verify Alpaca paper credentials |
 | `bun run gemini:smoke` | Verify Gemini API key |
 | `bun run fmp:smoke` | Verify FMP API key |
-| `bun run fred:smoke` | Verify FRED API key (prints latest macro snapshot) |
-| `bun run finnhub:smoke` | Verify Finnhub API key (analyst consensus + earnings) |
-| `bun test` | Unit + integration tests (fake adapter) |
-| `bunx playwright install chromium && bun run test:e2e` | Browser E2E (one-time browser install) |
-| `bun run build:web` | Production frontend build |
+| `bun run fred:smoke` | Verify FRED API key |
+| `bun run finnhub:smoke` | Verify Finnhub API key |
+| `bun test` | Run unit and integration tests |
+| `bun run test:e2e` | Run Playwright browser tests |
+| `bun run build:web` | Build the production frontend |
 
 ## Architecture
 
-```
+```text
 src/
-├── config/     env loading + validation (paper-only guard)
-├── domain/     Zod schemas + types (Portfolio, Holding, Snapshot, Recommendation, Risk)
-├── db/         bun:sqlite connection, migrations, repositories
-├── market/     Broker + MarketData interfaces; fake/ + alpaca/ adapters
-├── pipeline/   dailyRun spine: price → fake report → persist; seed; pricing
-├── server/     Hono HTTP API (/api/*)
-└── app.ts      wires db + gateway + bootstraps the two portfolios
-web/            React + Vite + Tailwind + Recharts + TanStack Query dashboard
+├── analysis/      technicals, market context, universe, opportunity scan
+├── config/        env loading and paper-only validation
+├── db/            SQLite connection, migrations, repositories
+├── domain/        Zod schemas and shared API types
+├── fundamentals/  fake, FMP, and Finnhub-backed enrichment
+├── llm/           Gemini adapter, prompts, normalization, schemas
+├── macro/         fake and FRED-backed macro snapshots
+├── market/        fake and Alpaca MarketGateway adapters
+├── pipeline/      price → context/scan/analyze → persist, with live events
+├── scheduler/     once-per-day automatic run trigger
+└── server/        Hono HTTP API
+web/               React + Vite + Tailwind + Recharts + TanStack Query
 ```
 
-The frontend shares backend types via the `@shared` alias (one source of truth for the API
-contract). The `MarketGateway` interface means the fake and Alpaca adapters are interchangeable —
-swap with a single env var.
+The frontend imports shared backend types through the `@shared` alias. Fake and Alpaca market
+adapters satisfy the same `MarketGateway` contract.
 
-## Status & roadmap
+## Next build
 
-Phase 0+1 done. Next: **Phase 2** wires the LLM analysis step (provider-agnostic, Gemini default)
-in place of the current fake report generator; **Phase 3** adds the prediction journal, resolution,
-and real AI trade execution.
+Build in this order:
+
+1. Finish the active scheduler and contribution-neutral performance slice.
+2. Persist every recommendation and add the scored-forecast journal.
+3. Add explicit AI-paper seeding and guarded auto-execution, disabled by default.
+4. Add the user research library for uploads, URL snapshots, and opt-in private notes.
+5. Resolve forecasts from historical high/low data with corporate-action awareness.
+6. Compile evidence-backed wiki lessons and calibration metrics into future prompts.
+
+See [`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md) for the full design,
+implementation deltas, acceptance criteria, and later phases.
+
+## Local planning notes
+
+The tracked architecture belongs in `docs/architecture-and-roadmap.md`. Keep private working notes,
+conversation exports, and temporary implementation plans under `docs/local/`, `docs/conversations/`,
+or `docs/plans/`; those directories are intentionally gitignored.

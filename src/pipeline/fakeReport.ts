@@ -67,6 +67,15 @@ function makeRecommendation(symbol: string, date: string, symbols: string[]): Re
     priceTargetUpside: null,
     sources: [],
     screen: null,
+    // Symbol-only (NOT date- or family-seeded) so a later run re-emits the identical fact and the
+    // dedup guard holds the library steady — exercises the self-curated memory path offline.
+    memorableFacts: [
+      {
+        fact: `[demo] ${symbol}: durable competitive characteristic noted for future runs`,
+        citationUrl: `https://example.com/${symbol.toLowerCase()}`,
+        scope: "ticker" as const,
+      },
+    ],
   };
 }
 

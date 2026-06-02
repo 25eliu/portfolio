@@ -60,9 +60,11 @@ export function ScheduleDialog({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center justify-between gap-3 border-t border-hairline pt-5">
           <div>
-            <div className="eyebrow mb-1">Time of day</div>
+            <div className="eyebrow mb-1">Run by</div>
             <p className="text-xs text-text-muted">
-              {enabled ? `Runs daily at ${time12h(time)}.` : "Turn on automatic runs to schedule a time."}
+              {enabled
+                ? `Runs by ${time12h(time)} — or as soon as you open your laptop, whichever comes first.`
+                : "Turn on automatic runs to choose a time."}
             </p>
           </div>
           <input
@@ -75,8 +77,9 @@ export function ScheduleDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="rounded-lg border border-hairline bg-surface-2 px-3 py-2.5 text-xs text-text-muted">
-          Uses this computer's local time and runs only while the app is open on this Mac. It will
-          not run while the computer is asleep or closed.
+          One run per day, in this computer's local time. If your laptop is asleep or off at that
+          time, the run happens automatically the next time you open it — so long as the app is still
+          running (keep it open, or launch it on login).
         </p>
 
         {error && <p className="text-xs text-neg">{error}</p>}

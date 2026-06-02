@@ -40,7 +40,7 @@ function ToolChips({ tools }: { tools: ToolHit[] }) {
     <div className="mt-2 flex flex-wrap gap-1.5">
       {recent.map((t, i) => (
         <Tooltip key={offset + i} content={t.sources.length ? t.sources.join(", ") : "searching…"}>
-          <span className="inline-flex items-center gap-1 rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-[11px] text-accent cursor-help">
+          <span className="inline-flex items-center gap-1 rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-[11px] text-accent cursor-help">
             <Search className="h-3.5 w-3.5" />
             <span className="font-medium">Searched:</span>
             <span className="max-w-[240px] truncate text-text-secondary">{t.query ?? "…"}</span>

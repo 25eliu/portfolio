@@ -212,7 +212,7 @@ export function TickerManager({ onClose }: { onClose: () => void }) {
             {watchlist.data.map((w) => (
               <span
                 key={w.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-hairline-strong bg-surface-2 px-2.5 py-1 text-xs font-medium text-text"
+                className="inline-flex items-center gap-1.5 rounded border border-hairline bg-surface-2 px-2.5 py-1 text-xs font-medium text-text"
               >
                 {w.symbol}
                 <button

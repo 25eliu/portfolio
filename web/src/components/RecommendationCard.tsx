@@ -58,7 +58,13 @@ function sentimentTone(s: number): { tone: "pos" | "neg" | "warn"; label: string
   return { tone: "warn", label: "neutral" };
 }
 
-export function RecommendationCard({ r }: { r: Recommendation }) {
+export function RecommendationCard({
+  r,
+  onViewJournal,
+}: {
+  r: Recommendation;
+  onViewJournal?: (ticker: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const hasDetail =
     r.technicals.rsi14 != null ||
@@ -101,7 +107,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             {pred.direction}
           </span>
           <span className="text-text-muted">·</span>
-          <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+          <span className="rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
             {pred.horizon}
           </span>
           {pred.expectedReturnPct != null && (
@@ -168,7 +174,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
           {r.signals.map((s) => (
             <span
               key={s}
-              className="rounded-md border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-secondary"
+              className="rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-secondary"
             >
               {s}
             </span>
@@ -268,6 +274,15 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             </div>
           )}
         </>
+      )}
+
+      {onViewJournal && (
+        <button
+          onClick={() => onViewJournal(r.ticker)}
+          className="mt-3 w-full border-t border-hairline pt-2.5 text-[11px] text-text-muted transition-colors hover:text-accent"
+        >
+          View in journal →
+        </button>
       )}
     </article>
   );

@@ -24,6 +24,7 @@ const PositionRes = z.object({
   avg_entry_price: z.coerce.number(),
   current_price: z.coerce.number(),
   market_value: z.coerce.number(),
+  lastday_price: z.coerce.number().optional(), // previous trading day close (day-P&L baseline)
 });
 const OrderRes = z.object({
   id: z.string(),
@@ -34,7 +35,12 @@ const OrderRes = z.object({
 });
 const SnapshotsRes = z.record(
   z.string(),
-  z.object({ latestTrade: z.object({ p: z.number() }).optional() }).nullable(),
+  z
+    .object({
+      latestTrade: z.object({ p: z.number() }).optional(),
+      prevDailyBar: z.object({ c: z.number() }).optional(), // previous daily close (day-P&L baseline)
+    })
+    .nullable(),
 );
 const BarsRes = z.object({
   bars: z
@@ -75,7 +81,11 @@ export function createAlpacaGateway(env: Env): MarketGateway {
       `/v2/stocks/snapshots?symbols=${qs}&feed=iex`,
     );
     const snaps = SnapshotsRes.parse(raw);
-    return symbols.map((s) => ({ symbol: s, price: snaps[s]?.latestTrade?.p ?? 0 }));
+    return symbols.map((s) => ({
+      symbol: s,
+      price: snaps[s]?.latestTrade?.p ?? 0,
+      previousClose: snaps[s]?.prevDailyBar?.c ?? null,
+    }));
   }
 
   return {
@@ -83,7 +93,7 @@ export function createAlpacaGateway(env: Env): MarketGateway {
 
     async getQuote(symbol: string): Promise<Quote> {
       const [q] = await getQuotes([symbol]);
-      return q ?? { symbol, price: 0 };
+      return q ?? { symbol, price: 0, previousClose: null };
     },
     getQuotes,
     // lookbackDays is CALENDAR days; Alpaca returns only trading days so the returned bar count is
@@ -139,6 +149,7 @@ export function createAlpacaGateway(env: Env): MarketGateway {
         avgEntry: p.avg_entry_price,
         currentPrice: p.current_price,
         marketValue: p.market_value,
+        previousClose: p.lastday_price ?? null,
       }));
     },
     async placeOrder(order: OrderInput): Promise<Order> {

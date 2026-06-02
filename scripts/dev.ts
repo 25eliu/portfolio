@@ -3,7 +3,10 @@
  *   bun run dev
  */
 const procs = [
-  Bun.spawn(["bun", "--watch", "src/server/index.ts"], { stdout: "inherit", stderr: "inherit" }),
+  // No --watch on the backend: an analysis run takes minutes, and a watch-triggered restart
+  // mid-run would abandon it (runs.abandonRunning marks it "error: abandoned (server restart)").
+  // Restart the backend manually after backend edits. The UI keeps Vite hot-reload below.
+  Bun.spawn(["bun", "src/server/index.ts"], { stdout: "inherit", stderr: "inherit" }),
   Bun.spawn(["bunx", "vite", "--config", "web/vite.config.ts"], {
     stdout: "inherit",
     stderr: "inherit",

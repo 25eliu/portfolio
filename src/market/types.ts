@@ -4,7 +4,7 @@
  * (real paper account) are fully interchangeable.
  */
 
-export type Quote = { symbol: string; price: number };
+export type Quote = { symbol: string; price: number; previousClose: number | null };
 
 export type Bar = {
   date: string; // YYYY-MM-DD
@@ -21,6 +21,8 @@ export type BrokerPosition = {
   avgEntry: number;
   currentPrice: number;
   marketValue: number;
+  /** Previous trading day's close per share — the day-P&L baseline. Null when unavailable. */
+  previousClose: number | null;
 };
 
 export type Account = {

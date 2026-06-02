@@ -68,7 +68,9 @@ describe("snapshots + market snapshots", () => {
       date: "2026-06-01",
       totalValue: 1100,
       cash: 100,
-      positions: [{ symbol: "AAPL", shares: 5, price: 200, marketValue: 1000 }],
+      positions: [
+        { symbol: "AAPL", shares: 5, price: 200, marketValue: 1000, dayPnL: null, totalPnL: null, costBasis: null, acquiredAt: null },
+      ],
     });
     const all = repos.snapshots.listByPortfolio(pid);
     expect(all.map((s) => s.date)).toEqual(["2026-05-30", "2026-06-01"]);

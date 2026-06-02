@@ -72,6 +72,9 @@ export function createMockAnalyzer(): Analyzer {
         priceTargetUpside: null,
         sources: [],
         screen: input.screen,
+        memorableFacts: [
+          { fact: `mock durable fact for ${input.symbol}`, citationUrl: "https://example.com", scope: "ticker" },
+        ],
       };
     },
     async marketMacro(_date, _trend, _pct, sink) {

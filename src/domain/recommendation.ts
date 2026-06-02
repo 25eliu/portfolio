@@ -37,9 +37,22 @@ export const Catalyst = z.object({
 export type Catalyst = z.infer<typeof Catalyst>;
 
 /**
- * One recommendation card (architecture doc §8). This shape is the contract the Phase 2 LLM
- * step must satisfy; in this slice it is produced by a deterministic fake generator so the
- * card UI and schema are validated before any model is wired in.
+ * A durable, structural fact the analyzer chose to remember from its own research — distilled to one
+ * claim with the citation it came from. Persisted into the self-curated knowledge library so future
+ * runs retrieve it as evidence (the platform's self-updating factual memory). Kept deliberately
+ * permissive (no max length here) so a slightly-long fact never fails the whole recommendation parse;
+ * the relevance bar (≤140 chars, durable-only) is enforced in the prompt and trimmed at persistence.
+ */
+export const MemorableFact = z.object({
+  fact: z.string().min(1),
+  citationUrl: z.string().nullable().default(null),
+  scope: z.enum(["ticker", "global"]).default("ticker"),
+});
+export type MemorableFact = z.infer<typeof MemorableFact>;
+
+/**
+ * One recommendation card. This shape is the contract both the Gemini analyzer and deterministic
+ * offline fallback satisfy so the UI receives the same validated structure in either mode.
  */
 export const Recommendation = z.object({
   ticker: Symbol,
@@ -63,6 +76,12 @@ export const Recommendation = z.object({
   screen: ScreenType.nullable().default(null),
   catalyst: Catalyst.nullable().default(null),
   briefingNote: z.string().nullable().default(null),
+  /**
+   * Durable facts the analyzer chose to add to its long-term memory this run. Non-critical: a malformed
+   * facts array falls back to [] so it never breaks the recommendation. Persisted as self_curated
+   * knowledge sources by the curation step (deduped against what the system already knows).
+   */
+  memorableFacts: z.array(MemorableFact).default([]).catch([]),
 });
 export type Recommendation = z.infer<typeof Recommendation>;
 

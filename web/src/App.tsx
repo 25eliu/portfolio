@@ -12,7 +12,12 @@ import { AnalysisStream } from "./components/AnalysisStream.tsx";
 import { Atmosphere } from "./components/Atmosphere.tsx";
 import { EquityCurve } from "./components/EquityCurve.tsx";
 import { Header } from "./components/Header.tsx";
-import { JournalPlaceholder } from "./components/JournalPlaceholder.tsx";
+import { AiTrades } from "./components/AiTrades.tsx";
+import { Journal } from "./components/Journal.tsx";
+import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
+import { CuratedMemory } from "./components/CuratedMemory.tsx";
+import { Wiki } from "./components/Wiki.tsx";
+import { PortfolioQuery } from "./components/PortfolioQuery.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
 import { PortfolioPanel } from "./components/PortfolioPanel.tsx";
 import { Recommendations } from "./components/Recommendations.tsx";
@@ -49,6 +54,7 @@ export default function App() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [horizon, setHorizon] = useState<HorizonKey>("3M");
+  const [journalTicker, setJournalTicker] = useState<string | undefined>(undefined);
 
   const portfolios = usePortfolios();
   const recommendations = useRecommendations();
@@ -68,8 +74,16 @@ export default function App() {
   const handleStreamFinished = (status: "done" | "error", message?: string) => {
     setActiveRunId(null);
     void refresh();
-    if (status === "error") toast.error("Run failed", { description: message });
-    else toast.success("Analysis complete", { description: "Report and snapshots updated." });
+    if (status === "error") {
+      const interrupted = /abandon|restart/i.test(message ?? "");
+      if (interrupted) {
+        toast("Run interrupted by a server restart", { description: "Nothing was saved — just re-run." });
+      } else {
+        toast.error("Run failed", { description: message });
+      }
+    } else {
+      toast.success("Analysis complete", { description: "Report and snapshots updated." });
+    }
   };
 
   return (
@@ -156,13 +170,40 @@ export default function App() {
           ) : (
             <>
               <MarketContextBanner report={recommendations.data?.report ?? null} />
-              <Recommendations report={recommendations.data?.report ?? null} />
+              <Recommendations
+                report={recommendations.data?.report ?? null}
+                onViewJournal={(ticker) => {
+                  setJournalTicker(ticker);
+                  document.getElementById("journal")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
             </>
           )}
         </Section>
 
-        <Section title="Journal &amp; query" index={4}>
-          <JournalPlaceholder />
+        <Section title="AI trading" index={4}>
+          <AiTrades />
+        </Section>
+
+        <Section title="Journal &amp; query" index={5}>
+          <div id="journal">
+            <Journal ticker={journalTicker} onClearFilter={() => setJournalTicker(undefined)} />
+          </div>
+        </Section>
+
+        <Section title="Knowledge library" index={6}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <KnowledgeLibrary />
+            <CuratedMemory />
+          </div>
+        </Section>
+
+        <Section title="Performance wiki" index={8}>
+          <Wiki />
+        </Section>
+
+        <Section title="Ask your portfolio" index={9}>
+          <PortfolioQuery />
         </Section>
       </main>
 

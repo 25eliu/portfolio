@@ -1,16 +1,51 @@
 import type {
+  Briefing,
   DailyReport,
+  ForecastOutcome,
   Holding,
   HoldingInput,
+  IngestionRun,
+  JournalEntry,
+  KgNeighbor,
+  KgNode,
+  KnowledgeSource,
+  KnowledgeVersion,
   MarketSnapshot,
   PricedPortfolio,
+  QueryLog,
   RiskPreset,
   RiskProfile,
   Run,
   Schedule,
+  ScoredForecast,
   Snapshot,
+  TradeDecision,
   WatchlistItem,
+  WikiLesson,
+  WikiMetric,
 } from "./types.ts";
+
+export type SourcePatch = {
+  title?: string;
+  scope?: "global" | "ticker";
+  scopeTicker?: string | null;
+  useInAnalysis?: boolean;
+  status?: "active" | "quarantined" | "archived";
+};
+export type NoteInput = { title: string; text: string; scope: "global" | "ticker"; scopeTicker?: string; useInAnalysis?: boolean };
+export type UrlInput = { url: string; title?: string; scope: "global" | "ticker"; scopeTicker?: string };
+type IngestResult = { source: KnowledgeSource; run: IngestionRun };
+
+/** One self-curated fact (the analyzer's own distilled memory) and its day grouping. */
+export type CuratedFact = {
+  id: string;
+  ticker: string | null;
+  scope: "global" | "ticker";
+  fact: string;
+  citationUrl: string | null;
+  createdAt: string;
+};
+export type CuratedDay = { date: string; facts: CuratedFact[] };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -47,4 +82,48 @@ export const client = {
   addWatch: (symbol: string) =>
     api<WatchlistItem>("/watchlist", { method: "POST", body: JSON.stringify({ symbol }) }),
   removeWatch: (id: string) => api<{ ok: boolean }>(`/watchlist/${id}`, { method: "DELETE" }),
+  journal: (filter: { ticker?: string; date?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (filter.ticker) qs.set("ticker", filter.ticker);
+    if (filter.date) qs.set("date", filter.date);
+    const q = qs.toString();
+    return api<{ entries: JournalEntry[] }>(`/journal${q ? `?${q}` : ""}`);
+  },
+  journalDays: () => api<{ days: { date: string; count: number; scored: number }[] }>("/journal/days"),
+  journalEntry: (id: string) =>
+    api<{ entry: JournalEntry; forecast: ScoredForecast | null; outcome: ForecastOutcome | null }>(
+      `/journal/${id}`,
+    ),
+  knowledgeSources: () => api<{ sources: KnowledgeSource[] }>("/knowledge/sources"),
+  knowledgeSource: (id: string) =>
+    api<{ source: KnowledgeSource; versions: KnowledgeVersion[]; activeChunks: number }>(`/knowledge/sources/${id}`),
+  addNote: (input: NoteInput) =>
+    api<IngestResult>("/knowledge/sources/note", { method: "POST", body: JSON.stringify(input) }),
+  addUrl: (input: UrlInput) =>
+    api<IngestResult>("/knowledge/sources/url", { method: "POST", body: JSON.stringify(input) }),
+  uploadKnowledge: (file: File, scope: "global" | "ticker", scopeTicker?: string) => {
+    const fd = new FormData();
+    fd.set("file", file);
+    fd.set("scope", scope);
+    if (scopeTicker) fd.set("scopeTicker", scopeTicker);
+    // No JSON content-type: let the browser set the multipart boundary.
+    return fetch("/api/knowledge/sources/upload", { method: "POST", body: fd }).then(async (res) => {
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      return (await res.json()) as IngestResult;
+    });
+  },
+  updateSource: (id: string, patch: SourcePatch) =>
+    api<KnowledgeSource>(`/knowledge/sources/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
+  refreshSource: (id: string) => api<IngestResult>(`/knowledge/sources/${id}/refresh`, { method: "POST" }),
+  archiveSource: (id: string) => api<{ ok: boolean }>(`/knowledge/sources/${id}`, { method: "DELETE" }),
+  curatedMemory: () => api<{ days: CuratedDay[] }>("/knowledge/curated"),
+  graphNode: (id: string) => api<{ node: KgNode; neighbors: KgNeighbor[] }>(`/graph/node/${id}`),
+  wikiBriefing: () => api<{ briefing: Briefing | null }>("/wiki/briefing"),
+  wikiLessons: () => api<{ lessons: WikiLesson[] }>("/wiki/lessons"),
+  wikiMetrics: (window?: string) =>
+    api<{ metrics: WikiMetric[] }>(`/wiki/metrics${window ? `?window=${window}` : ""}`),
+  trades: () => api<{ trades: TradeDecision[] }>("/trades"),
+  askQuery: (question: string) =>
+    api<{ queryId: string }>("/query", { method: "POST", body: JSON.stringify({ question }) }),
+  queryLog: () => api<{ queries: QueryLog[] }>("/query/log"),
 };

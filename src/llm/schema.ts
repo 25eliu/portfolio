@@ -40,6 +40,19 @@ export const recommendationFunctionDeclaration: FunctionDeclaration = {
         },
         required: ["direction", "horizon", "invalidation", "rationale"],
       },
+      // Durable facts to add to the system's self-curated long-term memory (0..3, each cited).
+      memorableFacts: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            fact: { type: Type.STRING, description: "one durable, structural claim, ≤140 chars" },
+            citationUrl: { type: Type.STRING, description: "a research source URL backing the fact" },
+            scope: { type: Type.STRING, enum: ["ticker", "global"] },
+          },
+          required: ["fact"],
+        },
+      },
     },
     required: ["ticker", "action", "conviction", "strategyFamily", "thesis", "signals", "prediction"],
   },

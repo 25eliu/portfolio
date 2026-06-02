@@ -10,6 +10,8 @@ build/
 data/*.sqlite
 data/*.sqlite-*
 data/*.db
+# Raw uploaded/snapshotted knowledge-base files (metadata + extracted text live in SQLite).
+data/knowledge/
 data/*.db-*
 
 # Environment & secrets (.env.example is committed as the template)
@@ -28,8 +30,14 @@ playwright-report/
 playwright/.cache/
 coverage/
 
-# Personal docs, notes, wiki, stock-data dumps — NOT part of the template
-docs/
+# Project documentation: keep the canonical architecture tracked, but leave working notes private.
+docs/*
+!docs/architecture-and-roadmap.md
+docs/local/
+docs/conversations/
+docs/plans/
+
+# Personal notes, wiki, stock-data dumps — NOT part of the template
 wiki/
 notes/
 scratch/

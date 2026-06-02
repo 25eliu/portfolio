@@ -2,6 +2,7 @@ import type { MarketSnapshot, PricedPortfolio, Snapshot } from "../api/types.ts"
 import { chart } from "../lib/chartTheme.ts";
 import { pct, pnlClass, signedUsd, usd } from "../lib/format.ts";
 import { type HorizonKey, horizonDays, latestDate, periodReturn, withinHorizon } from "../lib/horizon.ts";
+import { timeWeightedReturn } from "../lib/performance.ts";
 import { Card } from "./ui/Card.tsx";
 import { Sparkline } from "./ui/Sparkline.tsx";
 import { Stat } from "./ui/Stat.tsx";
@@ -23,16 +24,20 @@ export function SummaryBand({ user, ai, snapshots, horizon, onHorizonChange }: P
   const aiSnaps = snapshots?.ai ?? [];
   const spySnaps = snapshots?.spy ?? [];
 
-  // All three returns are the % move over the selected window, so they respond to the horizon.
+  // Returns are P&L over the selected window — contribution-neutral for You/AI (time-weighted, so
+  // adding stocks or cash never counts), and a plain price move for SPY (it has no contributions).
   const days = horizonDays(horizon);
   const ref = latestDate(userSnaps, aiSnaps, spySnaps);
-  const userSeries = withinHorizon(userSnaps, days, ref).map(stockValue);
-  const aiSeries = withinHorizon(aiSnaps, days, ref).map(stockValue);
-  const spySeries = withinHorizon(spySnaps, days, ref).map((s) => s.spyClose);
+  const userWin = withinHorizon(userSnaps, days, ref);
+  const aiWin = withinHorizon(aiSnaps, days, ref);
 
-  const youReturn = periodReturn(userSeries);
-  const aiReturn = periodReturn(aiSeries);
-  const spyReturn = periodReturn(spySeries);
+  const youReturn = timeWeightedReturn(userWin);
+  const aiReturn = timeWeightedReturn(aiWin);
+  const spyReturn = periodReturn(withinHorizon(spySnaps, days, ref).map((s) => s.spyClose));
+
+  // Sparklines track stock value (cash excluded) so cash deposits don't read as performance.
+  const userSeries = userWin.map(stockValue);
+  const aiSeries = aiWin.map(stockValue);
 
   const fmtReturn = (r: number | null) => (r == null ? "—" : pct(r));
 
