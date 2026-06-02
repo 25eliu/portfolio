@@ -28,6 +28,7 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
     `You are a senior equity analyst building a rigorous research brief on ${t.symbol}.`,
     `Use Google Search to gather and synthesize the most recent information across all factors below.`,
     `Weight credible voices (reputable analysts, notable investors, substantive financial press) over hype.`,
+    `If you cannot verify a specific figure (price target, earnings number, date) via search, say it is unconfirmed rather than inferring it from memory.`,
     ``,
     `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
     `Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
@@ -38,11 +39,11 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
     `3. Analyst actions & price targets — recent upgrades/downgrades, consensus target range.`,
     `4. Valuation context — how current multiples compare to history and peers.`,
     `5. Technical posture — trend direction, key levels, momentum signals.`,
-    `6. Credible-source sentiment — what reputable analysts or notable investors are saying right now.`,
+    `6. Credible-source sentiment — what reputable analysts, notable investors, and high-signal communities (substantive financial press, Reddit, X) are currently saying — weighting credibility over hype.`,
     `7. Bear case / counter-thesis — state the strongest argument against acting on this ticker,`,
     `   the specific conditions that would make this call wrong, and the realistic base rate of failure.`,
     ``,
-    `Summarize your findings concisely (6-10 sentences covering all seven factors).`,
+    `Summarize your findings in a tight paragraph per factor (roughly 8–14 sentences total) so the bear case has room.`,
     `Do not give a recommendation yet — just the researched facts.`,
   ].join("\n");
 }
@@ -64,16 +65,29 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     `Latest price: ${t.price}.`,
     `Portfolio buying power: $${t.availableCash} in uninvested cash. This is a hard limit — do not`,
     `assume unlimited capital. When cash is scarce, reserve BUYs for the highest-conviction ideas and`,
-    `size any trade plan within this cash; prefer WATCH over BUY if there isn't cash to act on it.`,
-    ``,
-    t.held
-      ? `You HOLD ${t.symbol}. Decide exactly one — and do not default to HOLD to avoid committing:\n  ADD (high-quality dip / thesis strengthening), TRIM (overextended / risk management), HOLD (thesis intact & fairly valued), SELL (thesis broken or better uses of capital).`
-      : `${t.symbol} is a CANDIDATE you do not own. Decide exactly one — passing is a valid, expected outcome:\n  BUY (you would act at today's price), WATCH (clear thesis but needs a concrete trigger), PASS (not compelling).`,
+    `size any trade plan within this cash.`,
+    ...(t.held
+      ? [
+          `When cash is scarce, prefer HOLD/TRIM over ADD; never assume capital you don't have.`,
+          ``,
+          `You HOLD ${t.symbol}. Decide exactly one — and do not default to HOLD to avoid committing:`,
+          `  ADD (high-quality dip / thesis strengthening), TRIM (overextended / risk management), HOLD (thesis intact & fairly valued), SELL (thesis broken or better uses of capital).`,
+        ]
+      : [
+          `When cash is scarce, prefer WATCH over BUY when there isn't cash to act.`,
+          ``,
+          `${t.symbol} is a CANDIDATE you do not own. Decide exactly one — passing is a valid, expected outcome:`,
+          `  BUY (you would act at today's price), WATCH (clear thesis but needs a concrete trigger), PASS (not compelling).`,
+        ]),
     `Weigh the bull and bear cases from the research; commit to the verdict the evidence supports.`,
     `Do not hedge — a non-committal verdict is a failure; pick the action the evidence demands.`,
-    `Conviction (0..1) must be a calibrated probability — reserve high values for genuinely high-confidence calls; neutral is allowed.`,
+    `Conviction (0..1) must be a calibrated probability — reserve high values for genuinely high-confidence calls; a genuinely uncertain/neutral call maps to ~0.5.`,
+    `Return conviction (0..1), a strategyFamily (momentum / value / event-driven / macro / mean-reversion / quality), the key signals that drove the decision, an optional catalyst, and the REQUIRED prediction object.`,
+    `prediction.direction is your price outlook — bullish if you expect appreciation, bearish if decline, neutral if range-bound/uncertain (a HOLD or PASS is usually neutral).`,
     `Return a REQUIRED prediction: { direction, horizon (1d|1w|1mo|3mo|6mo|1y), entry, target, stop, expectedReturnPct, rMultiple, trigger, actionIfTriggered, invalidation, rationale }.`,
-    `For WATCH: trigger = the specific, testable condition to act on; actionIfTriggered = what it becomes (e.g. "BUY"); also state the bearish branch in invalidation. Base every number ONLY on the provided technicals/fundamentals.`,
+    ...(!t.held
+      ? [`For WATCH: trigger = the specific, testable condition to act on; actionIfTriggered = what it becomes (e.g. "BUY"); also state the bearish branch in invalidation. Base every number ONLY on the provided technicals/fundamentals.`]
+      : [`Base every number ONLY on the provided technicals/fundamentals.`]),
   ].join("\n");
 }
 
