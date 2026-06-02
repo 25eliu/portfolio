@@ -142,6 +142,14 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
       const target = typeof rawPred.target === "number" ? rawPred.target : null;
       const prediction = Prediction.parse({
         ...rawPred,
+        direction:
+          rawPred.direction === "bullish" || rawPred.direction === "bearish" || rawPred.direction === "neutral"
+            ? rawPred.direction
+            : "neutral",
+        horizon:
+          typeof rawPred.horizon === "string" && ["1d", "1w", "1mo", "3mo", "6mo", "1y"].includes(rawPred.horizon)
+            ? rawPred.horizon
+            : "1mo",
         entry: typeof rawPred.entry === "number" ? rawPred.entry : price,
         expectedReturnPct:
           typeof rawPred.expectedReturnPct === "number"
