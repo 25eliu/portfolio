@@ -5,6 +5,7 @@ import { computeTechnicals } from "../analysis/technicals.ts";
 import { buildMarketContext } from "../analysis/marketContext.ts";
 import { runOpportunityScan } from "../analysis/opportunityScan.ts";
 import { buildUniverse, type UniverseEntry } from "../analysis/universe.ts";
+import { collectAiThesisTickers } from "../analysis/aiUniverse.ts";
 import { retrieveEvidence } from "../knowledge/retrieve.ts";
 import type { RetrievedExcerpt } from "../domain/index.ts";
 import type { Emit } from "./events.ts";
@@ -120,9 +121,10 @@ export async function generateLlmReport(
     .discoverOpportunities(ctx, app.env.MAX_THEMATIC_CANDIDATES, contextSink)
     .catch((err) => (console.warn(`[discovery] failed: ${err instanceof Error ? err.message : String(err)}`), []));
   const combined = dedupeBySymbol([...scan, ...thematic]);
-  const universe = buildUniverse({ held, watchlist, scan: combined, aiHeld });
+  const aiThesis = collectAiThesisTickers(app);
+  const universe = buildUniverse({ held, watchlist, scan: combined, aiHeld, aiThesis });
   console.log(
-    `[universe] held=${held.length} watchlist=${watchlist.length} scan=${scan.length} thematic=${thematic.length} → ${universe.symbols.length} to analyze`,
+    `[universe] held=${held.length} watchlist=${watchlist.length} scan=${scan.length} thematic=${thematic.length} aiThesis=${aiThesis.length} → ${universe.symbols.length} to analyze`,
   );
 
   emit({
@@ -156,6 +158,18 @@ export async function generateLlmReport(
       // The system's existing self-curated memory for this ticker — shown to the model so it only
       // proposes net-new durable facts (keeps the self-curated library dense, not repetitive).
       const priorFacts = app.repos.knowledge.selfCuratedFactsForTicker(symbol);
+      // The AI's own most recent call on this name (excluding today) — trusted continuity.
+      const prior = app.repos.journalEntries.latestPriorForTicker(symbol, date);
+      const priorThesis = prior
+        ? {
+            date: prior.date,
+            action: prior.action,
+            conviction: prior.conviction,
+            target: prior.recommendation.prediction.target,
+            stop: prior.recommendation.prediction.stop,
+            thesis: prior.recommendation.thesis,
+          }
+        : undefined;
       const rec = await analyzer.analyzeTicker(
         {
           symbol,
@@ -172,6 +186,7 @@ export async function generateLlmReport(
           evidence,
           wikiBriefing,
           priorFacts,
+          priorThesis,
         },
         ctx,
         tickerSink,
