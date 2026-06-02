@@ -142,6 +142,30 @@ export function journalEntriesRepo(db: DB) {
       const row = db.query<Row, [string]>("SELECT * FROM journal_entries WHERE id = ?").get(id);
       return row ? safeToDomain(row) : null;
     },
+
+    /** Distinct tickers the system rated BUY/ADD/WATCH on/after `sinceDate` — the AI's recent
+     *  buy-interest, carried forward into its hunting universe. Newest call first, capped to `limit`. */
+    recentActionableTickers(sinceDate: string, limit = 50): string[] {
+      const rows = db
+        .query<{ ticker: string }, [string, number]>(
+          `SELECT ticker, MAX(created_at) AS mc FROM journal_entries
+            WHERE date >= ? AND action IN ('BUY','ADD','WATCH')
+            GROUP BY ticker ORDER BY mc DESC LIMIT ?`,
+        )
+        .all(sinceDate, limit);
+      return rows.map((r) => r.ticker);
+    },
+
+    /** The most recent journal entry for a ticker strictly before `beforeDate` — the AI's prior call,
+     *  fed back into analysis for day-to-day continuity. Null when there is no earlier entry. */
+    latestPriorForTicker(ticker: string, beforeDate: string): JournalEntry | null {
+      const row = db
+        .query<Row, [string, string]>(
+          `SELECT * FROM journal_entries WHERE ticker = ? AND date < ? ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(ticker, beforeDate);
+      return row ? safeToDomain(row) : null;
+    },
   };
 }
 export type JournalEntriesRepo = ReturnType<typeof journalEntriesRepo>;

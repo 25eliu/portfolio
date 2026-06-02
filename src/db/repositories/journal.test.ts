@@ -156,6 +156,46 @@ describe("journalEntriesRepo", () => {
   });
 });
 
+describe("journalEntries.recentActionableTickers", () => {
+  test("returns distinct BUY/ADD/WATCH tickers within the window, newest-first", () => {
+    const repos = repositories(openMemoryDb());
+    const reportId = newId();
+    repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+    const mk = (ticker: string, date: string, action: string, createdAt: string) => {
+      const rec = Recommendation.parse({ ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", thesis: `t ${ticker}`, signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
+      return { id: newId(), reportId, runId: null, date, createdAt, ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: false };
+    };
+    repos.journalEntries.insertMany([
+      mk("NVDA", "2026-06-01", "BUY", "2026-06-01T00:00:00.000Z"),
+      mk("TSLA", "2026-06-02", "WATCH", "2026-06-02T00:00:00.000Z"),
+      mk("AAPL", "2026-06-02", "PASS", "2026-06-02T00:00:01.000Z"), // not actionable
+      mk("OLD", "2026-05-01", "BUY", "2026-05-01T00:00:00.000Z"),   // outside window
+    ]);
+    expect(repos.journalEntries.recentActionableTickers("2026-05-28", 10)).toEqual(["TSLA", "NVDA"]);
+  });
+});
+
+describe("journalEntries.latestPriorForTicker", () => {
+  test("returns the most recent entry strictly before the given date", () => {
+    const repos = repositories(openMemoryDb());
+    const reportId = newId();
+    repos.reports.insert({ id: reportId, date: "2026-05-28", generatedAt: "2026-05-28T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+    const mk = (date: string, action: string, createdAt: string) => {
+      const rec = Recommendation.parse({ ticker: "NVDA", held: false, action, conviction: 0.6, strategyFamily: "momentum", thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
+      return { id: newId(), reportId, runId: null, date, createdAt, ticker: "NVDA", held: false, action, conviction: 0.6, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: false };
+    };
+    repos.journalEntries.insertMany([
+      mk("2026-05-28", "WATCH", "2026-05-28T00:00:00.000Z"),
+      mk("2026-05-30", "BUY", "2026-05-30T00:00:00.000Z"),
+      mk("2026-06-01", "ADD", "2026-06-01T00:00:00.000Z"), // today → excluded
+    ]);
+    const prior = repos.journalEntries.latestPriorForTicker("NVDA", "2026-06-01");
+    expect(prior?.action).toBe("BUY");
+    expect(prior?.date).toBe("2026-05-30");
+    expect(repos.journalEntries.latestPriorForTicker("MSFT", "2026-06-01")).toBeNull();
+  });
+});
+
 describe("scoredForecastsRepo", () => {
   test("insert + getByJournalEntry round-trips arrays and nullables", () => {
     const reportId = seedReport();
