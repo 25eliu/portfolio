@@ -3,7 +3,7 @@ import { createApp, type App } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
 import { loadEnv } from "../config/env.ts";
-import { newId, Recommendation } from "../domain/index.ts";
+import { newId, Recommendation, type Action } from "../domain/index.ts";
 import { collectAiThesisTickers } from "./aiUniverse.ts";
 
 function makeApp(envOver: Record<string, string> = {}): App {
@@ -14,7 +14,7 @@ function seedReport(app: App): string {
   app.repos.reports.insert({ id, date: "2026-06-09", generatedAt: "2026-06-09T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
   return id;
 }
-function journal(app: App, reportId: string, ticker: string, action: string, date: string): string {
+function journal(app: App, reportId: string, ticker: string, action: Action, date: string): string {
   const id = newId();
   const rec = Recommendation.parse({ ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
   app.repos.journalEntries.insert({ id, reportId, runId: null, date, createdAt: `${date}T00:00:00.000Z`, ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: false });

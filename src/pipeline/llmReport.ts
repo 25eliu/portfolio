@@ -174,8 +174,9 @@ export async function generateLlmReport(
       const rec = await analyzer.analyzeTicker(
         {
           symbol,
-          // AI-held-only names read as candidates from the user's advisory perspective.
-          source: entry.source === "ai_held" ? "scan" : entry.source,
+          // AI-only names (its holdings or its carried-forward theses) read as candidates from the
+          // user's advisory perspective, so they map to the analyzer's "scan" source.
+          source: entry.source === "ai_held" || entry.source === "ai_thesis" ? "scan" : entry.source,
           screen: entry.candidate?.screen ?? null,
           screenReason: entry.candidate?.reason,
           price: quote.price,
