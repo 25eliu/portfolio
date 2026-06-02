@@ -1,6 +1,16 @@
 import type { Fundamentals, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
 import { renderEvidenceBlock } from "../knowledge/retrieve.ts";
 
+/** The AI's most recent prior call on a ticker, fed back for day-to-day continuity. */
+export type PriorThesis = {
+  date: string;
+  action: string;
+  conviction: number;
+  target: number | null;
+  stop: number | null;
+  thesis: string;
+};
+
 export type TickerInput = {
   symbol: string;
   source: "held" | "watchlist" | "scan";
@@ -21,6 +31,8 @@ export type TickerInput = {
   /** Durable facts the system has already self-curated for this ticker — shown so the model only
    *  proposes net-new facts (the key to keeping the self-curated library dense, not bloated). */
   priorFacts?: string[];
+  /** The AI's own latest prior call on this ticker — trusted continuity, distinct from user evidence. */
+  priorThesis?: PriorThesis;
 };
 
 /**
@@ -95,6 +107,14 @@ export function buildTickerStructurePrompt(
           `where stated conviction has run ahead of realized hit-rate, or that show negative expectancy.`,
           `It informs how strongly to act, not whether to commit; still pick the verdict the evidence demands.`,
           t.wikiBriefing,
+        ]
+      : []),
+    ...(t.priorThesis
+      ? [
+          ``,
+          `Your prior call on ${t.symbol} (${t.priorThesis.date}): ${t.priorThesis.action}, conviction ${t.priorThesis.conviction.toFixed(2)}` +
+            `${t.priorThesis.target != null ? `, target ${t.priorThesis.target}` : ""}${t.priorThesis.stop != null ? ` / stop ${t.priorThesis.stop}` : ""} — "${t.priorThesis.thesis}".`,
+          `This is your own earlier reasoning (trusted continuity). Build on it or revise it as the evidence now warrants — do not ignore it.`,
         ]
       : []),
     ``,
