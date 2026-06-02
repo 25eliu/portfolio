@@ -24,6 +24,7 @@ const EnvSchema = z.object({
   GEMINI_THINKING_LEVEL: z.enum(["low", "medium", "high"]).default("medium"),
   FMP_API_KEY: z.string().default(""),
   FRED_API_KEY: z.string().default(""),
+  FINNHUB_API_KEY: z.string().default(""),
   LLM_CONCURRENCY: z.coerce.number().int().positive().default(4),
   MAX_SCAN_CANDIDATES: z.coerce.number().int().nonnegative().default(8),
   MAX_THEMATIC_CANDIDATES: z.coerce.number().int().nonnegative().default(5),

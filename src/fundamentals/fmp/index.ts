@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Env } from "../../config/env.ts";
 import { Fundamentals, emptyFundamentals } from "../../domain/fundamentals.ts";
 import type { FundamentalsSource, ScreenCriteria } from "../types.ts";
+import { finnhubAnalystRating, finnhubNextEarnings } from "../finnhub/index.ts";
 
 /**
  * FMP adapter — targets the "stable" API (`/stable/<endpoint>?symbol=X`). The legacy `/api/v3/...`
@@ -40,6 +41,11 @@ export function createFmpFundamentals(env: Env): FundamentalsSource {
           forSymbol("price-target-summary", symbol).then(first).catch(() => ({})),
         ]);
 
+        const [rating, earnings] = await Promise.all([
+          finnhubAnalystRating(env, symbol).catch(() => null),
+          finnhubNextEarnings(env, symbol).catch(() => null),
+        ]);
+
         return Fundamentals.parse({
           symbol,
           name: typeof profile.companyName === "string" ? profile.companyName : null,
@@ -66,13 +72,13 @@ export function createFmpFundamentals(env: Env): FundamentalsSource {
           quickRatio: n(ratios.quickRatioTTM),
           freeCashFlowPerShare: n(ratios.freeCashFlowPerShareTTM),
           interestCoverage: n(ratios.interestCoverageRatioTTM),
-          analystRating: null, // needs the grades endpoint (not fetched)
+          analystRating: rating,
           priceTargetMean: n(target.targetConsensus),
           priceTargetHigh: n(target.targetHigh),
           priceTargetLow: n(target.targetLow),
           numAnalysts:
             n(ptSummary.lastQuarterCount) ?? n(ptSummary.lastYearCount) ?? n(ptSummary.allTimeCount),
-          nextEarningsDate: null,
+          nextEarningsDate: earnings,
         });
       } catch (err) {
         console.error("[fmp] get failed:", String(err).replaceAll(key, "***"));

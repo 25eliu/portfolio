@@ -3,6 +3,8 @@ import { openMemoryDb, repositories } from "../db/index.ts";
 import { createFakeFundamentals } from "./fake/index.ts";
 import { cached } from "./index.ts";
 import { Fundamentals } from "../domain/fundamentals.ts";
+import { finnhubAnalystRating, finnhubNextEarnings } from "./finnhub/index.ts";
+import { loadEnv } from "../config/env.ts";
 
 describe("fake fundamentals", () => {
   test("returns a schema-valid, deterministic object", async () => {
@@ -16,6 +18,20 @@ describe("fake fundamentals", () => {
   test("screen returns symbols", async () => {
     const f = createFakeFundamentals();
     expect((await f.screen({ limit: 3 })).length).toBeGreaterThan(0);
+  });
+});
+
+describe("finnhub helpers — no FINNHUB_API_KEY", () => {
+  const env = loadEnv({});
+
+  test("finnhubAnalystRating returns null without a key (no network call)", async () => {
+    const result = await finnhubAnalystRating(env, "AAPL");
+    expect(result).toBeNull();
+  });
+
+  test("finnhubNextEarnings returns null without a key (no network call)", async () => {
+    const result = await finnhubNextEarnings(env, "AAPL");
+    expect(result).toBeNull();
   });
 });
 

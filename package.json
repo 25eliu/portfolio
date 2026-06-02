@@ -15,6 +15,7 @@
     "gemini:smoke": "bun run scripts/gemini-smoke.ts",
     "fmp:smoke": "bun run scripts/fmp-smoke.ts",
     "fred:smoke": "bun run scripts/fred-smoke.ts",
+    "finnhub:smoke": "bun run scripts/finnhub-smoke.ts",
     "test": "bun test",
     "test:e2e": "playwright test"
   },
