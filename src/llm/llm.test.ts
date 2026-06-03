@@ -63,6 +63,7 @@ describe("mock analyzer", () => {
     const outlook = await a.synthesizeOutlook(ctx, []);
     expect(() => Outlook.parse(outlook)).not.toThrow();
     expect(outlook.sectors.length).toBeGreaterThanOrEqual(1);
+    expect(outlook.themes.length).toBeGreaterThanOrEqual(1);
     expect(["risk_on", "neutral", "risk_off", "defensive"]).toContain(outlook.regime?.stance ?? "neutral");
   });
 });
