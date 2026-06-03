@@ -48,6 +48,33 @@ export type CuratedFact = {
 };
 export type CuratedDay = { date: string; facts: CuratedFact[] };
 
+/** A tag triple as served by the AI Library API. */
+export type InsightTag = { dimension: string; value: string; source: "ai" | "human" };
+
+/** The canonical AI-knowledge shape (Phase 1: facts). */
+export type AiInsight = {
+  id: string;
+  kind: "fact" | "thesis";
+  level: string;
+  date: string;
+  createdAt: string;
+  subject: string;
+  headline: string;
+  body: string;
+  stance: string | null;
+  conviction: number | null;
+  horizon: string | null;
+  significance: number | null;
+  tags: InsightTag[];
+  tickers: string[];
+  sources: { title: string; url: string }[];
+  status: string;
+  provenance: { runId: string | null; reportId: string | null; journalEntryId?: string };
+};
+export type AiLibraryDay = { date: string; factCount: number };
+export type TagCount = { dimension: string; value: string; count: number };
+export type TagEdit = { add: { dimension: string; value: string }[]; remove: { dimension: string; value: string }[] };
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -118,6 +145,22 @@ export const client = {
   refreshSource: (id: string) => api<IngestResult>(`/knowledge/sources/${id}/refresh`, { method: "POST" }),
   archiveSource: (id: string) => api<{ ok: boolean }>(`/knowledge/sources/${id}`, { method: "DELETE" }),
   curatedMemory: () => api<{ days: CuratedDay[] }>("/knowledge/curated"),
+  aiLibraryDays: () => api<{ days: AiLibraryDay[] }>("/ai-library/days"),
+  aiLibraryDay: (date: string) => api<{ date: string; facts: AiInsight[] }>(`/ai-library/day/${date}`),
+  aiLibrarySearch: (params: { q?: string; dimension?: string; value?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.dimension && params.value) {
+      qs.set("dimension", params.dimension);
+      qs.set("value", params.value);
+    }
+    return api<{ insights: AiInsight[] }>(`/ai-library/search?${qs.toString()}`);
+  },
+  tags: () => api<{ tags: TagCount[] }>("/tags"),
+  editInsightTags: (kind: string, id: string, body: TagEdit) =>
+    api<{ tags: InsightTag[] }>(`/ai-insights/${kind}/${id}/tags`, { method: "PUT", body: JSON.stringify(body) }),
+  archiveInsight: (kind: string, id: string) =>
+    api<{ ok: boolean }>(`/ai-insights/${kind}/${id}`, { method: "DELETE" }),
   graphNode: (id: string) => api<{ node: KgNode; neighbors: KgNeighbor[] }>(`/graph/node/${id}`),
   wikiBriefing: () => api<{ briefing: Briefing | null }>("/wiki/briefing"),
   wikiLessons: () => api<{ lessons: WikiLesson[] }>("/wiki/lessons"),

@@ -107,6 +107,40 @@ export const useKnowledgeSources = () =>
 export const useCuratedMemory = () =>
   useQuery({ queryKey: [...keys.knowledge, "curated"], queryFn: client.curatedMemory });
 
+const aiLibraryKey = ["aiLibrary"] as const;
+
+export const useAiLibraryDays = () =>
+  useQuery({ queryKey: [...aiLibraryKey, "days"], queryFn: client.aiLibraryDays });
+
+export const useAiLibraryDay = (date: string | null) =>
+  useQuery({ queryKey: [...aiLibraryKey, "day", date], queryFn: () => client.aiLibraryDay(date!), enabled: !!date });
+
+export const useAiLibrarySearch = (params: { q?: string; dimension?: string; value?: string }) =>
+  useQuery({
+    queryKey: [...aiLibraryKey, "search", params],
+    queryFn: () => client.aiLibrarySearch(params),
+    enabled: !!(params.q || (params.dimension && params.value)),
+  });
+
+export const useTags = () => useQuery({ queryKey: [...aiLibraryKey, "tags"], queryFn: client.tags });
+
+export const useEditInsightTags = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, id, body }: { kind: string; id: string; body: import("./client.ts").TagEdit }) =>
+      client.editInsightTags(kind, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: aiLibraryKey }),
+  });
+};
+
+export const useArchiveInsight = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, id }: { kind: string; id: string }) => client.archiveInsight(kind, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: aiLibraryKey }),
+  });
+};
+
 export function useAddNote() {
   const invalidate = useInvalidateAll();
   return useMutation({ mutationFn: (input: NoteInput) => client.addNote(input), onSuccess: invalidate });
