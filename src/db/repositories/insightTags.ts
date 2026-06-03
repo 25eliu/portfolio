@@ -70,16 +70,23 @@ export function insightTagsRepo(db: DB) {
 
     insightNodeIdsForTag(dimension: TagDimension, value: string): string[] {
       const t = tagTarget(dimension, value);
-      return db
-        .query<{ src_id: string }, [string]>("SELECT src_id FROM kg_edges WHERE dst_id = ?")
-        .all(t.id)
-        .map((r) => r.src_id);
+      const rows = db
+        .query<{ src_id: string; data_json: string }, [string]>(
+          "SELECT src_id, data_json FROM kg_edges WHERE dst_id = ?",
+        )
+        .all(t.id);
+      const ids = new Set<string>();
+      for (const r of rows) {
+        const d = JSON.parse(r.data_json) as Partial<InsightTag>;
+        if (d?.dimension === dimension && d.value === value) ids.add(r.src_id);
+      }
+      return [...ids];
     },
 
     taxonomy(): { dimension: TagDimension; value: string; count: number }[] {
       const rows = db
         .query<{ data_json: string }, []>(
-          "SELECT data_json FROM kg_edges WHERE rel IN ('tagged_with','mentions') AND data_json LIKE '%dimension%'",
+          `SELECT data_json FROM kg_edges WHERE rel IN ('tagged_with','mentions') AND data_json LIKE '%"dimension":%'`,
         )
         .all();
       const m = new Map<string, { dimension: TagDimension; value: string; count: number }>();

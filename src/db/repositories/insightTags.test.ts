@@ -39,4 +39,23 @@ describe("insightTags", () => {
     expect(repos.insightTags.insightNodeIdsForTag("sector", "Energy").sort()).toEqual(["source:f1", "source:f2"]);
     expect(repos.insightTags.taxonomy()).toContainEqual({ dimension: "sector", value: "Energy", count: 2 });
   });
+
+  test("insightNodeIdsForTag ignores plain mentions edges with no tag triple", () => {
+    // A non-tag mentions edge (e.g. written elsewhere in the graph) to the same ticker node.
+    repos.graph.upsertNode({
+      id: "source:other", type: "source", label: "x", summary: "", data: {}, status: "active",
+      createdAt: NOW, updatedAt: NOW,
+    });
+    repos.graph.upsertNode({
+      id: "ticker:nvda", type: "ticker", label: "NVDA", summary: "", data: {}, status: "active",
+      createdAt: NOW, updatedAt: NOW,
+    });
+    repos.graph.upsertEdge({
+      id: "source:other|mentions|ticker:nvda", srcId: "source:other", dstId: "ticker:nvda",
+      rel: "mentions", weight: 1, data: {}, createdAt: NOW,
+    });
+    // A genuinely tagged fact.
+    repos.insightTags.addTag("source:f1", { dimension: "ticker", value: "NVDA", source: "ai" }, NOW);
+    expect(repos.insightTags.insightNodeIdsForTag("ticker", "NVDA")).toEqual(["source:f1"]);
+  });
 });
