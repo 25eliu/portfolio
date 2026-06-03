@@ -21,13 +21,15 @@
 
 ## File Structure
 
+**The daily marks are assessed in the PERFORMANCE WIKI — not re-surfaced in the Journal.** The Journal stays a record of calls; the wiki is where the in-flight book is assessed (both the LLM briefing and the human Wiki view).
+
 **Create:**
 - `src/domain/forecastMark.ts` — `ForecastDailyMark` zod type.
 - `src/db/repositories/forecastDailyMarks.ts` — repo (upsert idempotent, prior-mark lookup, list/forDate).
 - `src/db/repositories/forecastDailyMarks.test.ts`
-- `src/resolution/track.ts` — `trackOpenForecasts(app)` + `markFor(...)` pure helper + `renderInFlight(marks)`.
+- `src/resolution/track.ts` — `trackOpenForecasts(app)` + `markFor(...)` pure helper + `renderInFlight(marks)` + `assessInFlight(marks)`.
 - `src/resolution/track.test.ts`
-- `src/server/forecastMarks.test.ts` (route + journal-detail extension tests)
+- `src/server/wikiInFlight.test.ts` (wiki in-flight route + marks-trajectory route tests)
 
 **Modify:**
 - `src/db/schema.ts` — append migration `018_forecast_daily_marks`.
@@ -35,11 +37,11 @@
 - `src/domain/index.ts` — re-export `forecastMark.ts` (if not wildcard-covered).
 - `src/pipeline/dailyRun.ts` — call `trackOpenForecasts` (step 2b.5, after resolution, before `compileWiki`).
 - `src/wiki/index.ts` — append the in-flight assessment to the briefing body.
-- `src/server/routes/journal.ts` — include `marks` in `GET /journal/:id`; add `GET /forecasts/:id/marks` (in a small new router or here).
-- `src/server/app.ts` — mount the forecasts route (if a new router is used).
-- `src/query/tools.ts` — add `forecast_progress` tool.
-- `web/src/api/client.ts` + `hooks.ts` — `ForecastDailyMark` type; extend `journalEntry` response; add marks usage.
-- `web/src/components/Journal.tsx` — daily-progress mini-series in `JournalDetail`.
+- `src/server/routes/wiki.ts` — add `GET /wiki/in-flight` (today's assessment + open calls) and `GET /wiki/forecasts/:id/marks` (per-call trajectory, for wiki drill-down).
+- `src/query/tools.ts` — add `forecast_progress` tool (the query bot can read the same daily marks).
+- `web/src/api/client.ts` + `hooks.ts` — `ForecastDailyMark`/`InFlight` types; `wikiInFlight`/`forecastMarks` client + hooks.
+- `web/src/components/Wiki.tsx` — an "In-flight book" panel (assessment summary + open-call rows, each expandable to a daily sparkline).
+- **NOT touched:** `src/server/routes/journal.ts`, `web/src/components/Journal.tsx` — the Journal is unchanged.
 
 ---
 
@@ -515,22 +517,51 @@ describe("renderInFlight", () => {
 
 - [ ] **Step 2: Run — expect FAIL:** `bun test src/resolution/track.test.ts`
 
-- [ ] **Step 3: Implement `renderInFlight` in `src/resolution/track.ts`** (add at the end of the file):
+- [ ] **Step 3: Implement `assessInFlight` + `renderInFlight` in `src/resolution/track.ts`** (add at the end of the file). `assessInFlight` is the single source the briefing TEXT and the wiki JSON both use:
 
 ```ts
 const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
 const fmt = (x: number | null) => (x == null ? "—" : x.toFixed(2));
 
-/** A one-block daily assessment of the in-flight book, compiled from today's persisted marks. Injected
- *  into the wiki briefing so analysis sees how live calls are actually tracking (not just resolved). */
-export function renderInFlight(marks: ForecastDailyMark[]): string {
-  if (marks.length === 0) return "";
+/** A structured daily assessment of the in-flight book, compiled from today's persisted marks. The
+ *  single source for both the briefing text (renderInFlight) and the wiki API/UI. */
+export type InFlightAssessment = {
+  date: string | null;
+  total: number;
+  onTrack: number;
+  atRisk: number;
+  nearStop: number;
+  nearTarget: number;
+  avgUnrealizedR: number | null;
+  avgMfe: number | null;
+  avgMae: number | null;
+};
+
+export function assessInFlight(marks: ForecastDailyMark[]): InFlightAssessment {
   const count = (s: string) => marks.filter((m) => m.status === s).length;
   const rs = marks.map((m) => m.unrealizedR).filter((r): r is number => r != null);
+  return {
+    date: marks[0]?.date ?? null,
+    total: marks.length,
+    onTrack: count("on_track"),
+    atRisk: count("at_risk"),
+    nearStop: count("near_stop"),
+    nearTarget: count("near_target"),
+    avgUnrealizedR: avg(rs),
+    avgMfe: avg(marks.map((m) => m.mfe)),
+    avgMae: avg(marks.map((m) => m.mae)),
+  };
+}
+
+/** A one-block daily assessment injected into the wiki briefing so analysis sees how live calls are
+ *  actually tracking (not just resolved calibration). Empty string when there's nothing open. */
+export function renderInFlight(marks: ForecastDailyMark[]): string {
+  if (marks.length === 0) return "";
+  const a = assessInFlight(marks);
   return [
-    `IN-FLIGHT (marked ${marks[0]!.date}) — daily mark-to-market of open calls.`,
-    `${marks.length} open: ${count("on_track")} on track, ${count("at_risk")} at risk, ${count("near_stop")} near stop, ${count("near_target")} near target.`,
-    `Avg unrealized ${fmt(avg(rs))}R; avg MFE ${fmt(avg(marks.map((m) => m.mfe)))}R, avg MAE ${fmt(avg(marks.map((m) => m.mae)))}R.`,
+    `IN-FLIGHT (marked ${a.date}) — daily mark-to-market of open calls.`,
+    `${a.total} open: ${a.onTrack} on track, ${a.atRisk} at risk, ${a.nearStop} near stop, ${a.nearTarget} near target.`,
+    `Avg unrealized ${fmt(a.avgUnrealizedR)}R; avg MFE ${fmt(a.avgMfe)}R, avg MAE ${fmt(a.avgMae)}R.`,
   ].join("\n");
 }
 ```
@@ -557,14 +588,16 @@ git commit -m "feat(tracking): inject daily in-flight assessment into the wiki b
 
 ---
 
-## Task 5: API — journal-detail marks, `/forecasts/:id/marks`, `forecast_progress` tool
+## Task 5: API — wiki in-flight assessment, marks trajectory, `forecast_progress` tool
+
+The daily marks are exposed under the **wiki** namespace (assessment + per-call drill-down). The Journal API is NOT touched.
 
 **Files:**
-- Modify: `src/server/routes/journal.ts` (include `marks` in `/journal/:id`; add `/forecasts/:id/marks`)
+- Modify: `src/server/routes/wiki.ts` (add `GET /wiki/in-flight` and `GET /wiki/forecasts/:id/marks`)
 - Modify: `src/query/tools.ts` (add `forecast_progress`)
-- Test: `src/server/forecastMarks.test.ts` (create), `src/query/tools.test.ts` (append)
+- Test: `src/server/wikiInFlight.test.ts` (create), `src/query/tools.test.ts` (append)
 
-- [ ] **Step 1: Write the failing route test.** Create `src/server/forecastMarks.test.ts`:
+- [ ] **Step 1: Write the failing route test.** Create `src/server/wikiInFlight.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -595,58 +628,64 @@ beforeEach(async () => {
 });
 const req = (path: string) => server.fetch(new Request(`http://test/api${path}`));
 
-describe("forecast marks API", () => {
-  test("GET /forecasts/:id/marks returns the trajectory", async () => {
-    const body = (await (await req("/forecasts/f1/marks")).json()) as { marks: { date: string }[] };
-    expect(body.marks.length).toBe(1);
-    expect(body.marks[0]!.date).toBe(DATE);
+describe("wiki in-flight API", () => {
+  test("GET /wiki/in-flight returns today's assessment + open calls", async () => {
+    const body = (await (await req("/wiki/in-flight")).json()) as {
+      assessment: { total: number; onTrack: number }; calls: { ticker: string; side: string | null; status: string }[];
+    };
+    expect(body.assessment.total).toBe(1);
+    expect(body.calls[0]!.ticker).toBe("NVDA");
+    expect(body.calls[0]!.side).toBe("bullish");
   });
 
-  test("GET /forecasts/:id/marks → empty array for an unknown forecast", async () => {
-    const body = (await (await req("/forecasts/nope/marks")).json()) as { marks: unknown[] };
-    expect(body.marks).toEqual([]);
+  test("GET /wiki/in-flight is empty (zeroed) when nothing is open", async () => {
+    const fresh = createServer(createApp({ db: openMemoryDb(), gateway: createFakeGateway({ now: () => DATE, startingCash: 100_000 }), now: () => DATE }));
+    const body = (await (await fresh.fetch(new Request(`http://test/api/wiki/in-flight`))).json()) as { assessment: { total: number }; calls: unknown[] };
+    expect(body.assessment.total).toBe(0);
+    expect(body.calls).toEqual([]);
+  });
+
+  test("GET /wiki/forecasts/:id/marks returns the per-call trajectory", async () => {
+    const body = (await (await req("/wiki/forecasts/f1/marks")).json()) as { marks: { date: string }[] };
+    expect(body.marks.length).toBe(1);
+    expect(body.marks[0]!.date).toBe(DATE);
   });
 });
 ```
 
-- [ ] **Step 2: Run — expect FAIL (404):** `bun test src/server/forecastMarks.test.ts`
+- [ ] **Step 2: Run — expect FAIL (404):** `bun test src/server/wikiInFlight.test.ts`
 
-- [ ] **Step 3: Add the route + extend journal detail.** In `src/server/routes/journal.ts`:
-  - In the `GET /:id` handler, after computing `forecast` and `outcome`, add marks and include them in the response:
-    ```ts
-    const marks = forecast ? app.repos.forecastDailyMarks.listForForecast(forecast.id) : [];
-    ```
-    and change the `return c.json({ entry, forecast, outcome, trades });` to:
-    ```ts
-    return c.json({ entry, forecast, outcome, trades, marks });
-    ```
-  - Add a new route in the same router (it is mounted at `/journal`, so this would be `/journal/forecasts/...` — NOT what we want). Instead, add the marks endpoint to a path that mounts at `/`. The simplest: add it to the existing `aiKnowledgeRoutes`-style "/" group is wrong domain. Create the route in `journal.ts` but expose it via a SEPARATE small router. To keep it simple and avoid a new file, add the following to `src/server/routes/journal.ts`'s exported function on a sub-path and ALSO register a tiny forecasts router in app.ts:
+- [ ] **Step 3: Add the routes to the wiki router.** In `src/server/routes/wiki.ts`, add the import:
+```ts
+import { assessInFlight } from "../../resolution/track.ts";
+```
+Then add these two routes inside `wikiRoutes(app)` (before `return r;`):
 
-  Implementation choice (pick ONE, the reviewer can confirm): **add a dedicated router**. At the bottom of `src/server/routes/journal.ts`, export a second function:
-    ```ts
-    export function forecastRoutes(app: App): Hono {
-      const r = new Hono();
-      r.get("/forecasts/:id/marks", (c) =>
-        c.json({ marks: app.repos.forecastDailyMarks.listForForecast(c.req.param("id")) }),
-      );
-      return r;
-    }
-    ```
-  (Add `import { Hono } from "hono";` if not already imported in journal.ts — it is, since journalRoutes returns a Hono.)
+```ts
+  // In-flight book: today's daily marks assessed (the human view of "are my live calls tracking?").
+  r.get("/in-flight", (c) => {
+    const marks = app.repos.forecastDailyMarks.forDate(app.now());
+    const calls = marks.map((m) => {
+      const f = app.repos.scoredForecasts.get(m.forecastId);
+      return {
+        forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
+        movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
+      };
+    });
+    return c.json({ assessment: assessInFlight(marks), calls });
+  });
 
-- [ ] **Step 4: Mount the forecasts router.** In `src/server/app.ts`:
-  - Update the journal import to also import the new function:
-    ```ts
-    import { journalRoutes, forecastRoutes } from "./routes/journal.ts";
-    ```
-  - After the `api.route("/journal", journalRoutes(app));` line add:
-    ```ts
-    api.route("/", forecastRoutes(app)); // /forecasts/:id/marks
-    ```
+  // Per-call daily trajectory — backs the wiki drill-down sparkline.
+  r.get("/forecasts/:id/marks", (c) =>
+    c.json({ marks: app.repos.forecastDailyMarks.listForForecast(c.req.param("id")) }),
+  );
+```
 
-- [ ] **Step 5: Run — expect PASS:** `bun test src/server/forecastMarks.test.ts` and `bun test src/server/server.test.ts` (no regressions to the existing journal detail test — confirm it still passes with the added `marks` field; if that test does a strict `toEqual` on the response object, update it to include `marks: []` or use `toMatchObject` — read it first).
+(`wikiRoutes` is already mounted at `/wiki` in `src/server/app.ts`, so these resolve to `/api/wiki/in-flight` and `/api/wiki/forecasts/:id/marks` — no `app.ts` change needed.)
 
-- [ ] **Step 6: Add the `forecast_progress` query tool.** First write the failing test — append to `src/query/tools.test.ts` inside the existing `describe("query tool citations (cite)", ...)` or the registry block:
+- [ ] **Step 4: Run — expect PASS:** `bun test src/server/wikiInFlight.test.ts` and `bun test src/server/server.test.ts` (no regressions; the Journal detail route is untouched).
+
+- [ ] **Step 5: Add the `forecast_progress` query tool.** First write the failing test — append to `src/query/tools.test.ts` inside the existing `describe("query tool citations (cite)", ...)` or the registry block:
 
 ```ts
   test("forecast_progress returns the daily trajectory of an open call by ticker", async () => {
@@ -695,23 +734,25 @@ Then implement the tool — add to the `QUERY_TOOLS` array in `src/query/tools.t
   },
 ```
 
-- [ ] **Step 7: Run — expect PASS:** `bun test src/query/tools.test.ts`
-- [ ] **Step 8: Commit:**
+- [ ] **Step 6: Run — expect PASS:** `bun test src/query/tools.test.ts`
+- [ ] **Step 7: Commit:**
 ```bash
-git add src/server/routes/journal.ts src/server/app.ts src/server/forecastMarks.test.ts src/query/tools.ts src/query/tools.test.ts
-git commit -m "feat(tracking): journal-detail marks, /forecasts/:id/marks, forecast_progress tool"
+git add src/server/routes/wiki.ts src/server/wikiInFlight.test.ts src/query/tools.ts src/query/tools.test.ts
+git commit -m "feat(tracking): wiki in-flight assessment API, marks trajectory, forecast_progress tool"
 ```
 
 ---
 
-## Task 6: Frontend — daily-progress mini-series in the Journal detail
+## Task 6: Frontend — "In-flight book" panel in the Performance Wiki
+
+The assessment lives in the **Wiki** view (`web/src/components/Wiki.tsx`), alongside the calibration strip, briefing, and lessons. The Journal component is NOT touched.
 
 **Files:**
-- Modify: `web/src/api/client.ts` (type + extend `journalEntry` response)
-- Modify: `web/src/components/Journal.tsx` (`JournalDetail` mini-series)
+- Modify: `web/src/api/client.ts` (types + `wikiInFlight`/`forecastMarks` client methods)
+- Modify: `web/src/api/hooks.ts` (`useWikiInFlight`, `useForecastMarks`)
+- Modify: `web/src/components/Wiki.tsx` (`InFlightPanel` + expandable per-call sparkline)
 
-- [ ] **Step 1: Add the type + extend the client response.** In `web/src/api/client.ts`:
-  - After the `AiInsight`/`TagCount` types (or near the other domain re-exports), add:
+- [ ] **Step 1: Add types + client methods.** In `web/src/api/client.ts`, add near the other types:
     ```ts
     export type ForecastDailyMark = {
       id: string; forecastId: string; ticker: string; date: string; markPrice: number;
@@ -719,69 +760,103 @@ git commit -m "feat(tracking): journal-detail marks, /forecasts/:id/marks, forec
       unrealizedR: number | null; mfe: number; mae: number; spyExcess: number | null;
       status: "on_track" | "near_target" | "at_risk" | "near_stop"; createdAt: string;
     };
+    export type InFlightAssessment = {
+      date: string | null; total: number; onTrack: number; atRisk: number; nearStop: number;
+      nearTarget: number; avgUnrealizedR: number | null; avgMfe: number | null; avgMae: number | null;
+    };
+    export type InFlightCall = {
+      forecastId: string; ticker: string; side: string | null; resolveBy: string | null;
+      movePct: number; unrealizedR: number | null; mfe: number; mae: number; status: string;
+    };
     ```
-  - In the `journalEntry` client method, extend the response generic to include `marks`:
+  Then add to the client methods object (near `wikiBriefing`):
     ```ts
-    journalEntry: (id: string) =>
-      api<{ entry: JournalEntry; forecast: ScoredForecast | null; outcome: ForecastOutcome | null; marks: ForecastDailyMark[] }>(
-        `/journal/${id}`,
-      ),
+    wikiInFlight: () => api<{ assessment: InFlightAssessment; calls: InFlightCall[] }>("/wiki/in-flight"),
+    forecastMarks: (id: string) => api<{ marks: ForecastDailyMark[] }>(`/wiki/forecasts/${id}/marks`),
     ```
-    (Match the existing call's exact generic — read the current lines 110-112 and add `; marks: ForecastDailyMark[]` to the object type. If `trades` is also in the type, keep it.)
 
-- [ ] **Step 2: Render the mini-series in `JournalDetail`.** In `web/src/components/Journal.tsx`, inside `JournalDetail` (which already reads `const detail = useJournalEntry(entry.id);`), add after the existing `forecast`/`outcome` derivations:
-    ```tsx
-    const marks = detail.data?.marks ?? [];
+- [ ] **Step 2: Add hooks.** In `web/src/api/hooks.ts`, after `useWikiMetrics`:
+    ```ts
+    export const useWikiInFlight = () => useQuery({ queryKey: [...keys.wiki, "in-flight"], queryFn: client.wikiInFlight });
+    export const useForecastMarks = (id: string | null) =>
+      useQuery({ queryKey: [...keys.wiki, "marks", id], queryFn: () => client.forecastMarks(id!), enabled: id != null });
     ```
-  Then render a compact progress strip when there are marks and no terminal outcome yet. Add this block in the returned JSX, after the forecast `<Field>` rows and before `{outcome && <Outcome .../>}`:
+
+- [ ] **Step 3: Render the panel in `Wiki.tsx`.** Update the hooks import to add `useWikiInFlight, useForecastMarks`, and the type import to add `InFlightCall`/`ForecastDailyMark` from `../api/client.ts`. In the `Wiki()` body add `const inFlight = useWikiInFlight();` and render `<InFlightPanel ... />` in the JSX (e.g. right after the `<CalibrationStrip>`/briefing block):
 
 ```tsx
-      {marks.length > 0 && <DailyProgress marks={marks} />}
+      {(inFlight.data?.calls.length ?? 0) > 0 && <InFlightPanel data={inFlight.data!} />}
 ```
 
-  And add this component at the bottom of the file (reuse the file's existing `pct`/`Field` helpers and Tailwind tokens already used in the component):
+  Add these components at the bottom of the file (reuse the file's existing `pct`/`Stat`/Tailwind tokens; adapt class names to the file's actuals):
 
 ```tsx
-function DailyProgress({ marks }: { marks: import("../api/client.ts").ForecastDailyMark[] }) {
-  const last = marks[marks.length - 1]!;
-  const tone =
-    last.status === "near_stop" || last.status === "at_risk" ? "text-neg" : "text-pos";
+function InFlightPanel({ data }: { data: { assessment: import("../api/client.ts").InFlightAssessment; calls: import("../api/client.ts").InFlightCall[] } }) {
+  const a = data.assessment;
+  const r = (x: number | null) => (x == null ? "—" : `${x.toFixed(2)}R`);
   return (
-    <div className="mt-3">
-      <p className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">Daily progress ({marks.length})</p>
-      <div className="flex items-end gap-0.5">
-        {marks.map((m) => {
-          const h = Math.min(24, Math.max(2, Math.round(Math.abs(m.moveFromEntry) * 120)));
-          const up = m.moveFromEntry >= 0;
-          return (
-            <span
-              key={m.date}
-              title={`${m.date}: ${pct(m.moveFromEntry)} · R ${m.unrealizedR == null ? "—" : m.unrealizedR.toFixed(2)} · ${m.status}`}
-              className={`w-1.5 rounded-sm ${up ? "bg-pos/60" : "bg-neg/60"}`}
-              style={{ height: `${h}px` }}
-            />
-          );
-        })}
+    <div className="mt-5">
+      <p className="mb-2 text-[11px] uppercase tracking-wide text-text-muted">
+        In-flight book{a.date ? ` · marked ${a.date}` : ""} · {a.total} open
+      </p>
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted">
+        <span className="text-pos">{a.onTrack} on track</span>
+        <span>{a.atRisk} at risk</span>
+        <span className="text-neg">{a.nearStop} near stop</span>
+        <span>{a.nearTarget} near target</span>
+        <span>avg {r(a.avgUnrealizedR)}</span>
+        <span>MFE {r(a.avgMfe)}</span>
+        <span>MAE {r(a.avgMae)}</span>
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-text-muted">
-        <span className={tone}>now {pct(last.moveFromEntry)}</span>
-        <span>R {last.unrealizedR == null ? "—" : last.unrealizedR.toFixed(2)}</span>
-        <span>MFE {last.mfe.toFixed(2)}R</span>
-        <span>MAE {last.mae.toFixed(2)}R</span>
-        <span>{last.status}</span>
+      <div className="divide-y divide-hairline">
+        {data.calls.map((c) => (
+          <InFlightRow key={c.forecastId} call={c} />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function InFlightRow({ call }: { call: import("../api/client.ts").InFlightCall }) {
+  const [open, setOpen] = useState(false);
+  const marks = useForecastMarks(open ? call.forecastId : null);
+  const bad = call.status === "near_stop" || call.status === "at_risk";
+  return (
+    <div className="py-2">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 text-left text-[12px]">
+        <span className="font-medium text-text">{call.ticker}</span>
+        <span className="text-text-muted">{call.side}</span>
+        <span className={bad ? "text-neg" : "text-pos"}>{pct(call.movePct)}</span>
+        <span className="text-text-muted">{call.unrealizedR == null ? "—" : `${call.unrealizedR.toFixed(2)}R`}</span>
+        <span className="ml-auto text-[10px] text-text-muted">{call.status}{call.resolveBy ? ` · by ${call.resolveBy}` : ""}</span>
+      </button>
+      {open && (
+        <div className="mt-2 flex items-end gap-0.5">
+          {(marks.data?.marks ?? []).map((m) => {
+            const h = Math.min(24, Math.max(2, Math.round(Math.abs(m.moveFromEntry) * 120)));
+            return (
+              <span
+                key={m.date}
+                title={`${m.date}: ${pct(m.moveFromEntry)} · ${m.unrealizedR == null ? "—" : m.unrealizedR.toFixed(2)}R · ${m.status}`}
+                className={`w-1.5 rounded-sm ${m.moveFromEntry >= 0 ? "bg-pos/60" : "bg-neg/60"}`}
+                style={{ height: `${h}px` }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 ```
 
-> Confirm `pct` exists in Journal.tsx (it does — used for percentages) and `bg-pos`/`bg-neg`/`text-pos`/`text-neg`/`text-text-muted` are valid Tailwind tokens already used in the file. Adapt class names to the file's actual tokens if they differ.
+  Add `import { useState } from "react";` to `Wiki.tsx` if not already imported.
 
-- [ ] **Step 3: Typecheck + build.** From repo root: `bunx tsc --noEmit 2>&1 | grep "web/src"` → expect zero web errors. Then `cd web && bun run build` → expect success. (Pre-existing backend `journal.test.ts` tsc errors are out of scope.)
-- [ ] **Step 4: Commit:**
+- [ ] **Step 4: Typecheck + build.** From repo root: `bunx tsc --noEmit 2>&1 | grep "web/src"` → expect zero web errors. Then `cd web && bun run build` → expect success. (Pre-existing backend `journal.test.ts` tsc errors are out of scope.)
+- [ ] **Step 5: Commit:**
 ```bash
-git add web/src/api/client.ts web/src/components/Journal.tsx
-git commit -m "feat(web): daily-progress mini-series in the journal detail"
+git add web/src/api/client.ts web/src/api/hooks.ts web/src/components/Wiki.tsx
+git commit -m "feat(web): in-flight book panel in the performance wiki"
 ```
 
 ---
@@ -793,7 +868,7 @@ git commit -m "feat(web): daily-progress mini-series in the journal detail"
 
 - [ ] **Step 1: Run the whole backend suite:** `bun test` — expect all PASS. Investigate any failure before proceeding (pay attention to `pipeline.test.ts`, `wiki`, and `server.test.ts`).
 - [ ] **Step 2: Build the web app:** `cd web && bun run build` — expect success.
-- [ ] **Step 3: Update the architecture doc.** In `docs/architecture-and-roadmap.md`, mark Phase 2 done in the AI Knowledge Platform roadmap subsection and document: `forecast_daily_marks` (one row per open forecast per day; move/progress/R/running MFE-MAE/status); `trackOpenForecasts` runs at dailyRun step 2b.5; the in-flight assessment is injected into the wiki briefing; marks surface via `/journal/:id`, `/forecasts/:id/marks`, the `forecast_progress` tool, and the journal daily-progress mini-series. Note Phase 3 (theses + Market View) is still pending.
+- [ ] **Step 3: Update the architecture doc.** In `docs/architecture-and-roadmap.md`, mark Phase 2 done in the AI Knowledge Platform roadmap subsection and document: `forecast_daily_marks` (one row per open forecast per day; move/progress/R/running MFE-MAE/status); `trackOpenForecasts` runs at dailyRun step 2b.5; the in-flight assessment is injected into the wiki briefing AND surfaced in the Performance Wiki view (the Journal is unchanged); marks reachable via `/wiki/in-flight`, `/wiki/forecasts/:id/marks`, and the `forecast_progress` query tool. Note Phase 3 (theses + Market View) is still pending.
 - [ ] **Step 4: Commit:**
 ```bash
 git add docs/architecture-and-roadmap.md
@@ -808,9 +883,9 @@ git commit -m "docs: record Phase 2 daily performance tracking"
 - §2.1 `forecast_daily_marks` migration → Task 1. ✓ (matches spec columns; `id` PK added for repo ergonomics; `mfe`/`mae` defined as running max/min of unrealized R — documented.)
 - §2.2 `trackOpenForecasts` daily job + MFE/MAE roll-forward, reuses openBook math, called after pricing/before wiki → Tasks 2, 3. ✓ (placed at step 2b.5 — after resolution, before compileWiki, consistent with spec "before wiki compile".)
 - §2.3 in-flight assessment injected into the (one) wiki briefing → Task 4. ✓ (the existing live Open Book section is left intact; the assessment is additive and reads persisted marks.)
-- §2.4 `/forecasts/:id/marks`, `forecast_progress` tool, Journal daily-progress series → Tasks 5, 6. ✓
+- §2.4 assessment surfaced — **in the wiki, not the journal** (per the steer): `/wiki/in-flight` + `/wiki/forecasts/:id/marks` + `forecast_progress` tool + an "In-flight book" panel in `Wiki.tsx` → Tasks 5, 6. ✓ The Journal route/component are explicitly untouched.
 
-**Type consistency:** `ForecastDailyMark` fields identical across `src/domain/forecastMark.ts` (Task 1), repo `toDomain` (Task 1), `markFor`/`renderInFlight` (Tasks 2/4), the routes/tool (Task 5), and the web type (Task 6). `status` union `on_track|near_target|at_risk|near_stop` identical to `OpenThesisStatus` in `openBook.ts`. Repo method names (`upsert`, `listForForecast`, `priorMark`, `forDate`) used consistently in Tasks 2/4/5.
+**Type consistency:** `ForecastDailyMark` fields identical across `src/domain/forecastMark.ts` (Task 1), repo `toDomain` (Task 1), `markFor` (Task 2), the routes/tool (Task 5), and the web type (Task 6). `InFlightAssessment` is defined once in `track.ts` (Task 4) and re-typed identically in the web client (Task 6). `status` union `on_track|near_target|at_risk|near_stop` identical to `OpenThesisStatus` in `openBook.ts`. Repo method names (`upsert`, `listForForecast`, `priorMark`, `forDate`) used consistently in Tasks 2/4/5.
 
 **Placeholder scan:** none — every code step contains complete code.
 
@@ -818,4 +893,5 @@ git commit -m "docs: record Phase 2 daily performance tracking"
 1. **Mark math is duplicated** from `openBook.ts`'s private `progressFor` (rather than exporting/sharing it). Justified to keep `openBook.ts` untouched and the marks self-contained; reviewer may prefer extraction into a shared helper. (Tasks 2 — noted inline.)
 2. **MFE/MAE are defined in unrealized-R units** (running max/min of `unrealizedR`), distinct from `forecast_outcomes`' bar-derived `max_favorable_excursion`/`max_adverse_excursion` (return units). This is intentional — the daily blotter speaks in R — but the naming overlap is worth a comment so the two aren't conflated.
 3. **Double quote fetch:** `trackOpenForecasts` (step 2b.5) and the existing live Open Book inside `compileWiki` (step 2c) each call `getQuotes`. Acceptable (small, and avoids refactoring `compileWiki`'s open-book section); a future cleanup could have `compileWiki` read persisted marks instead. Flagged so it's a conscious choice.
-4. **`/forecasts/:id/marks` returns `{ marks: [] }` for unknown ids** (no 404) — consistent with other list endpoints; the query tool and UI both tolerate empty.
+4. **`/wiki/forecasts/:id/marks` returns `{ marks: [] }` for unknown ids** (no 404) — consistent with other list endpoints; the query tool and UI both tolerate empty.
+5. **Daily marks are assessed in the wiki, not the Journal** (per the steer). The Journal stays a record of *calls*; the wiki is where the in-flight book is *assessed* (LLM briefing + the Performance Wiki "In-flight book" panel). `src/server/routes/journal.ts` and `web/src/components/Journal.tsx` are not modified.
