@@ -749,7 +749,7 @@ export function persistOutlook(app: App, report: OutlookReport, runId: string | 
 
   for (const { level, item } of items) {
     const subjectKey = thesisSubjectKey(level, item.subject);
-    const prior = app.repos.aiTheses.supersedePriorActive(subjectKey, now);
+    const prior = app.repos.aiTheses.supersedePriorActive(subjectKey);
     const id = newId();
     // Persist each citation URL as a resolvable knowledge_source (deduped) and carry its id on the thesis.
     const citedSources = item.sources.map((s) => ({
