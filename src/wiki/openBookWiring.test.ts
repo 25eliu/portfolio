@@ -41,3 +41,16 @@ test("compileWiki includes the in-flight assessment when a daily mark exists for
   const body = app.repos.wiki.latestBriefing()?.body ?? "";
   expect(body).toContain("IN-FLIGHT");
 });
+
+test("compileWiki includes the OUTLOOK block when an active thesis exists", async () => {
+  const app: App = createApp({ db: openMemoryDb(), gateway: createFakeGateway({ now: () => "2026-06-10" }), now: () => "2026-06-10" });
+
+  app.repos.aiTheses.insert({
+    id: "th1", runId: null, reportId: null, date: app.now(), createdAt: `${app.now()}T00:00:00.000Z`,
+    level: "sector", subject: "Semiconductors", subjectKey: "sector:semiconductors", stance: "bullish",
+    conviction: 0.7, horizon: "3mo", summary: "Semis bullish", thesis: "Capex durable.", status: "active",
+    supersedesId: null, freshnessDeadline: null, tickers: ["NVDA"], sources: [],
+  } as Parameters<typeof app.repos.aiTheses.insert>[0]);
+  await compileWiki(app);
+  expect(app.repos.wiki.latestBriefing()?.body ?? "").toContain("OUTLOOK");
+});
