@@ -15,7 +15,7 @@ import { Header } from "./components/Header.tsx";
 import { AiTrades } from "./components/AiTrades.tsx";
 import { Journal } from "./components/Journal.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
-import { CuratedMemory } from "./components/CuratedMemory.tsx";
+import { AiLibrary } from "./components/AiLibrary.tsx";
 import { Wiki } from "./components/Wiki.tsx";
 import { PortfolioQuery } from "./components/PortfolioQuery.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
@@ -192,10 +192,11 @@ export default function App() {
         </Section>
 
         <Section title="Knowledge library" index={6}>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <KnowledgeLibrary />
-            <CuratedMemory />
-          </div>
+          <KnowledgeLibrary />
+        </Section>
+
+        <Section title="AI knowledge library" index={7}>
+          <AiLibrary />
         </Section>
 
         <Section title="Performance wiki" index={8}>

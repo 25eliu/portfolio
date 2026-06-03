@@ -20,12 +20,11 @@ const STATUS_TONE: Record<SourceStatus, "pos" | "neg" | "warn" | "neutral"> = {
   quarantined: "warn",
   archived: "neutral",
 };
-const TRUST_LABEL: Record<TrustClass, string> = {
+const TRUST_LABEL: Partial<Record<TrustClass, string>> = {
   public_url: "public url",
   public_upload: "upload",
   private_note: "private note",
   system_lesson: "system",
-  self_curated: "ai-curated",
 };
 const KIND_ICON = { upload: Upload, url: Globe, note: StickyNote, fact: Sparkles } as const;
 
