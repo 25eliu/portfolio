@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-03._
+> _Last updated: 2026-06-03 (AI Knowledge Platform Phase 3 complete: theses + Market View)._
 
 ## 1. Product direction
 
@@ -48,8 +48,10 @@ computed facts; it does not replace the database or grade the model from memory.
 - FMP fundamentals and screens, FRED macro data, and Finnhub analyst-consensus / earnings enrichment.
 - Market context, technical calculations, watchlist + scan universe building, thematic discovery,
   position-aware verbs, structured predictions, live SSE events, run logs, and snapshot persistence.
-- Once-per-day scheduling with an active local catch-up change: run on app open or wake, or by the
-  selected local time, whichever comes first.
+- Cooldown-based local scheduling: run on app open or wake, or by the selected local time, whichever
+  comes first — but never within a configurable cooldown window (default 4h) of the previous run, so
+  reopening the laptop repeatedly through the day re-runs without spamming runs. The cooldown is
+  derived from the last run's `started_at` in the `runs` table, so manual runs count toward it too.
 - Contribution-neutral return calculation work for portfolio summary performance.
 - **Typed journal (3A):** every recommendation persisted as an immutable `journal_entries` row with
   its full context and citations; complete actionable `BUY/ADD/TRIM/SELL` plans additionally become
@@ -542,11 +544,9 @@ Current single-dashboard structure (as built):
 
 > **Status (current):** the Active slice and Phases **3A, 3B, 3C, 3D, and 4** are **implemented** on a
 > shared knowledge-graph substrate (§5a), plus all of **Phase 5** (grounded NL query + mature risk
-> controls), **AI Knowledge Platform Phase 1** (curated AI insight library, graph tagging, AI Library
-> UI, `search_ai_insights` query tool), and **AI Knowledge Platform Phase 2** (daily performance tracking
-> — `forecast_daily_marks`, `trackOpenForecasts`, `assessInFlight`, wiki briefing + Performance Wiki
-> "In-flight book" panel, `forecast_progress` query tool). Remaining: **Phase 3** (theses + Market View)
-> and **Phase 6** (validation and polish).
+> controls), and the full **AI Knowledge Platform Phases 1–3** (curated AI insight library; daily
+> forecast tracking; theses + Market View). The AI Knowledge Platform is fully shipped. Remaining:
+> **Phase 6** (validation and polish).
 
 ### Active slice — scheduler and performance correctness ✅ done
 
@@ -607,11 +607,45 @@ Current single-dashboard structure (as built):
   gated). Advisory and AI-paper risk profiles are independent (`/api/risk?portfolio=ai`), settable in
   the UI. Allowed/eligible sets are documented in `domain/risk.ts`.
 
+### Phase 3 — AI Knowledge Platform (theses + Market View) ✅ done
+
+> _Spec: `docs/superpowers/specs/2026-06-02-ai-knowledge-platform-design.md`_
+
+**Goal:** give the AI a structured, persistent view of its own macro/sector/theme convictions — authored
+each run, surfaced in the wiki briefing and dashboard, and queryable via NL.
+
+- **`ai_theses` table (migration `020_ai_theses`) + `ai_theses_fts` (FTS5):** one immutable row per
+  regime/sector/theme subject per run. Columns include `status` (`active | superseded | expired |
+  archived`), `supersedes_id` (chain to the prior thesis on the same subject), and `freshness_deadline`
+  (horizon-derived date after which an un-reaffirmed thesis expires). Migration is numbered **020** —
+  `019_schedule_cooldown` already existed from separate scheduler work.
+- **LLM authoring:** `Analyzer.synthesizeOutlook` calls Gemini with a structured `submit_outlook` tool
+  (mock path for offline/fake runs emits `outlook: null`). The `Outlook`/`ThesisItem` contract is
+  carried on `DailyReport`; `buildOutlook` (`src/analysis/outlook.ts`) synthesises the report-level view
+  from per-ticker results.
+- **Persistence — `persistOutlook` (`src/knowledge/curateTheses.ts`, dailyRun step 4c):** supersedes the
+  prior active thesis on the same subject; auto-tags each thesis as `kg_nodes` +
+  `tagged_with` / `mentions` / `cites` / `supersedes` edges (dimensions: `sector`, `theme`, `direction`,
+  `horizon`, plus ticker mentions via `insightTags`); derives `freshnessDeadline` from horizon.
+- **Resolvable citations:** thesis citation URLs are persisted as `kind:"citation"` `knowledge_sources`
+  rows, deduped by URL with `use_in_analysis:0` — excluded from the personal library, AI facts, and
+  retrieval, but resolvable in the source dialog. `serializeThesis` and `search_ai_insights.cite()`
+  carry the citation `sourceId`.
+- **Expiry — `expireStale` (dailyRun step 2b.6, before the briefing):** flips active theses whose
+  `freshness_deadline` has passed and that were not reaffirmed in the current run to `expired`.
+- **Surfacing:**
+  - OUTLOOK block injected into the wiki briefing (`renderOutlook`) from current active theses.
+  - Theses accessible in the AI Library (`/ai-library/*`).
+  - **`/market-view/*` API + `MarketView.tsx`:** regime banner, sector leans, themes, and per-subject
+    evolution history (supersession chain).
+  - **`market_view` and `sector_outlook` query tools** added to `src/query/tools.ts` so "ask your
+    portfolio" can pull the AI's current macro/sector stance, grounded and cited.
+
+The AI Knowledge Platform is now fully shipped (Phases 1–3).
+
 ### Phase 2 — AI Knowledge Platform (daily performance tracking) ✅ done
 
 > _Spec: `docs/superpowers/specs/2026-06-02-ai-knowledge-platform-design.md`_
->
-> Phase 3 (theses + Market View) is designed but pending.
 
 **Goal:** continuously mark every open scored forecast to current price so performance is visible daily,
 not only at horizon resolution — producing running MTM marks, intra-horizon health signals, and a live
@@ -638,11 +672,9 @@ in-flight assessment fed back into the AI's analysis briefing.
 - **`forecast_progress` query tool:** added to `src/query/tools.ts` so "ask your portfolio" can pull
   per-forecast mark history and the current in-flight summary, grounded and cited.
 
-### Phase 1 — AI Knowledge Platform ✅ done (Phase 1 of 3)
+### Phase 1 — AI Knowledge Platform ✅ done
 
 > _Spec: `docs/superpowers/specs/2026-06-02-ai-knowledge-platform-design.md`_
->
-> Phases 2 (daily forecast tracking) and 3 (theses + Market View) are designed but pending.
 
 **Goal:** give the AI a curated, searchable, tagged knowledge library distinct from the user's
 research uploads, and wire it into the query bot and dashboard.
@@ -691,9 +723,13 @@ answers only from read-only tools, logged to `query_log`) and mature risk contro
 reward:risk / horizons / strategy eligibility enforced in `execution/plan.ts`; independent advisory and
 AI risk profiles via `/api/risk?portfolio=ai`).
 
+**AI Knowledge Platform (Phases 1–3) is complete** — curated AI insight library (Phase 1), daily
+forecast performance tracking (Phase 2), and theses + Market View (Phase 3). The full platform is
+shipped.
+
 **The next coding agent should build Phase 6 — validation and polish:**
 SEC EDGAR ingestion, QuantConnect gate, drawdown/Sharpe/alpha analytics, run-failure alerts, frontend
-code-splitting). All phases must use the policies in this document.
+code-splitting. All phases must use the policies in this document.
 
 ## 14. Repository documentation policy
 
