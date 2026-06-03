@@ -80,9 +80,10 @@
         horizon       TEXT NOT NULL,
         summary       TEXT NOT NULL DEFAULT '',
         thesis        TEXT NOT NULL,
-        status        TEXT NOT NULL DEFAULT 'active', -- active | superseded | archived
+        status        TEXT NOT NULL DEFAULT 'active', -- active | superseded | expired | archived
         supersedes_id TEXT,
-        data_json     TEXT NOT NULL DEFAULT '{}', -- { tickers[], sources[] }
+        freshness_deadline TEXT,                   -- date past which an un-reaffirmed active thesis expires
+        data_json     TEXT NOT NULL DEFAULT '{}', -- { tickers[], sources[{title,url,sourceId?}] }
         UNIQUE (id)
       );
       CREATE INDEX idx_thesis_date    ON ai_theses(date);
@@ -113,7 +114,7 @@ const thesis = (over: Partial<Thesis>): Thesis => ({
   level: "sector", subject: "Semiconductors", subjectKey: "sector:semiconductors",
   stance: "bullish", conviction: 0.7, horizon: "3mo", summary: "Semis bullish",
   thesis: "Data-center capex is durable.", status: "active", supersedesId: null,
-  tickers: ["NVDA"], sources: [{ title: "x", url: "https://x.com" }], ...over,
+  freshnessDeadline: null, tickers: ["NVDA"], sources: [{ title: "x", url: "https://x.com" }], ...over,
 });
 
 describe("aiTheses repo", () => {
@@ -144,6 +145,17 @@ describe("aiTheses repo", () => {
     expect(repos.aiTheses.listDay("2026-06-03").map((t) => t.id)).toEqual(["t2"]);
     expect(repos.aiTheses.historyForSubject("sector:semiconductors").map((t) => t.id)).toEqual(["t2", "t1"]);
   });
+
+  test("expireStale flips active theses past their freshness deadline to expired; fresh ones stay active", () => {
+    repos.aiTheses.insert(thesis({ id: "stale", subjectKey: "sector:a", freshnessDeadline: "2026-06-01" }));
+    repos.aiTheses.insert(thesis({ id: "fresh", subjectKey: "sector:b", freshnessDeadline: "2026-12-01" }));
+    repos.aiTheses.insert(thesis({ id: "nodeadline", subjectKey: "sector:c", freshnessDeadline: null }));
+    expect(repos.aiTheses.expireStale("2026-06-02")).toEqual(["stale"]);
+    expect(repos.aiTheses.get("stale")?.status).toBe("expired");
+    expect(repos.aiTheses.get("fresh")?.status).toBe("active");
+    expect(repos.aiTheses.get("nodeadline")?.status).toBe("active"); // null deadline never auto-expires
+    expect(repos.aiTheses.listActive().map((t) => t.id).sort()).toEqual(["fresh", "nodeadline"]);
+  });
 });
 ```
 
@@ -169,12 +181,25 @@ export const Thesis = z.object({
   horizon: z.string().min(1),
   summary: z.string().default(""),
   thesis: z.string().min(1),
-  status: z.enum(["active", "superseded", "archived"]).default("active"),
+  status: z.enum(["active", "superseded", "expired", "archived"]).default("active"),
   supersedesId: z.string().nullable().default(null),
+  /** Date (YYYY-MM-DD) past which an un-reaffirmed active thesis expires. Null = never auto-expires. */
+  freshnessDeadline: z.string().nullable().default(null),
   tickers: z.array(z.string()).default([]),
-  sources: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
+  /** Citations; `sourceId` is the knowledge_sources id of the persisted citation (set at persist time). */
+  sources: z.array(z.object({ title: z.string(), url: z.string(), sourceId: z.string().optional() })).default([]),
 });
 export type Thesis = z.infer<typeof Thesis>;
+
+/** Grace window (days) a dropped thesis lingers before expiring, by horizon. Re-affirmation resets it. */
+export const THESIS_FRESHNESS_DAYS: Record<string, number> = { "1d": 2, "1w": 10, "1mo": 35, "3mo": 100, "6mo": 195, "1y": 380 };
+
+/** Add `days` to a YYYY-MM-DD date, returning YYYY-MM-DD (UTC). */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 /** Normalize a (level, subject) into the stable supersede key "<level>:<slug>". */
 export function thesisSubjectKey(level: string, subject: string): string {
@@ -194,16 +219,17 @@ import { Thesis } from "../../domain/index.ts";
 type Row = {
   id: string; run_id: string | null; report_id: string | null; date: string; created_at: string;
   level: string; subject: string; subject_key: string; stance: string; conviction: number;
-  horizon: string; summary: string; thesis: string; status: string; supersedes_id: string | null; data_json: string;
+  horizon: string; summary: string; thesis: string; status: string; supersedes_id: string | null;
+  freshness_deadline: string | null; data_json: string;
 };
 
 const toDomain = (r: Row): Thesis => {
-  const data = JSON.parse(r.data_json) as { tickers?: string[]; sources?: { title: string; url: string }[] };
+  const data = JSON.parse(r.data_json) as { tickers?: string[]; sources?: { title: string; url: string; sourceId?: string }[] };
   return Thesis.parse({
     id: r.id, runId: r.run_id, reportId: r.report_id, date: r.date, createdAt: r.created_at,
     level: r.level, subject: r.subject, subjectKey: r.subject_key, stance: r.stance, conviction: r.conviction,
     horizon: r.horizon, summary: r.summary, thesis: r.thesis, status: r.status, supersedesId: r.supersedes_id,
-    tickers: data.tickers ?? [], sources: data.sources ?? [],
+    freshnessDeadline: r.freshness_deadline, tickers: data.tickers ?? [], sources: data.sources ?? [],
   });
 };
 
@@ -214,15 +240,28 @@ export function aiThesesRepo(db: DB) {
       db.query(
         `INSERT INTO ai_theses
            (id, run_id, report_id, date, created_at, level, subject, subject_key, stance, conviction,
-            horizon, summary, thesis, status, supersedes_id, data_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            horizon, summary, thesis, status, supersedes_id, freshness_deadline, data_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         v.id, v.runId, v.reportId, v.date, v.createdAt, v.level, v.subject, v.subjectKey, v.stance, v.conviction,
-        v.horizon, v.summary, v.thesis, v.status, v.supersedesId,
+        v.horizon, v.summary, v.thesis, v.status, v.supersedesId, v.freshnessDeadline,
         JSON.stringify({ tickers: v.tickers, sources: v.sources }),
       );
       db.query("INSERT INTO ai_theses_fts (thesis_id, text) VALUES (?, ?)").run(v.id, `${v.summary} ${v.thesis}`);
       return v;
+    },
+
+    /** Expire active theses whose freshness deadline has passed (the AI stopped re-affirming the view).
+     *  Returns the ids expired. Status flips active → expired; superseded/history rows are untouched. */
+    expireStale(asOfDate: string): string[] {
+      const ids = db
+        .query<{ id: string }, [string]>(
+          "SELECT id FROM ai_theses WHERE status = 'active' AND freshness_deadline IS NOT NULL AND freshness_deadline < ?",
+        )
+        .all(asOfDate)
+        .map((r) => r.id);
+      for (const id of ids) db.query("UPDATE ai_theses SET status = 'expired' WHERE id = ?").run(id);
+      return ids;
     },
 
     /** Flip every currently-active thesis for a subject_key to 'superseded'. Returns the ids flipped. */
@@ -584,11 +623,38 @@ git commit -m "feat(theses): buildOutlook report-level synthesis attached to Dai
 
 ---
 
-## Task 5: `curateTheses` — persist + supersede + tag + graph link; wire into dailyRun
+## Task 5: `curateTheses` — persist + supersede + tag + cite + graph link; expiry; wire into dailyRun
 
-**Files:** Modify `src/domain/graph.ts`; Create `src/knowledge/curateTheses.ts`, `src/knowledge/curateTheses.test.ts`; Modify `src/pipeline/dailyRun.ts`.
+**Files:** Modify `src/domain/graph.ts`, `src/domain/knowledge.ts`, `src/db/repositories/knowledge.ts`; Create `src/knowledge/curateTheses.ts`, `src/knowledge/curateTheses.test.ts`; Modify `src/pipeline/dailyRun.ts`.
 
-- [ ] **Step 1: Add `"thesis"` to `KgNodeType`** in `src/domain/graph.ts` (after `"tag"`).
+- [ ] **Step 0a: Add `"thesis"` to `KgNodeType`** in `src/domain/graph.ts` (after `"tag"`).
+
+- [ ] **Step 0b: Add `"citation"` to `SourceKind`** in `src/domain/knowledge.ts`:
+```ts
+export const SourceKind = z.enum(["upload", "url", "note", "fact", "citation"]);
+```
+(`citation` = an AI-origin reference behind a thesis: resolvable in the source dialog, but excluded from the personal library by the `kind IN ('note','url','upload')` allowlist, from AI facts by the `self_curated` filter, and from analysis retrieval by `use_in_analysis = 0`.)
+
+- [ ] **Step 0c: Add `findOrCreateCitationSource` to the knowledge repo** (`src/db/repositories/knowledge.ts`), after `listCuratedFacts` (reuses the repo's own `insertSource`; `newId` is already imported in domain — import it here too if absent):
+```ts
+    /** Resolve a thesis citation URL to a stable knowledge_sources id (deduped by origin URL). Creates a
+     *  lightweight `citation` source (no chunks; not analysis-injected) so thesis citations RESOLVE in the
+     *  source dialog and graph, without polluting the personal library or the analysis retrieval set. */
+    findOrCreateCitationSource(url: string, title: string, now: string): string {
+      const existing = db
+        .query<{ id: string }, [string]>("SELECT id FROM knowledge_sources WHERE kind = 'citation' AND origin = ? LIMIT 1")
+        .get(url);
+      if (existing) return existing.id;
+      const id = newId();
+      this.insertSource({
+        id, kind: "citation", title: title?.trim() || url, trustClass: "public_url",
+        scope: "global", scopeTicker: null, useInAnalysis: false, status: "active", origin: url,
+        createdAt: now, updatedAt: now,
+      });
+      return id;
+    },
+```
+Add a regression test (in `src/db/repositories/knowledge.test.ts`): a `citation` source is excluded from `listUserSources()` and from `listCuratedFacts()`, but `getSource(id)` returns it. And confirm `newId` is imported at the top of `knowledge.ts` (`import { newId } from "../../domain/index.ts";`) — add if missing.
 
 - [ ] **Step 2: Write the failing test** — create `src/knowledge/curateTheses.test.ts`:
 
@@ -626,6 +692,11 @@ describe("persistOutlook", () => {
     expect(tags).toContainEqual({ dimension: "sector", value: "Semiconductors", source: "ai" });
     expect(tags).toContainEqual({ dimension: "direction", value: "bullish", source: "ai" });
     expect(tags).toContainEqual({ dimension: "ticker", value: "NVDA", source: "ai" });
+    // citation persisted as a resolvable knowledge_source (excluded from the personal library) + carried sourceId
+    const srcId = sector.sources[0]!.sourceId!;
+    expect(app.repos.knowledge.getSource(srcId)?.kind).toBe("citation");
+    expect(app.repos.knowledge.listUserSources().some((s) => s.id === srcId)).toBe(false);
+    expect(sector.freshnessDeadline).not.toBeNull(); // dropped views age out at their horizon grace
   });
 
   test("re-running supersedes the prior thesis for the same subject (one active per subject)", () => {
@@ -648,7 +719,7 @@ describe("persistOutlook", () => {
 
 ```ts
 import type { App } from "../app.ts";
-import { newId, nodeId, edgeId, thesisSubjectKey, type Outlook, type ThesisItem } from "../domain/index.ts";
+import { newId, nodeId, edgeId, thesisSubjectKey, addDays, THESIS_FRESHNESS_DAYS, type Outlook, type ThesisItem } from "../domain/index.ts";
 
 /** Regime stance → a coarse direction tag for filtering (risk_on→bullish, risk_off/defensive→bearish). */
 function stanceDirection(stance: string): "bullish" | "bearish" | "neutral" {
@@ -680,11 +751,18 @@ export function persistOutlook(app: App, report: OutlookReport, runId: string | 
     const subjectKey = thesisSubjectKey(level, item.subject);
     const prior = app.repos.aiTheses.supersedePriorActive(subjectKey, now);
     const id = newId();
+    // Persist each citation URL as a resolvable knowledge_source (deduped) and carry its id on the thesis.
+    const citedSources = item.sources.map((s) => ({
+      title: s.title, url: s.url, sourceId: app.repos.knowledge.findOrCreateCitationSource(s.url, s.title, now),
+    }));
     app.repos.aiTheses.insert({
       id, runId, reportId: report.id, date, createdAt: now,
       level, subject: item.subject, subjectKey, stance: item.stance, conviction: item.conviction,
       horizon: item.horizon, summary: item.summary, thesis: item.thesis, status: "active",
-      supersedesId: prior[0] ?? null, tickers: item.tickers, sources: item.sources,
+      supersedesId: prior[0] ?? null,
+      // A held view is superseded+refreshed every run; a dropped view ages out at its horizon grace.
+      freshnessDeadline: addDays(date, THESIS_FRESHNESS_DAYS[item.horizon] ?? 35),
+      tickers: item.tickers, sources: citedSources,
     });
 
     // Graph: canonical thesis node carrying run provenance.
@@ -705,15 +783,35 @@ export function persistOutlook(app: App, report: OutlookReport, runId: string | 
       const priorNode = nodeId("thesis", prior[0]);
       app.repos.graph.upsertEdge({ id: edgeId(thesisNode, "supersedes", priorNode), srcId: thesisNode, dstId: priorNode, rel: "supersedes", weight: 1, data: {}, createdAt: now });
     }
+    // Cites edges to the (resolvable) citation source nodes — thesis provenance in the graph.
+    for (const s of citedSources) {
+      const srcNode = nodeId("source", s.sourceId);
+      app.repos.graph.upsertEdge({ id: edgeId(thesisNode, "cites", srcNode), srcId: thesisNode, dstId: srcNode, rel: "cites", weight: 1, data: {}, createdAt: now });
+    }
     added++;
   }
   return { added };
 }
 ```
 
-- [ ] **Step 5: Wire into `dailyRun`** (`src/pipeline/dailyRun.ts`). After the Step 4b curate block, add:
+- [ ] **Step 5: Wire into `dailyRun`** (`src/pipeline/dailyRun.ts`). Two insertions:
+
+  **(a) Expire stale theses BEFORE `compileWiki`** (so the briefing OUTLOOK + Market View "current" only show still-justified views). Add immediately after the Step 2b.5 tracking block and before the Step 2c `compileWiki` block:
 ```ts
-    // Step 4c — persist the run's outlook as superseding, tagged, graph-linked theses. Degrades gracefully.
+    // Step 2b.6 — expire theses the model has stopped re-affirming (past their freshness deadline), so
+    // the wiki outlook reflects only currently-held views. Idempotent + date-only; degrades gracefully.
+    try {
+      const expired = app.repos.aiTheses.expireStale(date);
+      if (expired.length > 0) console.log(`[theses] expired=${expired.length}`);
+    } catch (err) {
+      console.warn(`[theses] expiry failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+```
+(`date` is already `app.now()` in scope.)
+
+  **(b) Persist this run's outlook AFTER the Step 4b curate block** (step 4c):
+```ts
+    // Step 4c — persist the run's outlook as superseding, tagged, cited, graph-linked theses. Graceful.
     try {
       const theses = persistOutlook(app, report, runId, new Date().toISOString());
       if (theses.added > 0) console.log(`[theses] added=${theses.added}`);
@@ -721,13 +819,13 @@ export function persistOutlook(app: App, report: OutlookReport, runId: string | 
       console.warn(`[theses] step failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 ```
-Add `import { persistOutlook } from "../knowledge/curateTheses.ts";`. (`report` is in scope from Step 3 of the run.)
+Add `import { persistOutlook } from "../knowledge/curateTheses.ts";`. (`report` is in scope from Step 3 of the run.) Ordering note: expiry (2b.6) runs before the briefing (2c); the freshly-persisted outlook (4c) is read by the NEXT run's briefing — same carry-forward model as the rest of the pipeline.
 
 - [ ] **Step 6: Run — expect PASS:** `bun test src/knowledge/curateTheses.test.ts` and `bun test src/pipeline src/knowledge`.
 - [ ] **Step 7: Commit:**
 ```bash
-git add src/domain/graph.ts src/knowledge/curateTheses.ts src/knowledge/curateTheses.test.ts src/pipeline/dailyRun.ts
-git commit -m "feat(theses): persistOutlook — supersede + tag + graph-link theses; wire into dailyRun"
+git add src/domain/graph.ts src/domain/knowledge.ts src/db/repositories/knowledge.ts src/db/repositories/knowledge.test.ts src/knowledge/curateTheses.ts src/knowledge/curateTheses.test.ts src/pipeline/dailyRun.ts
+git commit -m "feat(theses): persistOutlook — supersede + tag + cite (resolvable sources) + graph-link; expiry; wire into dailyRun"
 ```
 
 ---
@@ -764,12 +862,18 @@ test("serializeThesis → AiInsight (thesis variant)", () => {
 
 - [ ] **Step 2: Run — expect FAIL:** `bun test src/knowledge/serialize.test.ts`
 
-- [ ] **Step 3: Implement `serializeThesis`** in `src/knowledge/serialize.ts`:
+- [ ] **Step 3a: Extend the `AiInsight` type** in `src/knowledge/serialize.ts` (Phase 1 type) so thesis citations resolve and expired theses serialize:
+  - `sources` entries gain an optional `sourceId`: change `sources: { title: string; url: string }[];` → `sources: { title: string; url: string; sourceId?: string }[];`
+  - `status` gains `"expired"`: change `status: "active" | "superseded" | "archived";` → `status: "active" | "superseded" | "expired" | "archived";`
+  (Backward-compatible: `serializeFact` simply omits `sourceId` and its `cite()` keeps using the fact's own id.)
+
+- [ ] **Step 3b: Implement `serializeThesis`** in `src/knowledge/serialize.ts`:
 
 ```ts
 import type { Thesis } from "../domain/index.ts";
 
-/** Serialize a persisted Thesis to the canonical AiInsight (thesis variant). Pure — no DB. */
+/** Serialize a persisted Thesis to the canonical AiInsight (thesis variant). Pure — no DB. Citations
+ *  carry their resolved knowledge_sources id so the source dialog opens them. */
 export function serializeThesis(t: Thesis): AiInsight {
   return {
     id: t.id,
@@ -1022,7 +1126,9 @@ export function marketViewRoutes(app: App): Hono {
     },
   },
 ```
-And extend `search_ai_insights.run` to also include theses: after building `insights` from facts, add `...app.repos.aiTheses.search(query ?? "").map(serializeThesis)` when a query is present, OR (to keep tag-filtering uniform) append `app.repos.aiTheses.listActive().map(serializeThesis)` to the `insights` array before the q/tag filters. Add `import { serializeThesis } from "../knowledge/serialize.ts";`.
+And extend `search_ai_insights.run` to also include theses: append `app.repos.aiTheses.listActive().map(serializeThesis)` to the `insights` array before the q/tag filters (keeps text + tag filtering uniform across facts and theses). Add `import { serializeThesis } from "../knowledge/serialize.ts";`.
+
+Also update `search_ai_insights`'s `cite()` so thesis citations resolve: change `sourceId: i.id` to `sourceId: i.sources[0]!.sourceId ?? i.id`. (For a fact, `sources[0].sourceId` is undefined → falls back to the fact's own source id; for a thesis, it's the resolvable `citation` knowledge_source id created in Task 5.) Add a test asserting a thesis result's citation `sourceId` is the citation source id (resolvable via `/knowledge/sources/:id`), not the thesis id.
 
 - [ ] **Step 7: Run — expect PASS:** `bun test src/query/tools.test.ts`
 - [ ] **Step 8: Commit:**
@@ -1173,7 +1279,7 @@ git commit -m "feat(web): Market View section (regime, sector leans, themes, evo
 
 - [ ] **Step 1:** `bun test` — expect all PASS. Investigate any failure (watch `pipeline.test.ts`, `llm`, `wiki`, `server.test.ts`).
 - [ ] **Step 2:** `bun run build:web` — expect success.
-- [ ] **Step 3:** Update `docs/architecture-and-roadmap.md`: mark Phase 3 done; document `ai_theses` + FTS, `synthesizeOutlook`/`buildOutlook` (report-level, attached to DailyReport), `persistOutlook` (supersede + tag + graph-link, dailyRun step 4c), the OUTLOOK briefing section, `/market-view/*` + `market_view`/`sector_outlook` tools + theses in `/ai-library`/`search_ai_insights`, and the `MarketView.tsx` section. Note the AI Knowledge Platform is now fully shipped (Phases 1–3).
+- [ ] **Step 3:** Update `docs/architecture-and-roadmap.md`: mark Phase 3 done; document `ai_theses` + FTS (+ `freshness_deadline`/`expired`), `synthesizeOutlook`/`buildOutlook` (report-level, attached to DailyReport), `persistOutlook` (supersede + tag + **cite to resolvable `citation` knowledge_sources** + graph-link, dailyRun step 4c), **thesis expiry** (`expireStale`, step 2b.6, horizon-based freshness), the OUTLOOK briefing section, `/market-view/*` + `market_view`/`sector_outlook` tools + theses in `/ai-library`/`search_ai_insights`, and the `MarketView.tsx` section. Note the AI Knowledge Platform is now fully shipped (Phases 1–3).
 - [ ] **Step 4: Commit:**
 ```bash
 git add docs/architecture-and-roadmap.md
@@ -1187,16 +1293,16 @@ git commit -m "docs: record Phase 3 theses + Market View"
 **Spec coverage (Phase 3 of the spec):**
 - §3.1 `019_ai_theses` table + FTS + supersede-by-subject → Task 1. ✓
 - §3.2 LLM `Outlook` contract (model-authored, caps 8/6, stance vocab) → Tasks 2, 3. ✓
-- §3.3 `curateTheses` persist + FTS + thesis node + auto-tag + supersede + briefing integration → Tasks 5, 7. ✓ (graph-linked like lessons; carry-forward = the OUTLOOK briefing block read from active theses.)
+- §3.3 `curateTheses` persist + FTS + thesis node + auto-tag + supersede + briefing integration → Tasks 5, 7. ✓ (graph-linked like lessons; carry-forward = the OUTLOOK briefing block read from active theses.) **Refinements:** citations persisted as resolvable `citation` knowledge_sources + `cites` edges (Task 5/6/8); horizon-based freshness + `expireStale` so un-reaffirmed theses expire (Tasks 1/5).
 - §3.4 serializer + `/market-view/*` + `market_view`/`sector_outlook` + theses in `search_ai_insights` + `MarketView.tsx` → Tasks 6, 8, 9. ✓
 
 **Type consistency:** `Thesis` fields identical across `src/domain/thesis.ts`, the repo `toDomain` (Task 1), `persistOutlook` (Task 5), `serializeThesis` (Task 6), and the route/tool/test seeds (Tasks 6/8). `Outlook`/`ThesisItem` identical across domain (Task 2), the analyzer + mock (Task 3), `buildOutlook` (Task 4), and `persistOutlook` (Task 5). `serializeThesis` emits the same `AiInsight` shape `serializeFact` does (Phase 1). Stance vocab + caps consistent (regime risk_*; sector/theme Direction; ≤8/≤6).
 
 **Placeholder scan:** none — every code step has complete code.
 
-**Deviations / decisions flagged for the reviewer:**
-1. **Circular-import risk (Task 2/4):** `Outlook` needs `Horizon`+`Source`, which live in `recommendation.ts`/`marketContext.ts`, while `DailyReport` (in `recommendation.ts`) needs `Outlook`. RECOMMENDED resolution: define `ThesisItem`/`Outlook` in `recommendation.ts` and re-export from `thesis.ts`. The implementer must pick the no-cycle option and confirm module init works.
-2. **`serializeThesis` derives tags from thesis fields** (not by re-reading graph edges like `serializeFact` does for facts) — keeps it pure/DB-free and the tags are authoritative from the row. Human tag-edits on theses are out of Phase-3 scope (the `:kind` tag-edit route still 400s for non-fact).
-3. **Fake/offline path emits `outlook: null`** (no synthesis) — the curate step no-ops, so offline runs accrue no theses. Acceptable (matches `marketContext: null`); a deterministic demo outlook is optional.
-4. **`search_ai_insights` including theses** may need a `cite()` tweak so thesis citations carry a usable `sourceId`/url — confirm the citation UI tolerates a thesis id (theses aren't `knowledge_sources`, so a thesis `sourceId` won't resolve via `/knowledge/sources/:id`). Safest: in the thesis branch of `cite()`, emit citations only from the thesis's own `sources[].url` (kind "knowledge") WITHOUT a `sourceId`, or skip cite for theses. Flag at the Task 8 review.
-5. **Theses never expire/cap** beyond supersede (one active per subject). Subjects the model stops mentioning keep their last active thesis indefinitely. A staleness/expiry pass (like wiki lessons) is a reasonable Phase 3.1 follow-up — out of scope here; noted.
+**Decisions (all five originally-flagged items now resolved in-plan):**
+1. **Circular import — RESOLVED (finalized):** define `ThesisItem`/`Outlook` in `recommendation.ts` (which owns `Horizon`) and re-export from `thesis.ts`. No cycle. (Task 2 spells out the no-cycle option; implementer confirms module init.)
+2. **`serializeThesis` derives tags from thesis fields** (pure/DB-free; authoritative from the row). Human tag-edits on theses remain out of scope (the `:kind` tag-edit route still 400s for non-fact). Unchanged — acceptable.
+3. **Fake/offline path emits `outlook: null`** (no synthesis) — curate no-ops; offline runs accrue no theses. Matches `marketContext: null`. Unchanged — acceptable.
+4. **Thesis citations — RESOLVED:** each citation URL is persisted as a resolvable `kind:"citation"` `knowledge_sources` row (deduped by URL; `use_in_analysis:0`; excluded from the personal library + AI facts + analysis retrieval), linked `thesis —cites→ source`, with its id carried on the thesis (`sources[].sourceId`). `serializeThesis` emits it and `search_ai_insights.cite()` uses `sources[0].sourceId ?? id`, so thesis citations open the source dialog like fact citations. (Tasks 5, 6, 8.)
+5. **Thesis expiry — RESOLVED:** each thesis gets a horizon-derived `freshness_deadline`; re-affirming a subject supersedes + refreshes it, so a held view never expires, but a view the model stops affirming ages out at its horizon and `expireStale` (dailyRun step 2b.6, before the briefing) flips it to `expired` — dropping it from the briefing OUTLOOK, Market View "current", and AI-Library active list while preserving its supersede history. (Tasks 1, 5.)
