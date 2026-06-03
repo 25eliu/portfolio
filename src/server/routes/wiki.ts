@@ -27,15 +27,23 @@ export function wikiRoutes(app: App): Hono {
   });
 
   // In-flight book: today's daily marks assessed (the human view of "are my live calls tracking?").
+  // Calls are ordered attention-first (near_stop/at_risk before near_target/on_track), mirroring the
+  // briefing's open-book blotter, so the most-at-risk calls surface at the top of the API + UI.
+  const STATUS_RANK: Record<string, number> = { near_stop: 0, at_risk: 1, near_target: 2, on_track: 3 };
   r.get("/in-flight", (c) => {
     const marks = app.repos.forecastDailyMarks.forDate(app.now());
-    const calls = marks.map((m) => {
-      const f = app.repos.scoredForecasts.get(m.forecastId);
-      return {
-        forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
-        movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
-      };
-    });
+    const calls = marks
+      .map((m) => {
+        const f = app.repos.scoredForecasts.get(m.forecastId);
+        return {
+          forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
+          movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || (a.unrealizedR ?? 0) - (b.unrealizedR ?? 0),
+      );
     return c.json({ assessment: assessInFlight(marks), calls });
   });
 
