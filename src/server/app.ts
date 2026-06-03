@@ -9,6 +9,7 @@ import { scheduleRoutes } from "./routes/schedule.ts";
 import { watchlistRoutes } from "./routes/watchlist.ts";
 import { journalRoutes } from "./routes/journal.ts";
 import { knowledgeRoutes } from "./routes/knowledge.ts";
+import { aiKnowledgeRoutes } from "./routes/aiKnowledge.ts";
 import { graphRoutes } from "./routes/graph.ts";
 import { wikiRoutes } from "./routes/wiki.ts";
 import { executionRoutes } from "./routes/execution.ts";
@@ -27,6 +28,7 @@ export function createServer(app: App): Hono {
   api.route("/watchlist", watchlistRoutes(app));
   api.route("/journal", journalRoutes(app));
   api.route("/knowledge", knowledgeRoutes(app));
+  api.route("/", aiKnowledgeRoutes(app)); // /ai-library, /tags, /ai-insights
   api.route("/graph", graphRoutes(app));
   api.route("/wiki", wikiRoutes(app));
   api.route("/query", queryRoutes(app));
