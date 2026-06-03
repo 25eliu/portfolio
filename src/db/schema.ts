@@ -462,4 +462,43 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
       CREATE INDEX idx_fdm_date     ON forecast_daily_marks(date);
     `,
   },
+  {
+    name: "019_schedule_cooldown",
+    sql: `
+      ALTER TABLE schedule_settings ADD COLUMN cooldown_hours INTEGER NOT NULL DEFAULT 4;
+    `,
+  },
+  {
+    // AI outlook theses (roadmap Phase 3). Each run the analyzer authors a cross-cutting outlook —
+    // market regime + sector leans + named themes — persisted here as superseding theses, FTS-searchable,
+    // and graph-linked. The CURRENT view per subject is status='active'; prior views chain via supersedes_id.
+    name: "020_ai_theses",
+    sql: `
+      CREATE TABLE ai_theses (
+        id            TEXT PRIMARY KEY,
+        run_id        TEXT,
+        report_id     TEXT,
+        date          TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        level         TEXT NOT NULL,
+        subject       TEXT NOT NULL,
+        subject_key   TEXT NOT NULL,
+        stance        TEXT NOT NULL,
+        conviction    REAL NOT NULL,
+        horizon       TEXT NOT NULL,
+        summary       TEXT NOT NULL DEFAULT '',
+        thesis        TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'active', -- active | superseded | expired | archived
+        supersedes_id TEXT,
+        freshness_deadline TEXT,
+        data_json     TEXT NOT NULL DEFAULT '{}',
+        UNIQUE (id)
+      );
+      CREATE INDEX idx_thesis_date    ON ai_theses(date);
+      CREATE INDEX idx_thesis_subject ON ai_theses(subject_key);
+      CREATE INDEX idx_thesis_status  ON ai_theses(status);
+
+      CREATE VIRTUAL TABLE ai_theses_fts USING fts5(thesis_id UNINDEXED, text);
+    `,
+  },
 ];

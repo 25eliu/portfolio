@@ -19,6 +19,7 @@ import { insightTagsRepo } from "./repositories/insightTags.ts";
 import { wikiRepo } from "./repositories/wiki.ts";
 import { tradeDecisionsRepo } from "./repositories/tradeDecisions.ts";
 import { queryLogRepo } from "./repositories/queryLog.ts";
+import { aiThesesRepo } from "./repositories/aiTheses.ts";
 
 export { openDb, openMemoryDb, migrate, type DB } from "./connection.ts";
 
@@ -45,6 +46,7 @@ export function repositories(db: DB) {
     wiki: wikiRepo(db),
     tradeDecisions: tradeDecisionsRepo(db),
     queryLog: queryLogRepo(db),
+    aiTheses: aiThesesRepo(db),
   };
 }
 export type Repositories = ReturnType<typeof repositories>;
