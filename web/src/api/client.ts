@@ -37,17 +37,6 @@ export type NoteInput = { title: string; text: string; scope: "global" | "ticker
 export type UrlInput = { url: string; title?: string; scope: "global" | "ticker"; scopeTicker?: string };
 type IngestResult = { source: KnowledgeSource; run: IngestionRun };
 
-/** One self-curated fact (the analyzer's own distilled memory) and its day grouping. */
-export type CuratedFact = {
-  id: string;
-  ticker: string | null;
-  scope: "global" | "ticker";
-  fact: string;
-  citationUrl: string | null;
-  createdAt: string;
-};
-export type CuratedDay = { date: string; facts: CuratedFact[] };
-
 /** A tag triple as served by the AI Library API. */
 export type InsightTag = { dimension: string; value: string; source: "ai" | "human" };
 
@@ -144,7 +133,6 @@ export const client = {
     api<KnowledgeSource>(`/knowledge/sources/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   refreshSource: (id: string) => api<IngestResult>(`/knowledge/sources/${id}/refresh`, { method: "POST" }),
   archiveSource: (id: string) => api<{ ok: boolean }>(`/knowledge/sources/${id}`, { method: "DELETE" }),
-  curatedMemory: () => api<{ days: CuratedDay[] }>("/knowledge/curated"),
   aiLibraryDays: () => api<{ days: AiLibraryDay[] }>("/ai-library/days"),
   aiLibraryDay: (date: string) => api<{ date: string; facts: AiInsight[] }>(`/ai-library/day/${date}`),
   aiLibrarySearch: (params: { q?: string; dimension?: string; value?: string }) => {

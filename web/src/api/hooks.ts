@@ -103,10 +103,6 @@ export function useRemoveWatch() {
 export const useKnowledgeSources = () =>
   useQuery({ queryKey: keys.knowledge, queryFn: client.knowledgeSources });
 
-/** Day-grouped self-curated facts. Shares the `knowledge` key prefix so an archive refetches it. */
-export const useCuratedMemory = () =>
-  useQuery({ queryKey: [...keys.knowledge, "curated"], queryFn: client.curatedMemory });
-
 const aiLibraryKey = ["aiLibrary"] as const;
 
 export const useAiLibraryDays = () =>
