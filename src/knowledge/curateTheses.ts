@@ -56,6 +56,7 @@ export function persistOutlook(app: App, report: OutlookReport, runId: string | 
     app.repos.insightTags.addTag(thesisNode, { dimension: "direction", value: stanceDirection(item.stance), source: "ai" }, now);
     app.repos.insightTags.addTag(thesisNode, { dimension: "horizon", value: item.horizon, source: "ai" }, now);
     for (const t of item.tickers) app.repos.insightTags.addTag(thesisNode, { dimension: "ticker", value: t, source: "ai" }, now);
+    // One active thesis per subject is the invariant, so prior has 0 or 1 ids; prior[0] is the chain link.
     if (prior[0]) {
       const priorNode = nodeId("thesis", prior[0]);
       app.repos.graph.upsertEdge({ id: edgeId(thesisNode, "supersedes", priorNode), srcId: thesisNode, dstId: priorNode, rel: "supersedes", weight: 1, data: {}, createdAt: now });

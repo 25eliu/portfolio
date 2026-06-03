@@ -30,6 +30,7 @@ describe("persistOutlook", () => {
     expect(tags).toContainEqual({ dimension: "sector", value: "Semiconductors", source: "ai" });
     expect(tags).toContainEqual({ dimension: "direction", value: "bullish", source: "ai" });
     expect(tags).toContainEqual({ dimension: "ticker", value: "NVDA", source: "ai" });
+    expect(tags).toContainEqual({ dimension: "horizon", value: "3mo", source: "ai" });
     const srcId = sector.sources[0]!.sourceId!;
     expect(app.repos.knowledge.getSource(srcId)?.kind).toBe("citation");
     expect(app.repos.knowledge.listUserSources().some((s) => s.id === srcId)).toBe(false);
@@ -41,6 +42,21 @@ describe("persistOutlook", () => {
     persistOutlook(app, { id: "rep2", outlook: outlook() }, "run2", "2026-06-03T00:00:00.000Z");
     expect(app.repos.aiTheses.currentByLevel("sector").length).toBe(1);
     expect(app.repos.aiTheses.historyForSubject("sector:semiconductors").length).toBe(2);
+  });
+
+  test("dedupes a citation URL shared across outlook items into one source", () => {
+    const shared = { title: "shared", url: "https://shared.example/x" };
+    const out = {
+      regime: { subject: "market", stance: "risk_on", conviction: 0.6, horizon: "1mo", summary: "r", thesis: "regime", tickers: [], sources: [shared] },
+      sectors: [{ subject: "Energy", stance: "bullish", conviction: 0.6, horizon: "3mo", summary: "e", thesis: "energy", tickers: [], sources: [shared] }],
+      themes: [],
+    } as unknown as import("../domain/index.ts").Outlook;
+    persistOutlook(app, { id: "repX", outlook: out }, "runX", NOW);
+    const citationSourceIds = new Set([
+      ...app.repos.aiTheses.currentByLevel("regime").flatMap((t) => t.sources.map((s) => s.sourceId)),
+      ...app.repos.aiTheses.currentByLevel("sector").flatMap((t) => t.sources.map((s) => s.sourceId)),
+    ]);
+    expect(citationSourceIds.size).toBe(1); // same URL → one citation source reused across items
   });
 
   test("a null outlook is a no-op", () => {
