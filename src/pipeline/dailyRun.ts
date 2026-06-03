@@ -6,6 +6,7 @@ import { generateLlmReport } from "./llmReport.ts";
 import { persistJournal } from "./journal.ts";
 import { persistCuratedFacts } from "../knowledge/curate.ts";
 import { resolveDueForecasts } from "../resolution/index.ts";
+import { trackOpenForecasts } from "../resolution/track.ts";
 import { compileWiki } from "../wiki/index.ts";
 import { executeAiTrades } from "../execution/index.ts";
 import { backfillUntrackedEntries } from "./backfill.ts";
@@ -95,6 +96,14 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
     } catch (err) {
       console.warn(`[curate] step failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+
+    // Step 2b.5 — mark every still-open forecast to today's price (persisted daily tracking). Degrades
+    // gracefully: a tracking failure is logged and never aborts the run.
+    const tracked = await trackOpenForecasts(app).catch((err) => {
+      console.warn(`[tracking] step failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { tracked: 0 };
+    });
+    if (tracked.tracked > 0) console.log(`[tracking] marked=${tracked.tracked}`);
 
     // Step 5 — the AI acts on its own book: deterministic paper trades from the same analysis, filled
     // against its isolated DB ledger. Sized against the pre-trade `ai` snapshot priced above.

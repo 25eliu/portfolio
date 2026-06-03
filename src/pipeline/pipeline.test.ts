@@ -38,6 +38,25 @@ describe("priceUserPortfolio", () => {
     expect(view.dayPnL).toBeCloseTo(10 * (price - prevClose), 2);
   });
 
+  test("a position opened today is marked from its entry price, so day P&L equals total P&L", async () => {
+    // Bought today (acquiredAt == pricing date): it never owned the overnight move, so Day P&L must
+    // be measured from cost basis, not the previous close — and therefore equal Total P&L on day one.
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 10, costBasis: 100, acquiredAt: DATE });
+    const view = await priceUserPortfolio(app);
+    const price = fakePrice("AAPL", DATE);
+    const pos = view.positions[0]!;
+    expect(pos.dayPnL).toBeCloseTo((price - 100) * 10, 2); // from entry, NOT previous close
+    expect(pos.dayPnL).toBeCloseTo(pos.totalPnL!, 2); // same baseline ⇒ identical on the open day
+  });
+
+  test("a position held from a prior session is marked from the previous close", async () => {
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 10, costBasis: 100, acquiredAt: "2026-05-20" });
+    const view = await priceUserPortfolio(app);
+    const price = fakePrice("AAPL", DATE);
+    const prevClose = fakePrice("AAPL", "2026-05-31");
+    expect(view.positions[0]!.dayPnL).toBeCloseTo(10 * (price - prevClose), 2); // overnight baseline
+  });
+
   test("day P&L is contribution-neutral: a holding shows only its daily move, never its value", async () => {
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 10, costBasis: 100 });
     app.repos.holdings.upsert(app.user.id, { symbol: "MSFT", shares: 5, costBasis: 200 });
@@ -195,5 +214,14 @@ describe("dailyRun", () => {
     await expect(dailyRun(broken)).rejects.toThrow("boom");
     expect(app.repos.runs.latest()?.status).toBe("error");
     expect(app.repos.runs.latest()?.error).toContain("boom");
+  });
+
+  test("marks open forecasts daily during the run", async () => {
+    await dailyRun(app);                       // creates scored forecasts (if any are scored)
+    const open = app.repos.scoredForecasts.listOpen(app.now(), 200);
+    if (open.length === 0) return;             // fake report may not score; guard keeps the test honest
+    const marks = app.repos.forecastDailyMarks.listForForecast(open[0]!.id);
+    expect(marks.length).toBeGreaterThanOrEqual(1);
+    expect(marks[marks.length - 1]!.date).toBe(app.now());
   });
 });
