@@ -1,5 +1,6 @@
 import type { App } from "../app.ts";
 import { nodeId } from "../domain/index.ts";
+import type { Thesis } from "../domain/index.ts";
 import type { InsightTag } from "../db/repositories/insightTags.ts";
 
 /** One canonical, tagged shape for any AI-produced knowledge — the contract every consumer reads.
@@ -19,8 +20,8 @@ export type AiInsight = {
   significance: number | null;
   tags: InsightTag[];
   tickers: string[];
-  sources: { title: string; url: string }[];
-  status: "active" | "superseded" | "archived";
+  sources: { title: string; url: string; sourceId?: string }[];
+  status: "active" | "superseded" | "expired" | "archived";
   provenance: { runId: string | null; reportId: string | null; journalEntryId?: string };
 };
 
@@ -70,5 +71,35 @@ export function serializeFact(app: App, row: CuratedFactRow): AiInsight {
       reportId: str(data.reportId),
       journalEntryId: str(data.journalEntryId) ?? undefined,
     },
+  };
+}
+
+/** Serialize a persisted Thesis to the canonical AiInsight (thesis variant). Pure — no DB. Citations
+ *  carry their resolved knowledge_sources id so the source dialog opens them. */
+export function serializeThesis(t: Thesis): AiInsight {
+  return {
+    id: t.id,
+    kind: "thesis",
+    level: t.level,
+    date: t.date,
+    createdAt: t.createdAt,
+    subject: t.subject,
+    headline: t.summary || t.subject,
+    body: t.thesis,
+    stance: t.stance,
+    conviction: t.conviction,
+    horizon: t.horizon,
+    significance: null,
+    tags: [
+      ...(t.level === "sector" ? [{ dimension: "sector" as const, value: t.subject, source: "ai" as const }] : []),
+      ...(t.level === "theme" ? [{ dimension: "theme" as const, value: t.subject, source: "ai" as const }] : []),
+      { dimension: "direction" as const, value: t.stance, source: "ai" as const },
+      { dimension: "horizon" as const, value: t.horizon, source: "ai" as const },
+      ...t.tickers.map((v) => ({ dimension: "ticker" as const, value: v, source: "ai" as const })),
+    ],
+    tickers: t.tickers,
+    sources: t.sources,
+    status: t.status,
+    provenance: { runId: t.runId, reportId: t.reportId },
   };
 }

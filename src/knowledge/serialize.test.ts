@@ -3,7 +3,8 @@ import { createApp, type App } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
 import { curateFacts } from "./curate.ts";
-import { serializeFact } from "./serialize.ts";
+import { serializeFact, serializeThesis } from "./serialize.ts";
+import type { Thesis } from "../domain/index.ts";
 
 let app: App;
 const NOW = "2026-06-02T12:00:00.000Z";
@@ -34,4 +35,23 @@ describe("serializeFact → AiInsight", () => {
     expect(insight.status).toBe("active");
     expect(insight.provenance.runId).toBe("r1");
   });
+});
+
+test("serializeThesis → AiInsight (thesis variant)", () => {
+  const t: Thesis = {
+    id: "t1", runId: "r1", reportId: "rep1", date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z",
+    level: "sector", subject: "Semiconductors", subjectKey: "sector:semiconductors", stance: "bullish",
+    conviction: 0.7, horizon: "3mo", summary: "Semis bullish", thesis: "Capex durable.", status: "active",
+    supersedesId: null, freshnessDeadline: null, tickers: ["NVDA"], sources: [{ title: "x", url: "https://x.com", sourceId: "src_1" }],
+  };
+  const i = serializeThesis(t);
+  expect(i.kind).toBe("thesis");
+  expect(i.level).toBe("sector");
+  expect(i.subject).toBe("Semiconductors");
+  expect(i.headline).toBe("Semis bullish");
+  expect(i.body).toBe("Capex durable.");
+  expect(i.stance).toBe("bullish");
+  expect(i.conviction).toBe(0.7);
+  expect(i.tickers).toEqual(["NVDA"]);
+  expect(i.sources).toEqual([{ title: "x", url: "https://x.com", sourceId: "src_1" }]);
 });

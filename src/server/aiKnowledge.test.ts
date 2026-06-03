@@ -21,8 +21,8 @@ const req = (path: string, init?: RequestInit) => server.fetch(new Request(`http
 
 describe("AI Library routes", () => {
   test("GET /ai-library/days returns day buckets with counts", async () => {
-    const body = (await (await req("/ai-library/days")).json()) as { days: { date: string; factCount: number }[] };
-    expect(body.days).toContainEqual({ date: DATE, factCount: 1 });
+    const body = (await (await req("/ai-library/days")).json()) as { days: { date: string; factCount: number; thesisCount: number }[] };
+    expect(body.days).toContainEqual({ date: DATE, factCount: 1, thesisCount: 0 });
   });
 
   test("GET /ai-library/day/:date returns serialized insights", async () => {
@@ -76,5 +76,38 @@ describe("AI Library routes", () => {
       body: JSON.stringify({ add: [], remove: [] }),
     });
     expect(put.status).toBe(400);
+  });
+
+  test("active thesis appears in GET /ai-library/day/:date and /ai-library/search by sector tag", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-1", runId: "r2", reportId: "rep2", date: DATE, createdAt: `${DATE}T09:00:00.000Z`,
+      level: "sector", subject: "Semiconductors", subjectKey: "sector:semiconductors",
+      stance: "bullish", conviction: 0.8, horizon: "3mo", summary: "Semis bullish",
+      thesis: "Data-center capex is durable.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: ["NVDA"], sources: [{ title: "x", url: "https://x.com", sourceId: "src_1" }],
+    });
+
+    // appears in /ai-library/day/:date
+    const dayBody = (await (await req(`/ai-library/day/${DATE}`)).json()) as { facts: { id: string; kind: string }[] };
+    expect(dayBody.facts.some((i) => i.id === "thesis-1" && i.kind === "thesis")).toBe(true);
+
+    // appears in /ai-library/search filtered by sector tag
+    const searchBody = (await (await req("/ai-library/search?dimension=sector&value=Semiconductors")).json()) as { insights: { id: string }[] };
+    expect(searchBody.insights.some((i) => i.id === "thesis-1")).toBe(true);
+  });
+
+  test("GET /ai-library/days includes thesisCount alongside factCount", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-2", runId: "r3", reportId: "rep3", date: DATE, createdAt: `${DATE}T08:00:00.000Z`,
+      level: "theme", subject: "AI Infrastructure", subjectKey: "theme:ai-infrastructure",
+      stance: "bullish", conviction: 0.75, horizon: "6mo", summary: "AI infra theme",
+      thesis: "Demand for AI compute is structural.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: [], sources: [],
+    });
+    const body = (await (await req("/ai-library/days")).json()) as { days: { date: string; factCount: number; thesisCount: number }[] };
+    const day = body.days.find((d) => d.date === DATE);
+    expect(day).toBeDefined();
+    expect(day!.factCount).toBe(1);
+    expect(day!.thesisCount).toBe(1);
   });
 });
