@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { App } from "../app.ts";
+import { createApp, type App } from "../app.ts";
 import { openMemoryDb, repositories, type Repositories } from "../db/index.ts";
+import { createFakeGateway } from "../market/index.ts";
 import { nodeId, type MemorableFact } from "../domain/index.ts";
 import { curateFacts, persistCuratedFacts } from "./curate.ts";
 import { retrieveEvidence } from "./retrieve.ts";
@@ -9,10 +10,13 @@ const NOW = "2026-06-02T14:00:00.000Z";
 let repos: Repositories;
 let app: App;
 
+/** Legacy helper for pre-gate tests — significance high enough to pass the gate. */
 const fact = (text: string, scope: "ticker" | "global" = "ticker", url: string | null = "https://example.com/x"): MemorableFact => ({
   fact: text,
   citationUrl: url,
   scope,
+  significance: 0.9,
+  category: "moat",
 });
 
 beforeEach(() => {
@@ -135,5 +139,65 @@ describe("persistCuratedFacts", () => {
     expect(repos.knowledge.listCuratedFacts()).toHaveLength(2);
     expect(repos.knowledge.selfCuratedFactsForTicker("NVDA")).toHaveLength(1);
     expect(repos.knowledge.selfCuratedFactsForTicker("MSFT")).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quality gate tests (Task 3) — use createApp for full app harness.
+// ---------------------------------------------------------------------------
+
+const GATE_NOW = "2026-06-02T00:00:00.000Z";
+let gateApp: App;
+
+/** Helper for gate tests — produces a MemorableFact with all fields. */
+const gateFact = (over: Partial<MemorableFact>): MemorableFact => ({
+  fact: "default", citationUrl: "https://x.com", scope: "ticker", significance: 0.9, category: "moat", ...over,
+});
+
+const gateRun = (facts: MemorableFact[]) =>
+  curateFacts(gateApp, { ticker: "NVDA", facts, runId: "r1", reportId: "rep1", journalEntryId: "j1", now: GATE_NOW });
+
+beforeEach(() => {
+  gateApp = createApp({ db: openMemoryDb(), gateway: createFakeGateway({ startingCash: 100_000 }), now: () => "2026-06-02", queryModel: null });
+});
+
+describe("curation quality gate", () => {
+  test("drops facts below the significance threshold", () => {
+    const r = gateRun([gateFact({ fact: "low conviction note", significance: 0.4 })]);
+    expect(r.added).toBe(0);
+    expect(gateApp.repos.knowledge.listCuratedFacts().length).toBe(0);
+  });
+
+  test("drops facts with no structural category", () => {
+    const r = gateRun([gateFact({ fact: "uncategorized claim", category: null })]);
+    expect(r.added).toBe(0);
+  });
+
+  test("keeps the highest-significance facts when more than the per-run cap qualify", () => {
+    gateRun([
+      gateFact({ fact: "fact A weakest", significance: 0.61 }),
+      gateFact({ fact: "fact B", significance: 0.7 }),
+      gateFact({ fact: "fact C", significance: 0.8 }),
+      gateFact({ fact: "fact D strongest", significance: 0.95 }),
+    ]);
+    const kept = gateApp.repos.knowledge.listCuratedFacts().map((f) => f.fact);
+    expect(kept.length).toBe(3);
+    expect(kept).not.toContain("fact A weakest");
+    expect(kept).toContain("fact D strongest");
+  });
+
+  test("rejects a near-duplicate of an existing fact", () => {
+    gateRun([gateFact({ fact: "NVDA dominates the AI training GPU market" })]);
+    const r2 = gateRun([gateFact({ fact: "NVDA dominates the AI training GPU market today" })]);
+    expect(r2.added).toBe(0);
+    expect(r2.skipped).toBe(1);
+  });
+
+  test("stores significance and category on the fact's graph node", () => {
+    gateRun([gateFact({ fact: "NVDA CUDA lock-in", significance: 0.88, category: "moat" })]);
+    const id = gateApp.repos.knowledge.listCuratedFacts()[0]!.id;
+    const node = gateApp.repos.graph.getNode(`source:${id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`);
+    expect(node?.data.significance).toBe(0.88);
+    expect(node?.data.category).toBe("moat");
   });
 });

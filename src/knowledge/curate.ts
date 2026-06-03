@@ -17,8 +17,24 @@ const MAX_FACT_CHARS = 140;
 export const MAX_CURATED_PER_TICKER = 40;
 /** Never let a single ticker's single run flood memory, however many the model returns. */
 const MAX_FACTS_PER_RUN = 3;
+/** A fact must clear this model-rated decision value to be remembered. */
+const MIN_SIGNIFICANCE = 0.6;
+/** Reject a new fact whose token overlap with an existing one is at least this (near-duplicate). */
+const NEAR_DUP_JACCARD = 0.8;
 
 const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
+
+/** Lowercased word set, used for cheap near-duplicate detection (no embeddings). */
+function tokenSet(s: string): Set<string> {
+  return new Set(s.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
 
 /** Collapse whitespace and clamp to the fact budget — also the dedup-normalization (hash) input. */
 function normalizeFact(s: string): string {
@@ -59,12 +75,26 @@ export function curateFacts(app: App, input: CurateInput): { added: number; skip
   let skipped = 0;
   const touchedScopes = new Set<string | null>();
 
-  for (const raw of input.facts.slice(0, MAX_FACTS_PER_RUN)) {
-    const text = normalizeFact(raw.fact);
-    if (!text) {
-      skipped++;
-      continue;
+  // Gate: keep only durable, categorized, sufficiently-significant facts; strongest first; cap per run.
+  const qualified = input.facts
+    .filter((f) => f.significance >= MIN_SIGNIFICANCE && f.category !== null && normalizeFact(f.fact))
+    .sort((a, b) => b.significance - a.significance)
+    .slice(0, MAX_FACTS_PER_RUN);
+  skipped += input.facts.length - qualified.length;
+
+  // Per-scope near-duplicate pool, seeded from the DB and grown with facts added this run.
+  const dupPool = new Map<string | null, Set<string>[]>();
+  const poolFor = (scopeTicker: string | null): Set<string>[] => {
+    let pool = dupPool.get(scopeTicker);
+    if (!pool) {
+      pool = app.repos.knowledge.activeCuratedTextsForScope(scopeTicker).map(tokenSet);
+      dupPool.set(scopeTicker, pool);
     }
+    return pool;
+  };
+
+  for (const raw of qualified) {
+    const text = normalizeFact(raw.fact);
     const scope = raw.scope === "global" ? "global" : "ticker";
     const scopeTicker = scope === "ticker" ? input.ticker : null;
     const citationUrl = raw.citationUrl && raw.citationUrl.trim() ? raw.citationUrl.trim() : null;
@@ -74,6 +104,13 @@ export function curateFacts(app: App, input: CurateInput): { added: number; skip
       skipped++;
       continue;
     }
+    const tokens = tokenSet(text);
+    const pool = poolFor(scopeTicker);
+    if (pool.some((existing) => jaccard(tokens, existing) >= NEAR_DUP_JACCARD)) {
+      skipped++;
+      continue;
+    }
+    pool.push(tokens);
 
     const sourceId = newId();
     app.repos.knowledge.insertSource({
@@ -117,7 +154,7 @@ export function curateFacts(app: App, input: CurateInput): { added: number; skip
       type: "source",
       label: text,
       summary: `fact · self_curated`,
-      data: { kind: "fact", trustClass: "self_curated", scope, runId: input.runId, reportId: input.reportId, journalEntryId: input.journalEntryId, citationUrl },
+      data: { kind: "fact", trustClass: "self_curated", scope, runId: input.runId, reportId: input.reportId, journalEntryId: input.journalEntryId, citationUrl, significance: raw.significance, category: raw.category },
       status: "active",
       createdAt: input.now,
       updatedAt: input.now,

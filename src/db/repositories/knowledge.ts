@@ -270,6 +270,22 @@ export function knowledgeRepo(db: DB) {
         .map((r) => r.text);
     },
 
+    /** Active self_curated fact texts in a scope (`scopeTicker` null = global) — the near-duplicate pool. */
+    activeCuratedTextsForScope(scopeTicker: string | null): string[] {
+      return db
+        .query<{ text: string }, [string | null]>(
+          `SELECT c.text AS text
+             FROM knowledge_chunks c
+             JOIN knowledge_sources s ON s.id = c.source_id
+            WHERE c.active = 1
+              AND s.status = 'active'
+              AND s.trust_class = 'self_curated'
+              AND s.scope_ticker IS ?`,
+        )
+        .all(scopeTicker)
+        .map((r) => r.text);
+    },
+
     /** Exact-dedup guard: is there already an active self_curated source in this scope whose latest
      *  content hashes to `contentHash`? (`scopeTicker` null matches global facts via `IS ?`.) */
     hasCuratedFact(contentHash: string, scopeTicker: string | null): boolean {
