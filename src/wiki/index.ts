@@ -81,8 +81,8 @@ export async function compileWiki(app: App): Promise<{ metrics: number; lessons:
     const priceBySymbol = new Map(quotes.map((q) => [q.symbol, q.price]));
     openSection = renderOpenBook(computeOpenBook(open, priceBySymbol, date), date);
   }
-    const inFlight = renderInFlight(app.repos.forecastDailyMarks.forDate(date));
-    const fullBody = [body, openSection, inFlight].filter(Boolean).join("\n\n");
+  const inFlight = renderInFlight(app.repos.forecastDailyMarks.forDate(date));
+  const fullBody = [body, openSection, inFlight].filter(Boolean).join("\n\n");
 
   app.repos.wiki.insertBriefing({
     id: newId(), date, body: fullBody,
