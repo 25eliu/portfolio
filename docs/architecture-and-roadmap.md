@@ -5,6 +5,13 @@
 > shadow portfolio. Recommendations are model outputs, not investment advice. Treat backtests with
 > suspicion because lookahead and survivorship bias can make weak strategies look strong.
 
+> **Living document — keep it current.** Update this file in the *same change* whenever you alter the
+> daily-run pipeline (`src/pipeline/`), the three memory systems (journal, knowledge base, performance
+> wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
+> the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
+> provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
+> _Last updated: 2026-06-02._
+
 ## 1. Product direction
 
 The platform mirrors manually entered real-world holdings, runs a daily market-analysis pipeline,
@@ -65,34 +72,53 @@ computed facts; it does not replace the database or grade the model from memory.
 - **Knowledge-graph substrate:** `kg_nodes` / `kg_edges` connect tickers, themes, sources, lessons,
   and strategies with stable slug ids and typed, bidirectionally-queryable edges; powers graph-aware
   retrieval and lesson provenance. Graph query API.
-- **Guarded AI paper trading (Phase 3B):** the AI autonomously manages its own paper book. Its own
+- **Always-on AI paper trading (Phase 3B):** the AI autonomously manages its own paper book. Its own
   positions join the analysis universe each run, and a **deterministic planner** turns the holder-neutral
-  thesis (direction/conviction/target/stop) into BUY/ADD/TRIM/SELL orders — the LLM never sizes or
-  gates. `execution_settings` (auto-execute toggle) and `trade_decisions` (auditable
-  proposed/skipped/submitted/filled/failed log, linked to journal entry + scored forecast). Trades +
-  auto-trading controls in the UI.
-  - **Capital model:** the AI book is a **self-contained DB-backed ledger** seeded at a fixed
+  thesis (direction/conviction/target/stop) into BUY/ADD/TRIM/SELL orders — the LLM never sizes or gates.
+  `trade_decisions` is an auditable proposed/skipped/filled log, linked to the journal entry + scored
+  forecast. The UI shows the trade log + the AI's risk preset.
+  - **Capital model:** the AI book is a **self-contained DB-backed ledger** funded at a fixed
     `AI_STARTING_CASH` ($100k), independent of the user's portfolio and any live broker. It sizes against
-    its own compounding equity; fills mutate its own holdings + cash (`execution/ledger.ts`). Always-on
-    (no seed/toggle).
+    its own compounding equity; fills are simulated deterministically and mutate its own holdings + cash
+    (`execution/ledger.ts`) in one transaction. **Always-on** — no seeding, no pause/auto-execute toggle.
+    A one-time migration (`016_reset_ai_book`) resets the book to a clean $100k on existing DBs; the old
+    `execution_settings` table and `/execution/seed` + settings endpoints are retired.
+- **Mature risk controls (Phase 5):** `RISK_PRESETS` now fully govern the AI execution planner —
+  per-preset reward:risk floor, allowed forecast horizons, and strategy-family eligibility (loose match;
+  aggressive = all), on top of position size/count/confidence. The user's advisory book and the AI's
+  paper book carry **independent** risk presets (`/api/risk?portfolio=ai`), each settable in the UI.
 - **Grounded NL query (Phase 5):** "ask your portfolio anything" — a Gemini tool-use loop over 9
   read-only data tools (`src/query/`) answers from the journal / forecasts / outcomes / wiki / trades /
   graph / research only (never recall), streams the answer + cited tools over SSE, and logs every Q&A to
   `query_log`. API `POST /api/query` + `GET /api/query/:id/stream`; an "Ask your portfolio" UI panel.
+- **Thesis-driven AI universe + continuity (recent):** the AI's hunting universe is no longer dominated
+  by the user's portfolio. Each run it merges its own holdings (`ai_held`) and its **carried-forward
+  theses** (`ai_thesis` = open forecasts + names it recently rated BUY/ADD/WATCH within a lookback) with a
+  *focused* fresh scan — so its focus grows from its own research rather than a brute-force daily scan
+  (`src/analysis/aiUniverse.ts`, `universe.ts`; precedence `held > watchlist > scan > ai_held > ai_thesis`).
+  A regression guard locks the invariant that **every user holding is still analyzed daily**. The
+  structure prompt also receives the AI's **prior call + price move** ("revise, don't restate a stale
+  thesis") for day-to-day continuity (`prompts.ts` `PriorThesis`).
+- **Wiki open-book scorecard (recent):** beyond resolved-outcome calibration, the wiki now also marks the
+  **open** forecasts to current price each run and appends an OPEN BOOK table to the briefing — move%,
+  →target, →stop, live unrealized R, days elapsed/remaining, and a status bucket (`near_stop`/`at_risk`/
+  `on_track`/`near_target`), sorted attention-first (`src/wiki/openBook.ts`). The AI reads "are my live
+  calls tracking?" alongside "how do my strategies calibrate?".
+- **Token-disciplined retrieval (recent):** lexical knowledge hits now pass a BM25 relevance floor
+  (`KNOWLEDGE_RELEVANCE_FLOOR`; ticker-scoped + graph-linked hits bypass it). The floor mechanism is wired
+  and tunable but **defaults permissive (0)** because BM25 is corpus-relative and near-zero on a small KB;
+  the ≤6-excerpt / ≤4000-char budget bounds tokens regardless. Tighten once the KB is large.
 
 ### Execution posture
 
-The AI portfolio is **actively traded** (paper only). `dailyRun` submits guarded orders through the
-paper gateway. Per the owner's directive, **auto-execution defaults ON** (a deliberate change from the
-original §7 "default disabled" stance) — acceptable because execution is hard-gated to confirmed paper
-mode and capped to a baseline matched to the user's portfolio. It is toggleable at any time. The
-manually entered user portfolio remains advisory-only and can never place orders.
+The AI portfolio is **actively traded** (simulated paper, always on). Each run, `executeAiTrades` sizes
+against the AI book's own compounding equity, the deterministic planner produces guarded orders, and
+`applyFills` books them to the **isolated DB ledger** — it never touches a live broker. There is no
+seeding and no on/off toggle. The manually entered user portfolio remains advisory-only and can never
+place orders.
 
 ### Not implemented yet
 
-- Mature risk controls — per-preset reward:risk thresholds, allowed horizons, strategy eligibility, and
-  separate advisory/AI risk profiles (remaining half of Phase 5; v1 uses a fixed reward:risk floor +
-  the existing presets).
 - QuantConnect strategy-family validation gate, richer performance analytics, and run-failure alerts
   (Phase 6).
 - Embeddings / semantic retrieval (deferred until lexical + graph-aware FTS proves insufficient) and
@@ -131,14 +157,14 @@ scaffold proposal.
 flowchart TD
     T[Manual run or local scheduler] --> A[1. Sync and price portfolios]
     A --> B[2. Resolve due forecasts]
-    B --> C[3. Compile active wiki briefing]
+    B --> C[3. Compile wiki briefing: calibration + OPEN BOOK]
     C --> D[4. Gather market context]
-    D --> E[5. Build held + watchlist + scan universe]
-    E --> F[6. Retrieve scoped research-library evidence]
-    F --> G[7. Analyze tickers]
+    D --> E[5. Build universe: user-held + watchlist + scan + ai_held + ai_thesis]
+    E --> F[6. Retrieve scoped, relevance-gated evidence]
+    F --> G[7. Analyze tickers - research then structure]
     G --> H[8. Persist report + journal forecasts]
-    H --> I[9. Propose and execute guarded AI paper trades]
-    I --> J[10. Persist trade decisions + snapshots]
+    H --> I[9. Plan + fill AI paper trades on the $100k DB ledger]
+    I --> J[10. Re-price AI post-trade + persist snapshots]
     J --> K[Done: stream completion and refresh UI]
 ```
 
@@ -231,32 +257,37 @@ portfolio should begin recording real A/B behavior before the full wiki compiler
 
 ### Required behavior
 
-> **Implemented (3B).** The behavior below is built; the one deviation is the default posture.
+> **Implemented (3B), then simplified to an isolated DB-backed ledger.** The AI book is a self-contained
+> $100k paper ledger — no live broker, no seeding from the user's portfolio, no on/off toggle.
 
-- Seed the AI book with a baseline **matched to the user's total equity** (auto-seeded on first run;
-  `POST /api/execution/seed` re-seeds, optionally with an explicit amount). The paper account's extra
-  cash beyond the baseline is never deployed.
-- **AI paper auto-execution defaults ON** per the owner's directive (the original spec said disabled).
-  Toggleable via `PUT /api/execution/settings`. Safe because execution is hard-gated to confirmed paper
-  mode; when off, runs record proposals but submit nothing.
-- A **deterministic planner** turns the holder-neutral thesis (direction/conviction/target/stop) into
-  BUY/ADD/TRIM/SELL orders using the risk presets, baseline capital, current exposure, confidence, and a
+- The AI book is **funded at a fixed `AI_STARTING_CASH` ($100k)** at bootstrap; a one-time migration
+  (`016_reset_ai_book`) resets an existing book to a clean $100k (wipes stale holdings/snapshots/trade log).
+  It is independent of the user's portfolio and of any broker account.
+- **Always on.** Every run, `executeAiTrades` runs the planner and fills the result — there is no
+  auto-execute toggle and nothing to seed. (The old `execution_settings` table + `/execution/seed` and
+  `/execution/settings` endpoints are retired.)
+- A **deterministic planner** (`src/execution/plan.ts`) turns the holder-neutral thesis
+  (direction/conviction/target/stop) into BUY/ADD/TRIM/SELL orders using the risk presets, the book's
+  **own current equity** as the exposure cap (compounding), current exposure, confidence, and a
   reward:risk floor. The LLM never sizes or selects.
-- Apply duplicate-order, concurrent-run (the run is already serialized), max-position, max-position-count,
-  available-cash, and baseline-exposure guards.
-- Persist proposed, skipped, submitted, filled, and failed trade decisions with an auditable reason,
-  linked to the journal entry + scored forecast.
-- Submit orders only through a positively-confirmed paper gateway.
-- Surface trade activity, skip reasons, and the auto-trading toggle in the dashboard.
+- Guards: duplicate-order (same name same day), max-position, max-position-count, available-cash, and
+  exposure (= equity) caps. Concurrent runs are already serialized.
+- **Fills are simulated deterministically** (`src/execution/ledger.ts`, `applyFills`): one transaction;
+  BUY opens, ADD recomputes weighted-average cost basis, TRIM partially sells, SELL fully exits;
+  insufficient cash **clamps** rather than overdraws; cash + holdings mutate on the AI portfolio.
+- Persist proposed / skipped / filled trade decisions with an auditable reason, linked to the journal
+  entry + scored forecast. The post-trade book is re-priced and snapshotted so the equity curve reflects
+  the run immediately.
+- Surface trade activity and skip reasons in the dashboard.
 
 ### Permanent guardrails
 
 - The manually entered user portfolio remains advisory-only and can never place orders.
-- Reject AI execution unless Alpaca paper mode is positively confirmed.
+- The AI book is **paper only by construction** — a simulated ledger that never reaches a live broker.
 - Never allow uploaded content, wiki prose, or LLM output to bypass deterministic sizing and safety
   checks.
-- Include cash and transaction costs when reporting actual AI-paper performance.
-- Keep hypothetical forecast performance visibly separate from executed paper-trade performance.
+- Account for cash on every fill; keep hypothetical forecast performance visibly separate from the AI
+  paper-book's executed performance.
 
 ## 8. Research knowledge base
 
@@ -377,6 +408,14 @@ the calibration gap) but stay queryable via `/api/wiki/metrics` and the graph; t
 a cohort is emitted only when it diverges materially from all-time. Lessons remain descriptive — no
 imperative directive layer (deferred).
 
+**Open-book layer (implemented).** Beyond resolved calibration, `compileWiki` (now async) also marks the
+*open* forecasts to current price and appends an OPEN BOOK section to the same briefing: per live thesis,
+move% since reference, progress →target / →stop, live unrealized R, days elapsed/remaining, and a status
+bucket (`near_stop` → `at_risk` → `on_track` → `near_target`), sorted attention-first and capped to ~12
+rows (`src/wiki/openBook.ts`). This makes the wiki a live scorecard ("are my current bets working so
+far?") in addition to a calibration record, and it feeds straight back into the next run's analysis. The
+two layers together are the AI's condensed trading memory.
+
 ## 10. Planned APIs
 
 ### Journal and execution (implemented)
@@ -440,8 +479,8 @@ Current single-dashboard structure (as built):
 ## 12. Ordered build roadmap
 
 > **Status (current):** the Active slice and Phases **3A, 3B, 3C, 3D, and 4** are **implemented** on a
-> shared knowledge-graph substrate (§5a), plus **Phase 5's grounded NL query**. Remaining: **Phase 5's
-> mature risk controls** and **Phase 6** (validation and polish).
+> shared knowledge-graph substrate (§5a), plus all of **Phase 5** (grounded NL query + mature risk
+> controls). Remaining: **Phase 6** (validation and polish).
 
 ### Active slice — scheduler and performance correctness ✅ done
 
@@ -489,7 +528,7 @@ Current single-dashboard structure (as built):
 - Briefing is a compact deduped table with a stated-vs-realized conviction (calibration) column; lessons
   stay descriptive (no directive layer yet).
 
-### Phase 5 — grounded query ✅ done · mature risk controls (remaining)
+### Phase 5 — grounded query ✅ done · mature risk controls ✅ done
 
 - ✅ **Grounded NL query** ("ask your portfolio anything"): `src/query/` exposes 9 read-only tools
   (portfolio_state, open forecasts, outcomes, cohort_metrics, lessons, journal_calls, trade_decisions,
@@ -497,8 +536,10 @@ Current single-dashboard structure (as built):
   `MAX_TOOL_ROUNDS` cap, injectable for tests) answers from those tools only — never recall — and
   streams the answer + cited tools over SSE (`POST /api/query` → `GET /api/query/:id/stream`). Every
   Q&A is logged to `query_log`. UI: an "Ask your portfolio" panel.
-- ⏳ **Mature risk controls (remaining Phase 5):** expand risk presets with allowed horizons,
-  reward:risk thresholds, and strategy eligibility; allow separate advisory vs AI-paper risk profiles.
+- ✅ **Mature risk controls:** `RISK_PRESETS` carry per-preset reward:risk floors, allowed horizons,
+  and strategy-family eligibility, all enforced in `execution/plan.ts` (entries gated; exits never
+  gated). Advisory and AI-paper risk profiles are independent (`/api/risk?portfolio=ai`), settable in
+  the UI. Allowed/eligible sets are documented in `domain/risk.ts`.
 
 ### Phase 6 — validation and polish
 
@@ -521,14 +562,12 @@ guarded BUY/ADD/TRIM/SELL orders; auto-execution defaults ON (owner directive, t
 eligible/skipped/submitted/filled/failed order has an auditable reason linked to its journal entry and
 scored forecast; and the user portfolio remains impossible to trade.
 
-The mid-migration refactors (isolated $100k AI ledger, self-curated facts, cost-basis/day-P&L) have
-**landed and are green** (`tsc` clean, full `bun test` passing), and **Phase 5's grounded NL query is
-built** (the `src/query/` module + `/api/query` + "Ask your portfolio" panel; answers come only from
-read-only tools, logged to `query_log`).
+**Phase 5 is complete** — grounded NL query (`src/query/` + `/api/query` + "Ask your portfolio" panel,
+answers only from read-only tools, logged to `query_log`) and mature risk controls (per-preset
+reward:risk / horizons / strategy eligibility enforced in `execution/plan.ts`; independent advisory and
+AI risk profiles via `/api/risk?portfolio=ai`).
 
-**The next coding agent should build the remaining half of Phase 5 — mature risk controls:** per-preset
-reward:risk thresholds, allowed horizons, and strategy-family eligibility wired into the execution
-planner; and (if wanted) separate advisory vs AI-paper risk profiles. Then Phase 6 (validation/polish:
+**The next coding agent should build Phase 6 — validation and polish:**
 SEC EDGAR ingestion, QuantConnect gate, drawdown/Sharpe/alpha analytics, run-failure alerts, frontend
 code-splitting). All phases must use the policies in this document.
 
