@@ -18,4 +18,9 @@ describe("MemorableFact significance + category", () => {
     const f = MemorableFact.parse({ fact: "x", significance: "high" as unknown as number });
     expect(f.significance).toBe(0);
   });
+
+  test("a malformed category falls back to null", () => {
+    const f = MemorableFact.parse({ fact: "x", category: 42 as unknown as string });
+    expect(f.category).toBeNull();
+  });
 });

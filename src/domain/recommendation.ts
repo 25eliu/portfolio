@@ -54,7 +54,7 @@ export const MemorableFact = z.object({
   scope: z.enum(["ticker", "global"]).default("ticker"),
   /** Model-rated decision value (0..1). Facts below the curation threshold are dropped. */
   significance: z.number().min(0).max(1).default(0).catch(0),
-  /** Structural category; a fact with no recognized category is not durable enough to keep. */
+  /** Structural category; used for curation filtering and tagged retrieval. */
   category: FactCategory.nullable().default(null).catch(null),
 });
 export type MemorableFact = z.infer<typeof MemorableFact>;
