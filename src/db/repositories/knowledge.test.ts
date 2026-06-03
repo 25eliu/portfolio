@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { openMemoryDb, repositories } from "../index.ts";
+import type { KnowledgeSource } from "../../domain/index.ts";
 
 let repos: ReturnType<typeof repositories>;
 const NOW = "2026-06-02T00:00:00.000Z";
@@ -8,7 +9,7 @@ beforeEach(() => {
   repos = repositories(openMemoryDb());
 });
 
-function insertSource(id: string, trustClass: string) {
+function insertSource(id: string, trustClass: KnowledgeSource["trustClass"]) {
   repos.knowledge.insertSource({
     id, kind: trustClass === "self_curated" ? "fact" : "note", title: `t-${id}`,
     trustClass, scope: "global", scopeTicker: null, useInAnalysis: true,
