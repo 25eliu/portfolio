@@ -195,10 +195,10 @@ export const QUERY_TOOLS: QueryTool[] = [
       return { insights: cap(insights, 12) };
     },
     cite(_args, result) {
-      const insights = (result as { insights?: { headline: string; date: string; subject: string; sources: { title: string; url: string }[] }[] }).insights ?? [];
+      const insights = (result as { insights?: { id: string; headline: string; date: string; subject: string; sources: { title: string; url: string }[] }[] }).insights ?? [];
       return insights
         .filter((i) => i.sources.length > 0)
-        .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.sources[0]!.url }));
+        .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.id }));
     },
   },
 ];

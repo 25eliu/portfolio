@@ -71,9 +71,7 @@ describe("query tool citations (cite)", () => {
     expect(tool("portfolio_state").cite).toBeUndefined();
     expect(tool("trade_decisions").cite).toBeUndefined();
   });
-});
 
-describe("query tools registry", () => {
   test("search_ai_insights returns the AI's curated facts by text and tag, with citations", async () => {
     const { curateFacts } = await import("../knowledge/curate.ts");
     curateFacts(app, {
@@ -86,5 +84,7 @@ describe("query tools registry", () => {
     expect(res.insights[0]!.headline).toContain("CUDA");
     const cites = t.cite!({ query: "cuda" }, res);
     expect(cites[0]!.title).toBe("x.com");
+    const factId = app.repos.knowledge.listCuratedFacts()[0]!.id;
+    expect(cites[0]!.sourceId).toBe(factId);
   });
 });
