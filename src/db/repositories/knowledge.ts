@@ -77,6 +77,23 @@ export function knowledgeRepo(db: DB) {
       return rows.map(sourceToDomain);
     },
 
+    /** User-owned sources only (notes/URLs/uploads). Excludes the AI's self_curated facts,
+     *  which live in the AI Library — keeps the personal library uncluttered. */
+    listUserSources(opts: { status?: SourceStatus } = {}): KnowledgeSource[] {
+      const rows = opts.status
+        ? db
+            .query<SourceRow, [string]>(
+              "SELECT * FROM knowledge_sources WHERE trust_class <> 'self_curated' AND status = ? ORDER BY updated_at DESC",
+            )
+            .all(opts.status)
+        : db
+            .query<SourceRow, []>(
+              "SELECT * FROM knowledge_sources WHERE trust_class <> 'self_curated' ORDER BY updated_at DESC",
+            )
+            .all();
+      return rows.map(sourceToDomain);
+    },
+
     updateSource(
       id: string,
       patch: { title?: string; scope?: string; scopeTicker?: string | null; useInAnalysis?: boolean; status?: SourceStatus },

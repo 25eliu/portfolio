@@ -29,7 +29,7 @@ const UpdateBody = z.object({
 export function knowledgeRoutes(app: App): Hono {
   const r = new Hono();
 
-  r.get("/sources", (c) => c.json({ sources: app.repos.knowledge.listSources() }));
+  r.get("/sources", (c) => c.json({ sources: app.repos.knowledge.listUserSources() }));
 
   // Self-curated factual memory, grouped by the day it was learned (newest day first) — mirrors the
   // journal's day-grouped shape so the UI can show "what the system learned each day".
