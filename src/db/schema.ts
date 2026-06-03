@@ -435,4 +435,31 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
     name: "017_query_log_citations",
     sql: `ALTER TABLE query_log ADD COLUMN citations_json TEXT NOT NULL DEFAULT '[]';`,
   },
+  {
+    // Daily mark-to-market for OPEN scored forecasts (roadmap Phase 2). One immutable row per
+    // (forecast, day): move since entry, progress to target/stop, unrealized R, running MFE/MAE, and a
+    // status bucket — so the book's performance is tracked continuously, not only at horizon resolution.
+    name: "018_forecast_daily_marks",
+    sql: `
+      CREATE TABLE forecast_daily_marks (
+        id                 TEXT PRIMARY KEY,
+        forecast_id        TEXT NOT NULL REFERENCES scored_forecasts(id) ON DELETE CASCADE,
+        ticker             TEXT NOT NULL,
+        date               TEXT NOT NULL,
+        mark_price         REAL NOT NULL,
+        move_from_entry    REAL NOT NULL,
+        progress_to_target REAL NOT NULL,
+        progress_to_stop   REAL NOT NULL,
+        unrealized_r       REAL,
+        mfe                REAL NOT NULL,
+        mae                REAL NOT NULL,
+        spy_excess         REAL,
+        status             TEXT NOT NULL,
+        created_at         TEXT NOT NULL,
+        UNIQUE (forecast_id, date)
+      );
+      CREATE INDEX idx_fdm_forecast ON forecast_daily_marks(forecast_id);
+      CREATE INDEX idx_fdm_date     ON forecast_daily_marks(date);
+    `,
+  },
 ];

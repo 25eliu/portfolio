@@ -12,6 +12,7 @@ import { watchlistRepo } from "./repositories/watchlist.ts";
 import { journalEntriesRepo } from "./repositories/journalEntries.ts";
 import { scoredForecastsRepo } from "./repositories/scoredForecasts.ts";
 import { forecastOutcomesRepo } from "./repositories/forecastOutcomes.ts";
+import { forecastDailyMarksRepo } from "./repositories/forecastDailyMarks.ts";
 import { graphRepo } from "./repositories/graph.ts";
 import { knowledgeRepo } from "./repositories/knowledge.ts";
 import { insightTagsRepo } from "./repositories/insightTags.ts";
@@ -37,6 +38,7 @@ export function repositories(db: DB) {
     journalEntries: journalEntriesRepo(db),
     scoredForecasts: scoredForecastsRepo(db),
     forecastOutcomes: forecastOutcomesRepo(db),
+    forecastDailyMarks: forecastDailyMarksRepo(db),
     graph: graphRepo(db),
     knowledge: knowledgeRepo(db),
     insightTags: insightTagsRepo(db),
