@@ -37,7 +37,7 @@ export function aiKnowledgeRoutes(app: App): Hono {
     const q = c.req.query("q")?.trim().toLowerCase();
     const dimension = c.req.query("dimension") as TagDimension | undefined;
     const value = c.req.query("value");
-    const limit = Number(c.req.query("limit") ?? 50);
+    const limit = Math.max(1, Number.parseInt(c.req.query("limit") ?? "50", 10) || 50);
     let insights = allFacts();
     if (q) insights = insights.filter((i) => i.headline.toLowerCase().includes(q));
     if (dimension && value) insights = insights.filter((i) => i.tags.some((t) => t.dimension === dimension && t.value === value));
@@ -47,6 +47,7 @@ export function aiKnowledgeRoutes(app: App): Hono {
   r.get("/tags", (c) => c.json({ tags: app.repos.insightTags.taxonomy() }));
 
   r.put("/ai-insights/:kind/:id/tags", async (c) => {
+    if (c.req.param("kind") !== "fact") return c.json({ error: "unsupported kind" }, 400);
     const id = c.req.param("id");
     const node = nodeId("source", id); // Phase 1: only fact insights, backed by source nodes
     const body = TagEdit.safeParse(await c.req.json().catch(() => null));
@@ -59,6 +60,7 @@ export function aiKnowledgeRoutes(app: App): Hono {
 
   // Archive (provenance preserved; chunks deactivated) — the fact disappears from the library.
   r.delete("/ai-insights/:kind/:id", (c) => {
+    if (c.req.param("kind") !== "fact") return c.json({ error: "unsupported kind" }, 400);
     const id = c.req.param("id");
     const updated = app.repos.knowledge.updateSource(id, { status: "archived" }, new Date().toISOString());
     if (!updated) return c.json({ error: "not found" }, 404);

@@ -61,4 +61,20 @@ describe("AI Library routes", () => {
     expect((await req(`/ai-insights/fact/${id}`, { method: "DELETE" })).status).toBe(200);
     expect(app.repos.knowledge.listCuratedFacts().length).toBe(0);
   });
+
+  test("search tolerates a non-numeric limit (does not silently drop results)", async () => {
+    const body = (await (await req("/ai-library/search?q=cuda&limit=foo")).json()) as { insights: unknown[] };
+    expect(body.insights.length).toBe(1);
+  });
+
+  test("an unsupported insight kind is rejected with 400", async () => {
+    const id = app.repos.knowledge.listCuratedFacts()[0]!.id;
+    expect((await req(`/ai-insights/thesis/${id}`, { method: "DELETE" })).status).toBe(400);
+    const put = await req(`/ai-insights/thesis/${id}/tags`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ add: [], remove: [] }),
+    });
+    expect(put.status).toBe(400);
+  });
 });
