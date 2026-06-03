@@ -83,3 +83,48 @@ export async function trackOpenForecasts(app: App): Promise<{ tracked: number }>
   }
   return { tracked };
 }
+
+const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+const fmt = (x: number | null) => (x == null ? "—" : x.toFixed(2));
+
+/** A structured daily assessment of the in-flight book, compiled from today's persisted marks. The
+ *  single source for both the briefing text (renderInFlight) and the wiki API/UI. */
+export type InFlightAssessment = {
+  date: string | null;
+  total: number;
+  onTrack: number;
+  atRisk: number;
+  nearStop: number;
+  nearTarget: number;
+  avgUnrealizedR: number | null;
+  avgMfe: number | null;
+  avgMae: number | null;
+};
+
+export function assessInFlight(marks: ForecastDailyMark[]): InFlightAssessment {
+  const count = (s: string) => marks.filter((m) => m.status === s).length;
+  const rs = marks.map((m) => m.unrealizedR).filter((r): r is number => r != null);
+  return {
+    date: marks[0]?.date ?? null,
+    total: marks.length,
+    onTrack: count("on_track"),
+    atRisk: count("at_risk"),
+    nearStop: count("near_stop"),
+    nearTarget: count("near_target"),
+    avgUnrealizedR: avg(rs),
+    avgMfe: avg(marks.map((m) => m.mfe)),
+    avgMae: avg(marks.map((m) => m.mae)),
+  };
+}
+
+/** A one-block daily assessment injected into the wiki briefing so analysis sees how live calls are
+ *  actually tracking (not just resolved calibration). Empty string when there's nothing open. */
+export function renderInFlight(marks: ForecastDailyMark[]): string {
+  if (marks.length === 0) return "";
+  const a = assessInFlight(marks);
+  return [
+    `IN-FLIGHT (marked ${a.date}) — daily mark-to-market of open calls.`,
+    `${a.total} open: ${a.onTrack} on track, ${a.atRisk} at risk, ${a.nearStop} near stop, ${a.nearTarget} near target.`,
+    `Avg unrealized ${fmt(a.avgUnrealizedR)}R; avg MFE ${fmt(a.avgMfe)}R, avg MAE ${fmt(a.avgMae)}R.`,
+  ].join("\n");
+}

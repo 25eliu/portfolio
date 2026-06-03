@@ -6,6 +6,7 @@ import { generateLessons } from "./lessons.ts";
 import { lintLesson } from "./lint.ts";
 import { compileBriefing } from "./compile.ts";
 import { computeOpenBook, renderOpenBook } from "./openBook.ts";
+import { renderInFlight } from "../resolution/track.ts";
 
 export { computeMetrics } from "./metrics.ts";
 export { generateLessons, deriveLesson, cohortLabel } from "./lessons.ts";
@@ -80,7 +81,8 @@ export async function compileWiki(app: App): Promise<{ metrics: number; lessons:
     const priceBySymbol = new Map(quotes.map((q) => [q.symbol, q.price]));
     openSection = renderOpenBook(computeOpenBook(open, priceBySymbol, date), date);
   }
-  const fullBody = [body, openSection].filter(Boolean).join("\n\n");
+    const inFlight = renderInFlight(app.repos.forecastDailyMarks.forDate(date));
+    const fullBody = [body, openSection, inFlight].filter(Boolean).join("\n\n");
 
   app.repos.wiki.insertBriefing({
     id: newId(), date, body: fullBody,
