@@ -162,4 +162,10 @@ describe("Schedule", () => {
     expect(() => Schedule.parse({ time: "09:30" })).toThrow();
     expect(() => Schedule.parse({ enabled: true })).toThrow();
   });
+  test("cooldownHours defaults to 4 and must be a positive integer", () => {
+    expect(Schedule.parse({ enabled: true, time: "09:30" }).cooldownHours).toBe(4);
+    expect(Schedule.parse({ enabled: true, time: "09:30", cooldownHours: 6 }).cooldownHours).toBe(6);
+    expect(() => Schedule.parse({ enabled: true, time: "09:30", cooldownHours: 0 })).toThrow();
+    expect(() => Schedule.parse({ enabled: true, time: "09:30", cooldownHours: 2.5 })).toThrow();
+  });
 });

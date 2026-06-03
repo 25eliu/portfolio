@@ -20,10 +20,10 @@ export function localHHMM(now: Date): string {
 /**
  * Pure decision: should the scheduled run start on this evaluation?
  *
- * Semantics ("run when I open my laptop, or at the set time — whichever comes first, once a day"):
- *  - disabled, or already ran today → never.
+ * Semantics ("run when I open my laptop, or by the set time — but not within the cooldown window"):
+ *  - disabled, or a run started within the cooldown window (`cooldownActive`) → never.
  *  - `justOpened` (the app just launched or the machine woke from sleep) → run now, regardless of
- *    time. This is the catch-up that guarantees a run when you open your laptop.
+ *    time. This is the catch-up that gives you a fresh run when you open your laptop.
  *  - otherwise (the app has been running continuously) → run once the set time is reached. The set
  *    time therefore acts as a guaranteed-by cap for a machine that stays awake.
  *
@@ -32,11 +32,11 @@ export function localHHMM(now: Date): string {
 export function shouldRun(
   schedule: Schedule,
   now: Date,
-  ranToday: boolean,
+  cooldownActive: boolean,
   justOpened: boolean,
 ): boolean {
   if (!schedule.enabled) return false;
-  if (ranToday) return false;
+  if (cooldownActive) return false;
   if (justOpened) return true;
   return localHHMM(now) >= schedule.time;
 }
@@ -51,16 +51,18 @@ export function wokeFromSleep(gapMs: number, tickMs: number): boolean {
 
 const TICK_MS = 30_000;
 
-/** True if the most recent run (manual or scheduled) started today, in local time. */
-function ranTodayLocal(app: App, now: Date): boolean {
+/** True if the most recent run (manual or scheduled) started within `cooldownHours` of `now`. */
+export function inCooldown(app: App, now: Date, cooldownHours: number): boolean {
   const latest = app.repos.runs.latest();
-  return latest != null && localDate(new Date(latest.startedAt)) === localDate(now);
+  if (latest == null) return false;
+  return now.getTime() - new Date(latest.startedAt).getTime() < cooldownHours * 3_600_000;
 }
 
 /**
- * Start the in-process scheduler. It fires the daily run at the user's chosen time, AND catches up
- * with an immediate run when the app launches or the machine wakes from sleep — whichever comes
- * first — guaranteeing at most one run per local day. Returns a stop handle.
+ * Start the in-process scheduler. It fires the run by the user's chosen time, AND catches up with an
+ * immediate run when the app launches or the machine wakes from sleep — but never within the
+ * configured cooldown window of the previous run (so repeated reopens don't spam runs). Returns a
+ * stop handle.
  *
  * Limitation: this is a process-local timer. It can only fire while the app is running — so for the
  * "run when I open my laptop" guarantee, keep the server running (or launch it on login). A machine
@@ -70,7 +72,8 @@ export function startScheduler(app: App, tickMs: number = TICK_MS): { stop: () =
   const evaluate = (justOpened: boolean) => {
     try {
       const now = new Date();
-      if (shouldRun(app.repos.schedule.get(), now, ranTodayLocal(app, now), justOpened)) {
+      const schedule = app.repos.schedule.get();
+      if (shouldRun(schedule, now, inCooldown(app, now, schedule.cooldownHours), justOpened)) {
         const { runId, status } = startRunGuarded(app);
         const reason = justOpened ? "on open" : "scheduled";
         console.log(`→ ${reason} run ${status} (${runId}) at ${localDate(now)} ${localHHMM(now)}`);

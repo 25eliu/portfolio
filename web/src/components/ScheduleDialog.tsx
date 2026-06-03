@@ -23,6 +23,9 @@ export function ScheduleDialog({ onClose }: { onClose: () => void }) {
 
   const [enabled, setEnabled] = useState<boolean>(schedule.data?.schedule.enabled ?? false);
   const [time, setTime] = useState<string>(schedule.data?.schedule.time ?? "09:30");
+  const [cooldownHours, setCooldownHours] = useState<number>(
+    schedule.data?.schedule.cooldownHours ?? 4,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -31,8 +34,12 @@ export function ScheduleDialog({ onClose }: { onClose: () => void }) {
       setError("Pick a valid time of day.");
       return;
     }
+    if (!Number.isInteger(cooldownHours) || cooldownHours < 1) {
+      setError("Cooldown must be a whole number of hours (1 or more).");
+      return;
+    }
     try {
-      await save.mutateAsync({ enabled, time });
+      await save.mutateAsync({ enabled, time, cooldownHours });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save schedule");
@@ -76,10 +83,31 @@ export function ScheduleDialog({ onClose }: { onClose: () => void }) {
           />
         </div>
 
+        <div className="flex items-center justify-between gap-3 border-t border-hairline pt-5">
+          <div>
+            <div className="eyebrow mb-1">Cooldown</div>
+            <p className="text-xs text-text-muted">
+              {enabled
+                ? `Won't run again within ${cooldownHours}h of the last run, so reopening repeatedly won't trigger extra runs.`
+                : "Minimum hours between runs."}
+            </p>
+          </div>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={cooldownHours}
+            onChange={(e) => setCooldownHours(Math.trunc(Number(e.target.value)))}
+            className={`${inputClass} w-20 font-mono`}
+            disabled={!enabled}
+          />
+        </div>
+
         <p className="rounded-lg border border-hairline bg-surface-2 px-3 py-2.5 text-xs text-text-muted">
-          One run per day, in this computer's local time. If your laptop is asleep or off at that
-          time, the run happens automatically the next time you open it — so long as the app is still
-          running (keep it open, or launch it on login).
+          Runs in this computer's local time — when you open your laptop or by the set time, whichever
+          comes first, but never more than once per cooldown window. If your laptop is asleep or off,
+          the run happens the next time you open it — so long as the app is still running (keep it
+          open, or launch it on login).
         </p>
 
         {error && <p className="text-xs text-neg">{error}</p>}

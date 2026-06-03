@@ -531,14 +531,14 @@ describe("risk", () => {
 });
 
 describe("schedule", () => {
-  test("defaults to disabled at 09:30", async () => {
+  test("defaults to disabled at 09:30 with a 4h cooldown", async () => {
     const got = (await (await req("/api/schedule")).json()) as {
-      schedule: { enabled: boolean; time: string };
+      schedule: { enabled: boolean; time: string; cooldownHours: number };
     };
-    expect(got.schedule).toEqual({ enabled: false, time: "09:30" });
+    expect(got.schedule).toEqual({ enabled: false, time: "09:30", cooldownHours: 4 });
   });
 
-  test("put then get a schedule", async () => {
+  test("put then get a schedule (cooldown defaults when omitted)", async () => {
     const put = await req("/api/schedule", {
       method: "PUT",
       body: JSON.stringify({ enabled: true, time: "16:00" }),
@@ -546,9 +546,22 @@ describe("schedule", () => {
     });
     expect(put.status).toBe(200);
     const got = (await (await req("/api/schedule")).json()) as {
-      schedule: { enabled: boolean; time: string };
+      schedule: { enabled: boolean; time: string; cooldownHours: number };
     };
-    expect(got.schedule).toEqual({ enabled: true, time: "16:00" });
+    expect(got.schedule).toEqual({ enabled: true, time: "16:00", cooldownHours: 4 });
+  });
+
+  test("put then get a schedule with an explicit cooldown", async () => {
+    const put = await req("/api/schedule", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: true, time: "16:00", cooldownHours: 6 }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(put.status).toBe(200);
+    const got = (await (await req("/api/schedule")).json()) as {
+      schedule: { enabled: boolean; time: string; cooldownHours: number };
+    };
+    expect(got.schedule).toEqual({ enabled: true, time: "16:00", cooldownHours: 6 });
   });
 
   test("rejects an invalid time", async () => {

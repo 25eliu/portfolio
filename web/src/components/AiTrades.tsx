@@ -1,6 +1,6 @@
 import type { RiskPreset, TradeAction, TradeStatus } from "../api/types.ts";
 import { useRisk, useSetAiRisk, useTrades } from "../api/hooks.ts";
-import { usd } from "../lib/format.ts";
+import { dateTime, usd } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
 import { SegmentedControl } from "./ui/SegmentedControl.tsx";
@@ -52,21 +52,27 @@ export function AiTrades() {
           </div>
         ) : (
           <div className="divide-y divide-hairline">
-            {rows.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 py-2.5">
-                <span className="w-14 font-semibold tracking-tight text-text">{t.ticker}</span>
-                <Badge tone={ACTION_TONE[t.action]}>{t.action}</Badge>
-                {t.qty > 0 && (
-                  <span className="tnum text-[11px] text-text-secondary">
-                    {t.qty} @ {usd(t.intendedPrice)}
+            {rows.map((t) => {
+              const when = t.submittedAt ?? t.createdAt;
+              return (
+                <div key={t.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-14 font-semibold tracking-tight text-text">{t.ticker}</span>
+                  <Badge tone={ACTION_TONE[t.action]}>{t.action}</Badge>
+                  {t.qty > 0 && (
+                    <span className="tnum text-[11px] text-text-secondary">
+                      {t.qty} @ {usd(t.intendedPrice)}
+                    </span>
+                  )}
+                  <span className="flex-1 truncate text-[11px] text-text-muted">{t.reason}</span>
+                  <Badge tone={STATUS_TONE[t.status]} dot>
+                    {t.status}
+                  </Badge>
+                  <span className="tnum whitespace-nowrap text-[10px] text-text-muted" title={when}>
+                    {dateTime(when)}
                   </span>
-                )}
-                <span className="flex-1 truncate text-[11px] text-text-muted">{t.reason}</span>
-                <Badge tone={STATUS_TONE[t.status]} dot>
-                  {t.status}
-                </Badge>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
