@@ -36,7 +36,11 @@ export function aiThesesRepo(db: DB) {
       return v;
     },
 
-    /** Expire active theses whose freshness deadline has passed. Returns the ids expired. */
+    /**
+     * Expire active theses whose freshness deadline has passed. Returns the ids expired.
+     * Boundary: a thesis is FRESH through its deadline day and expires the day AFTER
+     * (`freshness_deadline < asOfDate`, so deadline == asOfDate is still active).
+     */
     expireStale(asOfDate: string): string[] {
       const ids = db
         .query<{ id: string }, [string]>(
@@ -49,13 +53,12 @@ export function aiThesesRepo(db: DB) {
     },
 
     /** Flip every currently-active thesis for a subject_key to 'superseded'. Returns the ids flipped. */
-    supersedePriorActive(subjectKey: string, now: string): string[] {
+    supersedePriorActive(subjectKey: string): string[] {
       const ids = db
         .query<{ id: string }, [string]>("SELECT id FROM ai_theses WHERE subject_key = ? AND status = 'active'")
         .all(subjectKey)
         .map((r) => r.id);
       for (const id of ids) db.query("UPDATE ai_theses SET status = 'superseded' WHERE id = ?").run(id);
-      void now;
       return ids;
     },
 

@@ -491,8 +491,7 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
         status        TEXT NOT NULL DEFAULT 'active', -- active | superseded | expired | archived
         supersedes_id TEXT,
         freshness_deadline TEXT,
-        data_json     TEXT NOT NULL DEFAULT '{}',
-        UNIQUE (id)
+        data_json     TEXT NOT NULL DEFAULT '{}'
       );
       CREATE INDEX idx_thesis_date    ON ai_theses(date);
       CREATE INDEX idx_thesis_subject ON ai_theses(subject_key);
