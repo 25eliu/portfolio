@@ -22,6 +22,7 @@ export const KgNodeType = z.enum([
   "lesson",
   "metric",
   "cohort",
+  "tag",
 ]);
 export type KgNodeType = z.infer<typeof KgNodeType>;
 

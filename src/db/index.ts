@@ -14,6 +14,7 @@ import { scoredForecastsRepo } from "./repositories/scoredForecasts.ts";
 import { forecastOutcomesRepo } from "./repositories/forecastOutcomes.ts";
 import { graphRepo } from "./repositories/graph.ts";
 import { knowledgeRepo } from "./repositories/knowledge.ts";
+import { insightTagsRepo } from "./repositories/insightTags.ts";
 import { wikiRepo } from "./repositories/wiki.ts";
 import { tradeDecisionsRepo } from "./repositories/tradeDecisions.ts";
 import { queryLogRepo } from "./repositories/queryLog.ts";
@@ -38,6 +39,7 @@ export function repositories(db: DB) {
     forecastOutcomes: forecastOutcomesRepo(db),
     graph: graphRepo(db),
     knowledge: knowledgeRepo(db),
+    insightTags: insightTagsRepo(db),
     wiki: wikiRepo(db),
     tradeDecisions: tradeDecisionsRepo(db),
     queryLog: queryLogRepo(db),

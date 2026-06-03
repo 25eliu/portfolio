@@ -169,6 +169,16 @@ export function curateFacts(app: App, input: CurateInput): { added: number; skip
       srcId: sourceNode, dstId: tickerNode, rel: "mentions", weight: 1, data: {}, createdAt: input.now,
     });
 
+    // Tags: ticker (carries the tag triple so it surfaces in the AI Library), plus the ticker's sector.
+    app.repos.insightTags.addTag(sourceNode, { dimension: "ticker", value: input.ticker, source: "ai" }, input.now);
+    const sector = app.repos.graph
+      .neighbors(tickerNode, { rel: "belongs_to", direction: "out" })
+      .map((n) => n.node)
+      .find((n) => n?.type === "sector");
+    if (sector) {
+      app.repos.insightTags.addTag(sourceNode, { dimension: "sector", value: sector.label, source: "ai" }, input.now);
+    }
+
     touchedScopes.add(scopeTicker);
     added++;
   }
