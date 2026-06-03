@@ -73,7 +73,7 @@ export function createMockAnalyzer(): Analyzer {
         sources: [],
         screen: input.screen,
         memorableFacts: [
-          { fact: `mock durable fact for ${input.symbol}`, citationUrl: "https://example.com", scope: "ticker" },
+          { fact: `mock durable fact for ${input.symbol}`, citationUrl: "https://example.com", scope: "ticker", significance: 0.9, category: "moat" },
         ],
       };
     },

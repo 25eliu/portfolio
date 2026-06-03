@@ -74,6 +74,8 @@ function makeRecommendation(symbol: string, date: string, symbols: string[]): Re
         fact: `[demo] ${symbol}: durable competitive characteristic noted for future runs`,
         citationUrl: `https://example.com/${symbol.toLowerCase()}`,
         scope: "ticker" as const,
+        significance: 0.9,
+        category: "moat",
       },
     ],
   };
