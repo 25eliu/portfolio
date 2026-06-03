@@ -2,6 +2,7 @@ import type { App } from "../app.ts";
 import { nodeId, type Citation } from "../domain/index.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "../pipeline/pricing.ts";
 import { buildFtsQuery } from "../knowledge/retrieve.ts";
+import { serializeFact } from "../knowledge/serialize.ts";
 
 /**
  * Read-only query tools — the ONLY way the grounded-query model touches data. Each tool is a typed
@@ -177,6 +178,27 @@ export const QUERY_TOOLS: QueryTool[] = [
       const ticker = str(args.ticker)?.toUpperCase();
       const excerpts = (result as { excerpts?: { sourceId: string; title: string; trust: string; date: string; text: string }[] }).excerpts ?? [];
       return excerpts.map((e) => ({ kind: "knowledge", title: e.title, ticker, trust: e.trust, date: e.date, excerpt: e.text, sourceId: e.sourceId }));
+    },
+  },
+  {
+    name: "search_ai_insights",
+    description:
+      "Search the AI's OWN curated knowledge (durable facts it chose to remember) by text and/or tag (dimension=sector|ticker|theme|direction|horizon with a value). Returns tagged, cited insights — grounded, not recall.",
+    parameters: obj({ query: S, dimension: S, value: S }),
+    run(app, args) {
+      const query = str(args.query)?.toLowerCase();
+      const dimension = str(args.dimension);
+      const value = str(args.value);
+      let insights = app.repos.knowledge.listCuratedFacts().map((f) => serializeFact(app, f));
+      if (query) insights = insights.filter((i) => i.headline.toLowerCase().includes(query));
+      if (dimension && value) insights = insights.filter((i) => i.tags.some((t) => t.dimension === dimension && t.value === value));
+      return { insights: cap(insights, 12) };
+    },
+    cite(_args, result) {
+      const insights = (result as { insights?: { headline: string; date: string; subject: string; sources: { title: string; url: string }[] }[] }).insights ?? [];
+      return insights
+        .filter((i) => i.sources.length > 0)
+        .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.sources[0]!.url }));
     },
   },
 ];

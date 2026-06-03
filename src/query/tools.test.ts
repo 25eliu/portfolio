@@ -72,3 +72,19 @@ describe("query tool citations (cite)", () => {
     expect(tool("trade_decisions").cite).toBeUndefined();
   });
 });
+
+describe("query tools registry", () => {
+  test("search_ai_insights returns the AI's curated facts by text and tag, with citations", async () => {
+    const { curateFacts } = await import("../knowledge/curate.ts");
+    curateFacts(app, {
+      ticker: "NVDA",
+      facts: [{ fact: "NVDA CUDA lock-in is a durable moat", citationUrl: "https://x.com/a", scope: "ticker", significance: 0.9, category: "moat" }],
+      runId: "r1", reportId: "rep1", journalEntryId: "j1", now: "2026-06-02T10:00:00.000Z",
+    });
+    const t = tool("search_ai_insights");
+    const res = (await t.run(app, { query: "cuda" })) as { insights: { headline: string }[] };
+    expect(res.insights[0]!.headline).toContain("CUDA");
+    const cites = t.cite!({ query: "cuda" }, res);
+    expect(cites[0]!.title).toBe("x.com");
+  });
+});
