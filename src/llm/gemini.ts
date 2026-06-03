@@ -8,7 +8,7 @@
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
-import { Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
+import { Outlook, Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { Analyzer, StreamSink } from "./analyze.ts";
 import { normalizeAction } from "./normalize.ts";
@@ -16,11 +16,13 @@ import {
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
   buildMarketContextPrompt,
+  buildOutlookResearchPrompt,
+  buildOutlookStructurePrompt,
   buildTickerResearchPrompt,
   buildTickerStructurePrompt,
   type TickerInput,
 } from "./prompts.ts";
-import { candidatesFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+import { candidatesFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
 
 const THINKING: Record<Env["GEMINI_THINKING_LEVEL"], ThinkingLevel> = {
   low: ThinkingLevel.LOW,
@@ -207,6 +209,27 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
       } catch (err) {
         console.warn(`[discovery] failed: ${err instanceof Error ? err.message : String(err)}`);
         return [];
+      }
+    },
+
+    async synthesizeOutlook(ctx: MarketContext, recs: Recommendation[], sink?: StreamSink): Promise<Outlook> {
+      try {
+        sink?.({ kind: "stage", stage: "research" });
+        const recLines = recs.slice(0, 40).map((r) => `  ${r.ticker}: ${r.action} (${r.prediction.direction}, conv ${r.conviction.toFixed(2)})`);
+        const { text, sources } = await research(buildOutlookResearchPrompt(ctx.date, ctx.macroSummary, recLines), sink);
+        sink?.({ kind: "stage", stage: "structure" });
+        const args = await structure(buildOutlookStructurePrompt(ctx.date, text), { name: "submit_outlook" }, outlookFunctionDeclaration, sink);
+        const parsed = Outlook.safeParse(args ?? {});
+        if (!parsed.success) return { regime: null, sectors: [], themes: [] };
+        const withSrc = (it: typeof parsed.data.sectors[number]) => ({ ...it, sources: it.sources.length ? it.sources : sources });
+        return {
+          regime: parsed.data.regime ? withSrc(parsed.data.regime) : null,
+          sectors: parsed.data.sectors.map(withSrc),
+          themes: parsed.data.themes.map(withSrc),
+        };
+      } catch (err) {
+        console.warn(`[outlook] failed: ${err instanceof Error ? err.message : String(err)}`);
+        return { regime: null, sectors: [], themes: [] };
       }
     },
   };

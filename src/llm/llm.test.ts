@@ -3,6 +3,7 @@ import { createMockAnalyzer } from "./analyze.ts";
 import {
   Recommendation,
   ScanCandidate,
+  Outlook,
   emptyTechnicals,
   emptyFundamentals,
   MarketContext,
@@ -54,5 +55,14 @@ describe("mock analyzer", () => {
     const ctx = MarketContext.parse({ date: "2026-06-01" });
     expect((await a.discoverOpportunities(ctx, 1)).length).toBe(1);
     expect((await a.discoverOpportunities(ctx, 0)).length).toBe(0);
+  });
+
+  test("synthesizeOutlook returns a schema-valid Outlook", async () => {
+    const a = createMockAnalyzer();
+    const ctx = MarketContext.parse({ date: "2026-06-02" });
+    const outlook = await a.synthesizeOutlook(ctx, []);
+    expect(() => Outlook.parse(outlook)).not.toThrow();
+    expect(outlook.sectors.length).toBeGreaterThanOrEqual(1);
+    expect(["risk_on", "neutral", "risk_off", "defensive"]).toContain(outlook.regime?.stance ?? "neutral");
   });
 });

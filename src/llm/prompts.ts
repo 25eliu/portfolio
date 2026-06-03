@@ -213,3 +213,23 @@ export function buildDiscoveryStructurePrompt(ctx: MarketContext, count: number,
     research || "(no external research available)",
   ].join("\n");
 }
+
+export function buildOutlookResearchPrompt(date: string, macroSummary: string, recLines: string[]): string {
+  return [
+    `Today is ${date}. Synthesize a cross-cutting US-equity OUTLOOK for a trader.`,
+    `Market context: ${macroSummary || "(none)"}.`,
+    recLines.length ? `This run's calls:\n${recLines.join("\n")}` : `(no individual calls this run)`,
+    `Use Google Search to ground a market-regime read, the most attractive/unattractive SECTORS, and 1-6 named cross-cutting THEMES. Cite sources.`,
+  ].join("\n");
+}
+
+export function buildOutlookStructurePrompt(date: string, research: string): string {
+  return [
+    `From the research below, return the structured outlook for ${date} via submit_outlook.`,
+    `regime.subject MUST be "market"; regime.stance one of risk_on|neutral|risk_off|defensive.`,
+    `sectors: up to 8 GICS sectors; themes: up to 6; each with stance bullish|bearish|neutral, conviction 0..1, horizon, a one-line summary, a 1-3 sentence thesis, and any tickers.`,
+    `Only include a sector/theme with a genuine lean — omit filler.`,
+    ``,
+    research,
+  ].join("\n");
+}

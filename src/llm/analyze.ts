@@ -1,4 +1,4 @@
-import type { Recommendation, ScanCandidate, Source } from "../domain/index.ts";
+import type { Outlook, Recommendation, ScanCandidate, Source } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { TickerInput } from "./prompts.ts";
 
@@ -29,6 +29,11 @@ export interface Analyzer {
    * sources. Never fatal — returns [] on failure.
    */
   discoverOpportunities(ctx: MarketContext, count: number, sink?: StreamSink): Promise<ScanCandidate[]>;
+  /**
+   * Cross-cutting outlook synthesis (Phase 3): given the market context and this run's recommendations,
+   * author a regime call + sector leans + named themes. Never fatal — returns an empty outlook on failure.
+   */
+  synthesizeOutlook(ctx: MarketContext, recs: Recommendation[], sink?: StreamSink): Promise<Outlook>;
 }
 
 /** Deterministic offline analyzer for tests — never calls the network; emits synthetic stream events. */
@@ -88,6 +93,14 @@ export function createMockAnalyzer(): Analyzer {
         { symbol: "SOFI", screen: "sentiment", reason: "mock sentiment: credible-investor interest", sources: [] },
       ];
       return seed.slice(0, Math.max(0, count));
+    },
+    async synthesizeOutlook(_ctx, _recs, sink): Promise<Outlook> {
+      sink?.({ kind: "text", text: "synthesizing outlook…" });
+      return {
+        regime: { subject: "market", stance: "risk_on", conviction: 0.55, horizon: "1mo", summary: "mock constructive", thesis: "mock regime thesis", tickers: [], sources: [] },
+        sectors: [{ subject: "Information Technology", stance: "bullish", conviction: 0.6, horizon: "3mo", summary: "mock", thesis: "mock sector thesis", tickers: ["NVDA"], sources: [] }],
+        themes: [{ subject: "AI infrastructure", stance: "bullish", conviction: 0.6, horizon: "6mo", summary: "mock", thesis: "mock theme thesis", tickers: [], sources: [] }],
+      };
     },
   };
 }
