@@ -59,6 +59,27 @@ export const MemorableFact = z.object({
 });
 export type MemorableFact = z.infer<typeof MemorableFact>;
 
+/** One model-authored outlook item (regime/sector/theme). Stance is validated per-level at persist time. */
+export const ThesisItem = z.object({
+  subject: z.string().min(1),
+  stance: z.string().min(1),
+  conviction: z.number().min(0).max(1).catch(0.5),
+  horizon: Horizon.catch("3mo"),
+  summary: z.string().default(""),
+  thesis: z.string().min(1),
+  tickers: z.array(z.string()).default([]),
+  sources: z.array(Source).default([]),
+});
+export type ThesisItem = z.infer<typeof ThesisItem>;
+
+/** The full cross-cutting outlook the analyzer authors each run. Caps keep the library dense. */
+export const Outlook = z.object({
+  regime: ThesisItem.nullable().default(null).catch(null),
+  sectors: z.array(ThesisItem).catch([]).transform((xs) => xs.slice(0, 8)),
+  themes: z.array(ThesisItem).catch([]).transform((xs) => xs.slice(0, 6)),
+});
+export type Outlook = z.infer<typeof Outlook>;
+
 /**
  * One recommendation card. This shape is the contract both the Gemini analyzer and deterministic
  * offline fallback satisfy so the UI receives the same validated structure in either mode.
@@ -103,5 +124,7 @@ export const DailyReport = z.object({
   recommendations: z.array(Recommendation),
   /** Daily market regime context (null until the LLM step builds it). */
   marketContext: MarketContext.nullable().default(null),
+  /** Cross-cutting AI outlook (regime + sector/theme leans). Null until the LLM synth step builds it. */
+  outlook: Outlook.nullable().default(null),
 });
 export type DailyReport = z.infer<typeof DailyReport>;

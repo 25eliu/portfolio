@@ -88,7 +88,7 @@ describe("dailyRun → AI execution", () => {
   test("a prior BUY/WATCH is carried into the next run's universe as a thesis name", async () => {
     // Seed a recent buy-interest call on a name the user does NOT hold and that won't necessarily scan in.
     const reportId = "r0-zzz";
-    app.repos.reports.insert({ id: reportId, date: DATE, generatedAt: `${DATE}T00:00:00.000Z`, source: "llm", recommendations: [], marketContext: null });
+    app.repos.reports.insert({ id: reportId, date: DATE, generatedAt: `${DATE}T00:00:00.000Z`, source: "llm", recommendations: [], marketContext: null, outlook: null });
     const rec = Recommendation.parse({
       ticker: "ZZZ", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum", thesis: "carry me forward", signals: [],
       prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 50, target: 65, stop: 45 }, technicals: {},

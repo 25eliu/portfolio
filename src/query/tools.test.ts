@@ -78,7 +78,7 @@ describe("query tool citations (cite)", () => {
     // Seed report → journal entry → scored forecast (FK parents required)
     const NOW = "2026-06-01T00:00:00.000Z";
     const reportId = newId();
-    app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: NOW, source: "llm", recommendations: [], marketContext: null });
+    app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: NOW, source: "llm", recommendations: [], marketContext: null, outlook: null });
     const entryId = newId();
     app.repos.journalEntries.insert({
       id: entryId, reportId, runId: null, date: "2026-06-01", createdAt: NOW,

@@ -207,6 +207,6 @@ export async function generateLlmReport(
   const { surfaced: recommendations, dropped } = surfaceRecommendations(analyzed, app.env.MAX_WATCH_SURFACED, new Set(aiHeld));
   const opportunities = recommendations.filter((r) => !r.held).length;
   console.log(`[opportunities] surfaced=${opportunities} dropped=${dropped} (held=${recommendations.length - opportunities})`);
-  const report: DailyReport = { id: newId(), date, generatedAt: new Date().toISOString(), source: "llm", recommendations, marketContext: ctx };
+  const report: DailyReport = { id: newId(), date, generatedAt: new Date().toISOString(), source: "llm", recommendations, marketContext: ctx, outlook: null };
   return { report, referencePrices, evidenceByTicker };
 }

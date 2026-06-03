@@ -60,6 +60,34 @@ export const recommendationFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
+const thesisItemSchema = {
+  type: Type.OBJECT,
+  properties: {
+    subject: { type: Type.STRING },
+    stance: { type: Type.STRING },
+    conviction: { type: Type.NUMBER, description: "0..1" },
+    horizon: { type: Type.STRING, enum: ["1d", "1w", "1mo", "3mo", "6mo", "1y"] },
+    summary: { type: Type.STRING, description: "one-line headline" },
+    thesis: { type: Type.STRING, description: "dense reasoning, 1-3 sentences" },
+    tickers: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["subject", "stance", "conviction", "horizon", "thesis"],
+};
+
+export const outlookFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_outlook",
+  description: "Return the cross-cutting market outlook: regime + sector leans + named themes.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      regime: { ...thesisItemSchema, nullable: true, description: "subject='market'; stance risk_on|neutral|risk_off|defensive" },
+      sectors: { type: Type.ARRAY, items: thesisItemSchema, description: "≤8 GICS sectors; stance bullish|bearish|neutral" },
+      themes: { type: Type.ARRAY, items: thesisItemSchema, description: "≤6 named cross-cutting themes; stance bullish|bearish|neutral" },
+    },
+    required: ["sectors", "themes"],
+  },
+};
+
 /** The function declaration Gemini calls to return sentiment/thematic discovery candidates. Each
  *  candidate is re-validated through the ScanCandidate Zod schema after the call; grounding
  *  citations are attached as the candidate's sources. */

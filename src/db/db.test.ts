@@ -105,6 +105,7 @@ describe("reports", () => {
       source: "fake",
       recommendations: [],
       marketContext: null,
+      outlook: null,
     });
     expect(repos.reports.latest()?.date).toBe("2026-06-01");
   });
@@ -124,6 +125,7 @@ describe("reports", () => {
         sources: [{ title: "X", url: "https://example.com" }],
         macro: null,
       },
+      outlook: null,
     });
     const latest = repos.reports.latest();
     expect(latest?.marketContext?.spyTrend).toBe("up");
@@ -141,6 +143,7 @@ describe("reports", () => {
       source: "llm",
       recommendations: [],
       marketContext: null,
+      outlook: null,
     });
     // A NEWER legacy row from the old schema (technicals.macd used to be a string).
     db.query(

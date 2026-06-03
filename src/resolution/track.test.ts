@@ -62,7 +62,7 @@ describe("trackOpenForecasts", () => {
     const reportId = newId();
     app.repos.reports.insert({
       id: reportId, date: "2026-06-01", generatedAt: NOW, source: "llm",
-      recommendations: [], marketContext: null,
+      recommendations: [], marketContext: null, outlook: null,
     });
     const entryId = newId();
     app.repos.journalEntries.insert({

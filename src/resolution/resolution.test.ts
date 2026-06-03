@@ -25,7 +25,7 @@ function provider(): HistoricalBarsProvider {
 }
 
 function seedForecast(app: App, resolveAt: string): ScoredForecast {
-  const report: DailyReport = { id: newId(), date: "2026-06-01", generatedAt: ASOF, source: "llm", marketContext: null, recommendations: [] };
+  const report: DailyReport = { id: newId(), date: "2026-06-01", generatedAt: ASOF, source: "llm", marketContext: null, outlook: null, recommendations: [] };
   app.repos.reports.insert(report);
   const rec = Recommendation.parse({
     ticker: "AAPL", held: false, action: "BUY", conviction: 0.6, strategyFamily: "momentum_breakout",

@@ -8,7 +8,7 @@ import { compileWiki } from "./index.ts";
 const TS = "2026-06-20T00:00:00.000Z";
 
 function seedResolved(app: App, i: number, outcome: "target_hit" | "stop_hit"): string {
-  const report: DailyReport = { id: newId(), date: "2026-06-20", generatedAt: TS, source: "llm", marketContext: null, recommendations: [] };
+  const report: DailyReport = { id: newId(), date: "2026-06-20", generatedAt: TS, source: "llm", marketContext: null, outlook: null, recommendations: [] };
   app.repos.reports.insert(report);
   const rec = Recommendation.parse({
     ticker: "AAPL", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum",

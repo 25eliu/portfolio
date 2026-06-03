@@ -90,5 +90,6 @@ export function generateFakeReport(symbols: string[], date: string): DailyReport
     source: "fake",
     recommendations: universe.map((sym) => makeRecommendation(sym, date, symbols)),
     marketContext: null,
+    outlook: null,
   };
 }

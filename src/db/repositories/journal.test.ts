@@ -20,6 +20,7 @@ function seedReport(): string {
     generatedAt: TS,
     source: "llm",
     marketContext: null,
+    outlook: null,
     recommendations: [],
   };
   return repos.reports.insert(report).id;
@@ -160,7 +161,7 @@ describe("journalEntries.recentActionableTickers", () => {
   test("returns distinct BUY/ADD/WATCH tickers within the window, newest-first", () => {
     const repos = repositories(openMemoryDb());
     const reportId = newId();
-    repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+    repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
     const mk = (ticker: string, date: string, action: string, createdAt: string) => {
       const rec = Recommendation.parse({ ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", thesis: `t ${ticker}`, signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
       return { id: newId(), reportId, runId: null, date, createdAt, ticker, held: false, action, conviction: 0.6, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: false };
@@ -179,7 +180,7 @@ describe("journalEntries.latestPriorForTicker", () => {
   test("returns the most recent entry strictly before the given date", () => {
     const repos = repositories(openMemoryDb());
     const reportId = newId();
-    repos.reports.insert({ id: reportId, date: "2026-05-28", generatedAt: "2026-05-28T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+    repos.reports.insert({ id: reportId, date: "2026-05-28", generatedAt: "2026-05-28T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
     const mk = (date: string, action: string, createdAt: string) => {
       const rec = Recommendation.parse({ ticker: "NVDA", held: false, action, conviction: 0.6, strategyFamily: "momentum", thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
       return { id: newId(), reportId, runId: null, date, createdAt, ticker: "NVDA", held: false, action, conviction: 0.6, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: false };

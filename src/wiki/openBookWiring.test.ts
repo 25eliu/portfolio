@@ -10,7 +10,7 @@ test("compileWiki appends the open-book section for in-flight theses", async () 
   const app: App = createApp({ db: openMemoryDb(), gateway: createFakeGateway({ now: () => "2026-06-10" }), now: () => "2026-06-10" });
 
   const reportId = newId();
-  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
   const jeId = newId();
   const rec = Recommendation.parse({ ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum", thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
   app.repos.journalEntries.insert({ id: jeId, reportId, runId: null, date: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z", ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: true });
@@ -28,7 +28,7 @@ test("compileWiki includes the in-flight assessment when a daily mark exists for
 
   // Seed report → journal entry → open scored forecast (no outcome = still open).
   const reportId = newId();
-  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
   const jeId = newId();
   const rec = Recommendation.parse({ ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum", thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {} });
   app.repos.journalEntries.insert({ id: jeId, reportId, runId: null, date: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z", ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum", recommendation: rec, marketContextId: null, scored: true });

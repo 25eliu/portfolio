@@ -11,7 +11,7 @@ function seedForecast(id: string): void {
   const reportId = newId();
   repos.reports.insert({
     id: reportId, date: "2026-06-02", generatedAt: NOW, source: "llm",
-    recommendations: [], marketContext: null,
+    recommendations: [], marketContext: null, outlook: null,
   });
   const entryId = newId();
   repos.journalEntries.insert({

@@ -13,7 +13,7 @@ function reportFor(rec: Partial<Parameters<typeof Recommendation.parse>[0]> = {}
     thesis: "t", signals: [], prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", entry: 100, target: 130, stop: 95 }, technicals: {},
     ...rec,
   });
-  return { id: newId(), date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", marketContext: null, recommendations: [parsed] };
+  return { id: newId(), date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", marketContext: null, outlook: null, recommendations: [parsed] };
 }
 
 /** Build an execution context priced off the AI's current DB-backed book. */

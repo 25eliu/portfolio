@@ -136,6 +136,7 @@ describe("buildJournal", () => {
     generatedAt: "2026-06-01T14:30:00.000Z",
     source: "llm",
     marketContext: null,
+    outlook: null,
     recommendations: [
       rec({ action: "BUY" }), // scored
       rec({ action: "HOLD" }), // unscored

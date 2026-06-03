@@ -11,6 +11,7 @@ function seedPrerequisites(repos: ReturnType<typeof repositories>) {
     generatedAt: TS,
     source: "llm",
     marketContext: null,
+    outlook: null,
     recommendations: [],
   };
   repos.reports.insert(report);

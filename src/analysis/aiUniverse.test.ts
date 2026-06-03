@@ -11,7 +11,7 @@ function makeApp(envOver: Record<string, string> = {}): App {
 }
 function seedReport(app: App): string {
   const id = newId();
-  app.repos.reports.insert({ id, date: "2026-06-09", generatedAt: "2026-06-09T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+  app.repos.reports.insert({ id, date: "2026-06-09", generatedAt: "2026-06-09T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
   return id;
 }
 function journal(app: App, reportId: string, ticker: string, action: Action, date: string): string {

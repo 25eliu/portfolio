@@ -13,7 +13,7 @@ let server: ReturnType<typeof createServer>;
 /** Seed report → journal entry → OPEN scored forecast so FKs hold and listOpen returns it. */
 function seedForecast(app: App, id: string): void {
   const reportId = newId();
-  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null });
+  app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: "2026-06-01T00:00:00.000Z", source: "llm", recommendations: [], marketContext: null, outlook: null });
   const entryId = newId();
   app.repos.journalEntries.insert({
     id: entryId, reportId, runId: null, date: "2026-06-01", createdAt: "2026-06-01T00:00:00.000Z",
