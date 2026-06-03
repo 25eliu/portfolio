@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { openMemoryDb } from "../index.ts";
-import { repositories } from "../index.ts";
+import { openMemoryDb, repositories } from "../index.ts";
 
 let repos: ReturnType<typeof repositories>;
 const NOW = "2026-06-02T00:00:00.000Z";
