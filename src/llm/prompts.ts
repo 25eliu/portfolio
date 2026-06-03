@@ -155,12 +155,14 @@ export function buildTickerStructurePrompt(
     ``,
     `Long-term memory — durable, structural facts this system already knows about ${t.symbol}:`,
     (t.priorFacts ?? []).length ? (t.priorFacts ?? []).map((f) => `  • ${f}`).join("\n") : `  (none yet)`,
-    `Optionally return up to 3 NEW durable facts in memorableFacts to add to this long-term memory.`,
+    `Optionally return up to 3 NEW durable facts in memorableFacts. Each fact MUST include:`,
+    `  • significance (0..1): its lasting decision value — ONLY facts with significance ≥ 0.6 are kept.`,
+    `  • category: one of moat | secular | management | capital_structure | regulatory | unit_economics.`,
     `A durable fact has lasting decision value: competitive moats, secular theses, management track`,
     `record, capital structure, regulatory shifts, structural unit economics. Do NOT add ephemeral`,
     `price moves, daily news, today's quote, or anything already listed above. Each fact ≤140 chars,`,
     `self-contained (name the company/ticker), and MUST cite one of the research source URLs below —`,
-    `if you cannot cite it, omit it. Add nothing (memorableFacts: []) if nothing durable qualifies.`,
+    `if you cannot cite it, or it lacks a category, omit it.`,
     sources.length
       ? [`Research source URLs (set citationUrl to one of these):`, ...sources.slice(0, 12).map((s, i) => `  [${i + 1}] ${s.url}${s.title ? ` — ${s.title}` : ""}`)].join("\n")
       : `(No research source URLs were captured this run — return memorableFacts: [].)`,

@@ -43,10 +43,19 @@ export type Catalyst = z.infer<typeof Catalyst>;
  * permissive (no max length here) so a slightly-long fact never fails the whole recommendation parse;
  * the relevance bar (≤140 chars, durable-only) is enforced in the prompt and trimmed at persistence.
  */
+export const FactCategory = z.enum([
+  "moat", "secular", "management", "capital_structure", "regulatory", "unit_economics",
+]);
+export type FactCategory = z.infer<typeof FactCategory>;
+
 export const MemorableFact = z.object({
   fact: z.string().min(1),
   citationUrl: z.string().nullable().default(null),
   scope: z.enum(["ticker", "global"]).default("ticker"),
+  /** Model-rated decision value (0..1). Facts below the curation threshold are dropped. */
+  significance: z.number().min(0).max(1).default(0).catch(0),
+  /** Structural category; a fact with no recognized category is not durable enough to keep. */
+  category: FactCategory.nullable().default(null).catch(null),
 });
 export type MemorableFact = z.infer<typeof MemorableFact>;
 
