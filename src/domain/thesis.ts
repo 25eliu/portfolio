@@ -25,6 +25,13 @@ export const Thesis = z.object({
 });
 export type Thesis = z.infer<typeof Thesis>;
 
+/** Map a thesis stance to a coarse direction tag (risk_on→bullish, risk_off/defensive→bearish). */
+export function stanceDirection(stance: string): "bullish" | "bearish" | "neutral" {
+  if (stance === "bullish" || stance === "risk_on") return "bullish";
+  if (stance === "bearish" || stance === "risk_off" || stance === "defensive") return "bearish";
+  return "neutral";
+}
+
 /** Normalize a (level, subject) into the stable supersede key "<level>:<slug>". */
 export function thesisSubjectKey(level: string, subject: string): string {
   const slug = subject.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

@@ -1,12 +1,5 @@
 import type { App } from "../app.ts";
-import { newId, nodeId, edgeId, thesisSubjectKey, addDays, THESIS_FRESHNESS_DAYS, type Outlook, type ThesisItem } from "../domain/index.ts";
-
-/** Regime stance → a coarse direction tag for filtering (risk_on→bullish, risk_off/defensive→bearish). */
-function stanceDirection(stance: string): "bullish" | "bearish" | "neutral" {
-  if (stance === "bullish" || stance === "risk_on") return "bullish";
-  if (stance === "bearish" || stance === "risk_off" || stance === "defensive") return "bearish";
-  return "neutral";
-}
+import { newId, nodeId, edgeId, thesisSubjectKey, stanceDirection, addDays, THESIS_FRESHNESS_DAYS, type Outlook, type ThesisItem } from "../domain/index.ts";
 
 type OutlookReport = { id: string; outlook: Outlook | null };
 

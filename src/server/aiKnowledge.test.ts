@@ -96,6 +96,18 @@ describe("AI Library routes", () => {
     expect(searchBody.insights.some((i) => i.id === "thesis-1")).toBe(true);
   });
 
+  test("GET /ai-library/search matches thesis body when keyword absent from headline", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-body-search", runId: "r4", reportId: "rep4", date: DATE, createdAt: `${DATE}T07:00:00.000Z`,
+      level: "regime", subject: "market", subjectKey: "regime:market",
+      stance: "risk_on", conviction: 0.65, horizon: "1mo", summary: "Constructive macro",
+      thesis: "Breadth expansion underpins the rally xyzunique123.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: [], sources: [],
+    });
+    const body = (await (await req("/ai-library/search?q=xyzunique123")).json()) as { insights: { id: string }[] };
+    expect(body.insights.some((i) => i.id === "thesis-body-search")).toBe(true);
+  });
+
   test("GET /ai-library/days includes thesisCount alongside factCount", async () => {
     app.repos.aiTheses.insert({
       id: "thesis-2", runId: "r3", reportId: "rep3", date: DATE, createdAt: `${DATE}T08:00:00.000Z`,

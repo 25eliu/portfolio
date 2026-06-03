@@ -44,7 +44,7 @@ export function aiKnowledgeRoutes(app: App): Hono {
     const value = c.req.query("value");
     const limit = Math.max(1, Number.parseInt(c.req.query("limit") ?? "50", 10) || 50);
     let insights = allInsights();
-    if (q) insights = insights.filter((i) => i.headline.toLowerCase().includes(q));
+    if (q) insights = insights.filter((i) => i.headline.toLowerCase().includes(q) || i.body.toLowerCase().includes(q));
     if (dimension && value) insights = insights.filter((i) => i.tags.some((t) => t.dimension === dimension && t.value === value));
     return c.json({ insights: insights.slice(0, limit) });
   });

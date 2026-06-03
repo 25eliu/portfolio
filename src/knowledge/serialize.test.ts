@@ -59,3 +59,9 @@ test("serializeThesis → AiInsight (thesis variant)", () => {
   expect(i.tags).toContainEqual({ dimension: "horizon", value: "3mo", source: "ai" });
   expect(i.tags).toContainEqual({ dimension: "ticker", value: "NVDA", source: "ai" });
 });
+
+test("serializeThesis normalizes a regime stance into a bullish/bearish direction tag", () => {
+  const t = { id: "r1", runId: null, reportId: null, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z", level: "regime", subject: "market", subjectKey: "regime:market", stance: "risk_on", conviction: 0.6, horizon: "1mo", summary: "constructive", thesis: "breadth", status: "active", supersedesId: null, freshnessDeadline: null, tickers: [], sources: [] } as import("../domain/index.ts").Thesis;
+  const i = serializeThesis(t);
+  expect(i.tags).toContainEqual({ dimension: "direction", value: "bullish", source: "ai" });
+});

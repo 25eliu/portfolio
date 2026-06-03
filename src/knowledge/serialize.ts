@@ -1,5 +1,5 @@
 import type { App } from "../app.ts";
-import { nodeId } from "../domain/index.ts";
+import { nodeId, stanceDirection } from "../domain/index.ts";
 import type { Thesis } from "../domain/index.ts";
 import type { InsightTag } from "../db/repositories/insightTags.ts";
 
@@ -93,7 +93,7 @@ export function serializeThesis(t: Thesis): AiInsight {
     tags: [
       ...(t.level === "sector" ? [{ dimension: "sector" as const, value: t.subject, source: "ai" as const }] : []),
       ...(t.level === "theme" ? [{ dimension: "theme" as const, value: t.subject, source: "ai" as const }] : []),
-      { dimension: "direction" as const, value: t.stance, source: "ai" as const },
+      { dimension: "direction" as const, value: stanceDirection(t.stance), source: "ai" as const },
       { dimension: "horizon" as const, value: t.horizon, source: "ai" as const },
       ...t.tickers.map((v) => ({ dimension: "ticker" as const, value: v, source: "ai" as const })),
     ],
