@@ -132,6 +132,30 @@ computed facts; it does not replace the database or grade the model from memory.
   (`KNOWLEDGE_RELEVANCE_FLOOR`; ticker-scoped + graph-linked hits bypass it). The floor mechanism is wired
   and tunable but **defaults permissive (0)** because BM25 is corpus-relative and near-zero on a small KB;
   the ≤6-excerpt / ≤4000-char budget bounds tokens regardless. Tighten once the KB is large.
+- **AI Knowledge Platform — Phase 1 (implemented):** the self-curated AI insight layer. See §12 Phase 1
+  entry for the full breakdown. Key pieces landed in this iteration:
+  - **Self-curation quality gate** (`src/knowledge/curate.ts`): a fact is kept only if `significance ≥ 0.6`
+    AND it carries a structural `category` (`moat | secular | management | capital_structure | regulatory |
+    unit_economics`). Surviving facts are sorted strongest-first up to the per-run cap, with a
+    token-Jaccard near-duplicate guard layered on top of the existing exact-hash dedup + per-scope cap.
+    The `memorableFacts` Gemini output schema and Zod type were extended with both fields (safe `.catch`
+    defaults keep offline/fake paths working).
+  - **Graph-native tagging** (`src/db/repositories/insightTags.ts`): tags are `kg_nodes` + `tagged_with`
+    / `mentions` edges carrying a `{dimension, value, source}` triple (dimensions: `ticker`, `sector`,
+    `theme`, `direction`, `horizon`). AI auto-tags each curated fact with ticker + sector; humans can
+    add/remove tags. No new DB table or migration — the §5a graph substrate is reused directly.
+  - **Canonical `AiInsight` serializer** (`src/knowledge/serialize.ts`): one tagged JSON shape consumed
+    by the API, the query bot, and (later) theses.
+  - **Personal Knowledge Library is user-only:** `knowledge.listUserSources()` excludes `self_curated`
+    sources; AI-curated facts live in a separate AI Library and are never mixed with user uploads.
+  - **AI Library API:** `GET /api/ai-library/days`, `GET /api/ai-library/day/:date`,
+    `GET /api/ai-library/search`, `GET /api/tags`, `PUT /api/ai-insights/:kind/:id/tags`,
+    `DELETE /api/ai-insights/:kind/:id` (archive = hidden, not destroyed). Search is in-memory over the
+    bounded self-curated set.
+  - **Query tool** `search_ai_insights` added to `src/query/tools.ts` so "ask your portfolio" can pull
+    the AI's curated knowledge grounded and cited, alongside journal/wiki/research tools.
+  - **`AiLibrary.tsx` frontend** (day-sectioned, collapsible, search + tag chip filter, archive-hidden)
+    in its own dashboard section, replacing `CuratedMemory.tsx`.
 
 ### Execution posture
 
@@ -493,8 +517,10 @@ Current single-dashboard structure (as built):
    status, skip reason), linked to the journal.
 5. **Journal** — day-grouped: a collapsible list of days, each expanding to that day's calls; a call
    expands to its thesis/prediction, scored-forecast contract, resolved outcome, and linked trades.
-6. **Knowledge library + curated memory** — uploads, URLs, notes, self-curated facts; source scope,
-   versions, trust labels, quarantine status, and private-note analysis opt-in.
+6. **Knowledge library** — uploads, URLs, and notes (user-only sources); source scope, versions, trust
+   labels, quarantine status, and private-note analysis opt-in.
+6a. **AI Library** — the AI's self-curated insights (`AiLibrary.tsx`): day-sectioned, collapsible,
+    searchable, tag-chip-filtered; archive-hidden. Distinct from the user's upload library.
 7. **Performance wiki** — active briefing, evidence-gated lessons, and calibration (hit-rate vs stated
    conviction, expectancy, Brier).
 8. **Ask your portfolio** — grounded NL query: ask a question, get a streamed answer drawn only from
@@ -504,7 +530,9 @@ Current single-dashboard structure (as built):
 
 > **Status (current):** the Active slice and Phases **3A, 3B, 3C, 3D, and 4** are **implemented** on a
 > shared knowledge-graph substrate (§5a), plus all of **Phase 5** (grounded NL query + mature risk
-> controls). Remaining: **Phase 6** (validation and polish).
+> controls), and **AI Knowledge Platform Phase 1** (curated AI insight library, graph tagging, AI Library
+> UI, `search_ai_insights` query tool). Remaining: **AI Knowledge Platform Phases 2–3** and **Phase 6**
+> (validation and polish).
 
 ### Active slice — scheduler and performance correctness ✅ done
 
@@ -564,6 +592,33 @@ Current single-dashboard structure (as built):
   and strategy-family eligibility, all enforced in `execution/plan.ts` (entries gated; exits never
   gated). Advisory and AI-paper risk profiles are independent (`/api/risk?portfolio=ai`), settable in
   the UI. Allowed/eligible sets are documented in `domain/risk.ts`.
+
+### Phase 1 — AI Knowledge Platform ✅ done (Phase 1 of 3)
+
+> _Spec: `docs/superpowers/specs/2026-06-02-ai-knowledge-platform-design.md`_
+>
+> Phases 2 (daily forecast tracking) and 3 (theses + Market View) are designed but pending.
+
+**Goal:** give the AI a curated, searchable, tagged knowledge library distinct from the user's
+research uploads, and wire it into the query bot and dashboard.
+
+- **Quality gate** (`src/knowledge/curate.ts`): significance ≥ 0.6 AND a structural category required;
+  strongest-first up to the per-run cap; token-Jaccard near-duplicate guard on top of exact-hash dedup.
+  `memorableFacts` Gemini schema + Zod type extended with `significance` + `category` (safe defaults).
+- **Graph-native tagging** (`src/db/repositories/insightTags.ts`): tags are `kg_nodes` +
+  `tagged_with` / `mentions` edges with a `{dimension, value, source}` triple; dimensions are
+  `ticker | sector | theme | direction | horizon`. AI auto-tags on curation; humans add/remove via API.
+  No new migration — reuses the §5a `kg_nodes` / `kg_edges` substrate.
+- **Canonical serializer** (`src/knowledge/serialize.ts`): one `AiInsight` JSON shape for API,
+  query bot, and future theses.
+- **Library separation:** `knowledge.listUserSources()` excludes `self_curated`; the AI Library is
+  a first-class separate collection, not mixed with user uploads.
+- **API surface:** `/api/ai-library/days`, `/api/ai-library/day/:date`, `/api/ai-library/search`,
+  `/api/tags`, `PUT /api/ai-insights/:kind/:id/tags`, `DELETE /api/ai-insights/:kind/:id` (soft archive).
+- **Query integration:** `search_ai_insights` tool in `src/query/tools.ts` grounds and cites curated
+  facts in "ask your portfolio" answers.
+- **Dashboard:** `AiLibrary.tsx` — day-sectioned, collapsible, search + tag chip filter, archive-hidden;
+  replaces `CuratedMemory.tsx`.
 
 ### Phase 6 — validation and polish
 
