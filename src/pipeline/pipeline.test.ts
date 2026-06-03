@@ -216,11 +216,12 @@ describe("dailyRun", () => {
     expect(app.repos.runs.latest()?.error).toContain("boom");
   });
 
-  test("marks open forecasts daily during the run", async () => {
-    await dailyRun(app);                       // creates scored forecasts (if any are scored)
-    const open = app.repos.scoredForecasts.listOpen(app.now(), 200);
-    if (open.length === 0) return;             // fake report may not score; guard keeps the test honest
-    const marks = app.repos.forecastDailyMarks.listForForecast(open[0]!.id);
+  test("marks the prior open book on the next run", async () => {
+    await dailyRun(app);                                   // run 1 creates scored forecasts
+    const priorOpen = app.repos.scoredForecasts.listOpen(app.now(), 200);
+    if (priorOpen.length === 0) return;                    // fake report may not score; honest guard
+    await dailyRun(app);                                   // run 2: step 2b.5 marks the now-prior open book
+    const marks = app.repos.forecastDailyMarks.listForForecast(priorOpen[0]!.id);
     expect(marks.length).toBeGreaterThanOrEqual(1);
     expect(marks[marks.length - 1]!.date).toBe(app.now());
   });

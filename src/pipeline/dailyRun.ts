@@ -58,6 +58,14 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
       console.log(`[resolution] resolved=${resolution.resolved} skipped=${resolution.skipped}`);
     }
 
+    // Step 2b.5 — mark the still-open book (calls from prior runs) to today's price, before the wiki
+    // compiles, so the briefing can assess how live calls are tracking. Degrades gracefully.
+    const tracked = await trackOpenForecasts(app).catch((err) => {
+      console.warn(`[tracking] step failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { tracked: 0 };
+    });
+    if (tracked.tracked > 0) console.log(`[tracking] marked=${tracked.tracked}`);
+
     // Step 2c — compile the performance wiki from resolved outcomes (after resolution, before analysis)
     // so the freshest, evidence-gated briefing is injected into this run. Degrades gracefully.
     const wiki = await compileWiki(app).catch((err) => {
@@ -96,14 +104,6 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
     } catch (err) {
       console.warn(`[curate] step failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    // Step 2b.5 — mark every still-open forecast to today's price (persisted daily tracking). Degrades
-    // gracefully: a tracking failure is logged and never aborts the run.
-    const tracked = await trackOpenForecasts(app).catch((err) => {
-      console.warn(`[tracking] step failed: ${err instanceof Error ? err.message : String(err)}`);
-      return { tracked: 0 };
-    });
-    if (tracked.tracked > 0) console.log(`[tracking] marked=${tracked.tracked}`);
 
     // Step 5 — the AI acts on its own book: deterministic paper trades from the same analysis, filled
     // against its isolated DB ledger. Sized against the pre-trade `ai` snapshot priced above.
