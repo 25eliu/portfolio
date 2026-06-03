@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { App } from "../../app.ts";
+import { assessInFlight } from "../../resolution/track.ts";
 
 /** Read-only performance-wiki views: active briefing, lessons, and calibration metrics. */
 export function wikiRoutes(app: App): Hono {
@@ -24,6 +25,24 @@ export function wikiRoutes(app: App): Hono {
     const window = c.req.query("window");
     return c.json({ metrics: app.repos.wiki.listMetrics(window ? { window } : {}) });
   });
+
+  // In-flight book: today's daily marks assessed (the human view of "are my live calls tracking?").
+  r.get("/in-flight", (c) => {
+    const marks = app.repos.forecastDailyMarks.forDate(app.now());
+    const calls = marks.map((m) => {
+      const f = app.repos.scoredForecasts.get(m.forecastId);
+      return {
+        forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
+        movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
+      };
+    });
+    return c.json({ assessment: assessInFlight(marks), calls });
+  });
+
+  // Per-call daily trajectory — backs the wiki drill-down sparkline.
+  r.get("/forecasts/:id/marks", (c) =>
+    c.json({ marks: app.repos.forecastDailyMarks.listForForecast(c.req.param("id")) }),
+  );
 
   return r;
 }

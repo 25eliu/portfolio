@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { createApp, type App } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
-import { AI_STARTING_CASH } from "../domain/index.ts";
+import { AI_STARTING_CASH, newId } from "../domain/index.ts";
 import { QUERY_TOOLS, QUERY_TOOLS_BY_NAME } from "./tools.ts";
 
 const tool = (name: string) => QUERY_TOOLS_BY_NAME.get(name)!;
@@ -70,6 +70,39 @@ describe("query tool citations (cite)", () => {
   test("data-only tools expose no cite() (they stay as tool badges, not source cards)", () => {
     expect(tool("portfolio_state").cite).toBeUndefined();
     expect(tool("trade_decisions").cite).toBeUndefined();
+    expect(tool("forecast_progress").cite).toBeUndefined();
+  });
+
+  test("forecast_progress returns the daily trajectory of an open call by ticker", async () => {
+    const { trackOpenForecasts } = await import("../resolution/track.ts");
+    // Seed report → journal entry → scored forecast (FK parents required)
+    const NOW = "2026-06-01T00:00:00.000Z";
+    const reportId = newId();
+    app.repos.reports.insert({ id: reportId, date: "2026-06-01", generatedAt: NOW, source: "llm", recommendations: [], marketContext: null });
+    const entryId = newId();
+    app.repos.journalEntries.insert({
+      id: entryId, reportId, runId: null, date: "2026-06-01", createdAt: NOW,
+      ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum",
+      recommendation: {
+        ticker: "NVDA", held: false, action: "BUY", conviction: 0.7, strategyFamily: "momentum",
+        thesis: "test", signals: [],
+        prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", target: 120, stop: 90 },
+        technicals: {},
+      } as Parameters<typeof app.repos.journalEntries.insert>[0]["recommendation"],
+      marketContextId: null, scored: true,
+    });
+    app.repos.scoredForecasts.insert({
+      id: "fp-f1", journalEntryId: entryId, ticker: "NVDA", side: "bullish", strategyFamily: "momentum", signals: [],
+      createdAt: NOW, asOfTimestamp: NOW, marketSession: "regular", quoteTimestamp: null, priceFeed: "fake",
+      referencePrice: 100, entry: 100, target: 120, stop: 90,
+      horizonTradingSessions: 10, resolveAt: "2026-06-15", conviction: 0.7, benchmarkSymbol: "SPY",
+      benchmarkReferencePrice: 400, resolutionPolicyVersion: "v1", marketContextId: null,
+      citedSourceIds: [], retrievedChunkIds: [],
+    } as Parameters<typeof app.repos.scoredForecasts.insert>[0]);
+    await trackOpenForecasts(app);
+    const res = (await tool("forecast_progress").run(app, { ticker: "NVDA" })) as { calls: { ticker: string; marks: unknown[] }[] };
+    expect(res.calls[0]!.ticker).toBe("NVDA");
+    expect(res.calls[0]!.marks.length).toBeGreaterThanOrEqual(1);
   });
 
   test("search_ai_insights returns the AI's curated facts by text and tag, with citations", async () => {

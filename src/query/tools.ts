@@ -201,6 +201,30 @@ export const QUERY_TOOLS: QueryTool[] = [
         .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.id }));
     },
   },
+  {
+    name: "forecast_progress",
+    description:
+      "Daily mark-to-market trajectory of the AI's OPEN scored calls (move since entry, progress to target/stop, unrealized R, running MFE/MAE, status). Optionally filter by ticker. Grounded in persisted daily marks.",
+    parameters: obj({ ticker: S }),
+    run(app, args) {
+      const ticker = str(args.ticker)?.toUpperCase();
+      const open = app.repos.scoredForecasts
+        .listAll({ limit: 500 })
+        .filter((f) => !app.repos.forecastOutcomes.getByForecast(f.id))
+        .filter((f) => (ticker ? f.ticker === ticker : true));
+      return {
+        calls: cap(open, 20).map((f) => {
+          const marks = app.repos.forecastDailyMarks.listForForecast(f.id);
+          const last = marks[marks.length - 1] ?? null;
+          return {
+            ticker: f.ticker, side: f.side, resolveBy: f.resolveAt,
+            latest: last && { date: last.date, movePct: last.moveFromEntry, unrealizedR: last.unrealizedR, mfe: last.mfe, mae: last.mae, status: last.status },
+            marks: marks.map((m) => ({ date: m.date, movePct: m.moveFromEntry, r: m.unrealizedR, status: m.status })),
+          };
+        }),
+      };
+    },
+  },
 ];
 
 export const QUERY_TOOLS_BY_NAME: Map<string, QueryTool> = new Map(QUERY_TOOLS.map((t) => [t.name, t]));
