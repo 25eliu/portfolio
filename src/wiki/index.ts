@@ -7,6 +7,7 @@ import { lintLesson } from "./lint.ts";
 import { compileBriefing } from "./compile.ts";
 import { computeOpenBook, renderOpenBook } from "./openBook.ts";
 import { renderInFlight } from "../resolution/track.ts";
+import { renderOutlook } from "./outlookBrief.ts";
 
 export { computeMetrics } from "./metrics.ts";
 export { generateLessons, deriveLesson, cohortLabel } from "./lessons.ts";
@@ -82,7 +83,8 @@ export async function compileWiki(app: App): Promise<{ metrics: number; lessons:
     openSection = renderOpenBook(computeOpenBook(open, priceBySymbol, date), date);
   }
   const inFlight = renderInFlight(app.repos.forecastDailyMarks.forDate(date));
-  const fullBody = [body, openSection, inFlight].filter(Boolean).join("\n\n");
+  const outlook = renderOutlook(app.repos.aiTheses.listActive());
+  const fullBody = [body, openSection, inFlight, outlook].filter(Boolean).join("\n\n");
 
   app.repos.wiki.insertBriefing({
     id: newId(), date, body: fullBody,
