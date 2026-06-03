@@ -120,4 +120,26 @@ describe("query tool citations (cite)", () => {
     const factId = app.repos.knowledge.listCuratedFacts()[0]!.id;
     expect(cites[0]!.sourceId).toBe(factId);
   });
+
+  test("market_view returns the AI's current regime + sector/theme leans", async () => {
+    app.repos.aiTheses.insert({ id: "rg", runId: null, reportId: null, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z", level: "regime", subject: "market", subjectKey: "regime:market", stance: "risk_on", conviction: 0.6, horizon: "1mo", summary: "constructive", thesis: "breadth", status: "active", supersedesId: null, freshnessDeadline: null, tickers: [], sources: [] } as Parameters<typeof app.repos.aiTheses.insert>[0]);
+    const res = (await tool("market_view").run(app, {})) as { regime: { stance: string } | null };
+    expect(res.regime?.stance).toBe("risk_on");
+  });
+
+  test("sector_outlook returns a sector's thesis history", async () => {
+    app.repos.aiTheses.insert({ id: "s1", runId: null, reportId: null, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z", level: "sector", subject: "Energy", subjectKey: "sector:energy", stance: "bullish", conviction: 0.6, horizon: "3mo", summary: "e", thesis: "energy", status: "active", supersedesId: null, freshnessDeadline: null, tickers: [], sources: [] } as Parameters<typeof app.repos.aiTheses.insert>[0]);
+    const res = (await tool("sector_outlook").run(app, { sector: "Energy" })) as { history: unknown[] };
+    expect(res.history.length).toBe(1);
+  });
+
+  test("search_ai_insights thesis citations resolve to the citation sourceId (not the thesis id)", async () => {
+    app.repos.aiTheses.insert({ id: "th1", runId: null, reportId: null, date: "2026-06-02", createdAt: "2026-06-02T00:00:00.000Z", level: "sector", subject: "Energy", subjectKey: "sector:energy", stance: "bullish", conviction: 0.7, horizon: "3mo", summary: "energy thesis", thesis: "Energy sector looks strong", status: "active", supersedesId: null, freshnessDeadline: null, tickers: [], sources: [{ title: "Reuters", url: "https://reuters.com/energy", sourceId: "src_x" }] } as Parameters<typeof app.repos.aiTheses.insert>[0]);
+    const t = tool("search_ai_insights");
+    const res = (await t.run(app, { query: "energy" })) as { insights: { headline: string }[] };
+    expect(res.insights.length).toBeGreaterThan(0);
+    const cites = t.cite!({ query: "energy" }, res);
+    const thesisCite = cites.find((c) => c.sourceId === "src_x");
+    expect(thesisCite?.sourceId).toBe("src_x");
+  });
 });

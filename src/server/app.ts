@@ -14,6 +14,7 @@ import { graphRoutes } from "./routes/graph.ts";
 import { wikiRoutes } from "./routes/wiki.ts";
 import { executionRoutes } from "./routes/execution.ts";
 import { queryRoutes } from "./routes/query.ts";
+import { marketViewRoutes } from "./routes/marketView.ts";
 
 /** Build the HTTP API over an application context (injectable for tests). */
 export function createServer(app: App): Hono {
@@ -31,6 +32,7 @@ export function createServer(app: App): Hono {
   api.route("/", aiKnowledgeRoutes(app)); // /ai-library, /tags, /ai-insights
   api.route("/graph", graphRoutes(app));
   api.route("/wiki", wikiRoutes(app));
+  api.route("/market-view", marketViewRoutes(app));
   api.route("/query", queryRoutes(app));
   api.route("/", executionRoutes(app)); // /trades
   api.route("/", runRoutes(app)); // /run, /status, /recommendations, /snapshots

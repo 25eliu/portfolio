@@ -2,7 +2,7 @@ import type { App } from "../app.ts";
 import { nodeId, type Citation } from "../domain/index.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "../pipeline/pricing.ts";
 import { buildFtsQuery } from "../knowledge/retrieve.ts";
-import { serializeFact } from "../knowledge/serialize.ts";
+import { serializeFact, serializeThesis } from "../knowledge/serialize.ts";
 
 /**
  * Read-only query tools — the ONLY way the grounded-query model touches data. Each tool is a typed
@@ -189,16 +189,18 @@ export const QUERY_TOOLS: QueryTool[] = [
       const query = str(args.query)?.toLowerCase();
       const dimension = str(args.dimension);
       const value = str(args.value);
-      let insights = app.repos.knowledge.listCuratedFacts().map((f) => serializeFact(app, f));
-      if (query) insights = insights.filter((i) => i.headline.toLowerCase().includes(query));
+      const facts = app.repos.knowledge.listCuratedFacts().map((f) => serializeFact(app, f));
+      const theses = app.repos.aiTheses.listActive().map(serializeThesis);
+      let insights = [...facts, ...theses];
+      if (query) insights = insights.filter((i) => i.headline.toLowerCase().includes(query) || i.body.toLowerCase().includes(query));
       if (dimension && value) insights = insights.filter((i) => i.tags.some((t) => t.dimension === dimension && t.value === value));
       return { insights: cap(insights, 12) };
     },
     cite(_args, result) {
-      const insights = (result as { insights?: { id: string; headline: string; date: string; subject: string; sources: { title: string; url: string }[] }[] }).insights ?? [];
+      const insights = (result as { insights?: { id: string; headline: string; date: string; subject: string; sources: { title: string; url: string; sourceId?: string }[] }[] }).insights ?? [];
       return insights
         .filter((i) => i.sources.length > 0)
-        .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.id }));
+        .map((i) => ({ kind: "knowledge" as const, title: i.sources[0]!.title, ticker: i.subject, trust: "self_curated", date: i.date, excerpt: i.headline, sourceId: i.sources[0]!.sourceId ?? i.id }));
     },
   },
   {
@@ -223,6 +225,31 @@ export const QUERY_TOOLS: QueryTool[] = [
           };
         }),
       };
+    },
+  },
+  {
+    name: "market_view",
+    description: "The AI's CURRENT outlook: market regime + sector leans + named themes (stored, self-authored — grounded, not recall).",
+    parameters: obj(),
+    run(app) {
+      const active = app.repos.aiTheses.listActive();
+      const slim = (t: (typeof active)[number]) => ({ subject: t.subject, stance: t.stance, conviction: t.conviction, horizon: t.horizon, summary: t.summary || t.thesis });
+      return {
+        regime: active.filter((t) => t.level === "regime").map(slim)[0] ?? null,
+        sectors: active.filter((t) => t.level === "sector").map(slim),
+        themes: active.filter((t) => t.level === "theme").map(slim),
+      };
+    },
+  },
+  {
+    name: "sector_outlook",
+    description: "The AI's outlook for a specific sector, including how the view has evolved (supersede history).",
+    parameters: obj({ sector: S }, ["sector"]),
+    run(app, args) {
+      const sector = str(args.sector);
+      if (!sector) return { history: [] };
+      const key = `sector:${sector.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
+      return { history: cap(app.repos.aiTheses.historyForSubject(key), 10).map((t) => ({ date: t.date, stance: t.stance, conviction: t.conviction, status: t.status, thesis: t.thesis })) };
     },
   },
 ];
