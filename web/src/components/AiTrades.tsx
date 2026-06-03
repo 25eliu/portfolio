@@ -1,8 +1,15 @@
-import type { TradeAction, TradeStatus } from "../api/types.ts";
-import { useTrades } from "../api/hooks.ts";
+import type { RiskPreset, TradeAction, TradeStatus } from "../api/types.ts";
+import { useRisk, useSetAiRisk, useTrades } from "../api/hooks.ts";
 import { usd } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
+import { SegmentedControl } from "./ui/SegmentedControl.tsx";
+
+const RISK_OPTIONS: { value: RiskPreset; label: string }[] = [
+  { value: "conservative", label: "Cons" },
+  { value: "balanced", label: "Bal" },
+  { value: "aggressive", label: "Aggr" },
+];
 
 const ACTION_TONE: Record<TradeAction, "pos" | "neg"> = { BUY: "pos", ADD: "pos", TRIM: "neg", SELL: "neg" };
 const STATUS_TONE: Record<TradeStatus, "pos" | "neg" | "accent" | "neutral" | "warn"> = {
@@ -16,16 +23,22 @@ const STATUS_TONE: Record<TradeStatus, "pos" | "neg" | "accent" | "neutral" | "w
 /** Region 4 (trades) — the AI's own paper-trade log. The AI trades automatically on every run. */
 export function AiTrades() {
   const trades = useTrades();
+  const risk = useRisk();
+  const setAiRisk = useSetAiRisk();
   const rows = trades.data?.trades ?? [];
+  const aiPreset = risk.data?.ai?.preset ?? "balanced";
 
   return (
     <div className="space-y-3">
       <div className="card p-6">
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium text-text-secondary">AI trades</p>
           {rows.length > 0 && <Badge tone="neutral">{rows.length}</Badge>}
           <Badge tone="pos" dot>paper · auto</Badge>
-          <span className="ml-auto text-[11px] text-text-muted">the AI's own decisions, from the same analysis</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="eyebrow hidden sm:inline" title="Governs the AI's sizing, horizons, and strategy eligibility">AI risk</span>
+            <SegmentedControl value={aiPreset} onChange={(p) => setAiRisk.mutate(p)} options={RISK_OPTIONS} size="sm" />
+          </div>
         </div>
 
         {trades.isLoading ? (

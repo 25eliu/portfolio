@@ -42,3 +42,33 @@ describe("query tools registry", () => {
     expect(res.node.id).toBe("ticker:aapl");
   });
 });
+
+describe("query tool citations (cite)", () => {
+  test("knowledge_search maps each excerpt to a knowledge source card carrying the focus ticker + source id", () => {
+    const t = tool("knowledge_search");
+    const result = { excerpts: [{ sourceId: "src1", title: "AI chips note", trust: "private_note", date: "2026-05-30", text: "datacenter demand…" }] };
+    const cites = t.cite!({ query: "chips", ticker: "nvda" }, result);
+    expect(cites).toEqual([
+      { kind: "knowledge", title: "AI chips note", ticker: "NVDA", trust: "private_note", date: "2026-05-30", excerpt: "datacenter demand…", sourceId: "src1" },
+    ]);
+  });
+
+  test("journal_calls caps source cards at 6 and carries the entry id + thesis for click-through", () => {
+    const t = tool("journal_calls");
+    const rows = Array.from({ length: 9 }, (_, i) => ({ id: `j${i}`, date: "2026-06-01", ticker: `T${i}`, action: "BUY", conviction: 0.7, thesis: `thesis ${i}` }));
+    const cites = t.cite!({}, rows);
+    expect(cites).toHaveLength(6);
+    expect(cites[0]).toMatchObject({ kind: "journal", ticker: "T0", excerpt: "thesis 0", detail: "conviction 0.7", sourceId: "j0" });
+  });
+
+  test("list_lessons keeps the lesson id for citing while summarizing the body in the model payload", () => {
+    const t = tool("list_lessons");
+    const cites = t.cite!({}, [{ id: "all_time:overall", title: "Momentum wins", state: "active", n: 22 }]);
+    expect(cites).toEqual([{ kind: "lesson", title: "Momentum wins", sourceId: "all_time:overall", detail: "active · n=22" }]);
+  });
+
+  test("data-only tools expose no cite() (they stay as tool badges, not source cards)", () => {
+    expect(tool("portfolio_state").cite).toBeUndefined();
+    expect(tool("trade_decisions").cite).toBeUndefined();
+  });
+});

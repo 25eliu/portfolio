@@ -12,27 +12,28 @@ export function createQueryModel(env: App["env"]): QueryModel | null {
   return env.GEMINI_API_KEY ? createGeminiQueryModel(env) : null;
 }
 
-async function runInBackground(app: App, queryId: string, question: string): Promise<void> {
-  const sink: QuerySink = (e) =>
-    e.kind === "delta"
-      ? queryBus.publish(queryId, { type: "delta", text: e.text })
-      : queryBus.publish(queryId, { type: "tool", name: e.name, args: e.args });
+async function runInBackground(app: App, queryId: string, question: string, focusTickers: string[]): Promise<void> {
+  const sink: QuerySink = (e) => {
+    if (e.kind === "delta") queryBus.publish(queryId, { type: "delta", text: e.text });
+    else if (e.kind === "tool") queryBus.publish(queryId, { type: "tool", name: e.name, args: e.args });
+    else queryBus.publish(queryId, { type: "source", citations: e.citations });
+  };
   const now = new Date().toISOString();
   try {
     if (!app.queryModel) throw new Error("Query unavailable: no model configured (set GEMINI_API_KEY).");
-    const { answer, toolsUsed } = await answerQuery(app, question, app.queryModel, sink);
-    app.repos.queryLog.insert({ id: queryId, question, answer, toolsUsed, status: "ok", createdAt: now });
-    queryBus.publish(queryId, { type: "done", answer, toolsUsed });
+    const { answer, toolsUsed, citations } = await answerQuery(app, question, app.queryModel, sink, { focusTickers });
+    app.repos.queryLog.insert({ id: queryId, question, answer, toolsUsed, citations, status: "ok", createdAt: now });
+    queryBus.publish(queryId, { type: "done", answer, toolsUsed, citations });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    app.repos.queryLog.insert({ id: queryId, question, answer: "", toolsUsed: [], status: "error", createdAt: now });
+    app.repos.queryLog.insert({ id: queryId, question, answer: "", toolsUsed: [], citations: [], status: "error", createdAt: now });
     queryBus.publish(queryId, { type: "error", message });
   }
 }
 
 /** Start a grounded query in the background; the caller streams it via the query bus by `queryId`. */
-export function startQuery(app: App, question: string): { queryId: string } {
+export function startQuery(app: App, question: string, opts: { focusTickers?: string[] } = {}): { queryId: string } {
   const queryId = newId();
-  void runInBackground(app, queryId, question);
+  void runInBackground(app, queryId, question, opts.focusTickers ?? []);
   return { queryId };
 }

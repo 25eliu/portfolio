@@ -87,10 +87,34 @@ computed facts; it does not replace the database or grade the model from memory.
   per-preset reward:risk floor, allowed forecast horizons, and strategy-family eligibility (loose match;
   aggressive = all), on top of position size/count/confidence. The user's advisory book and the AI's
   paper book carry **independent** risk presets (`/api/risk?portfolio=ai`), each settable in the UI.
+  - **Thesis-driven position sizing:** rather than filling every entry to the per-position cap, the
+    planner sizes each position to a fraction of that cap derived from the thesis — the product of
+    normalized **conviction** and **reward:risk** (`sizeFraction` in `execution/plan.ts`). Stronger,
+    higher-payoff ideas approach the cap; weak-but-passing ones get a 25% floor (no dust). ADDs top a
+    held name up to its thesis-sized target, not the full cap. Sizing stays deterministic — the planner
+    owns it, the LLM still never sets size.
 - **Grounded NL query (Phase 5):** "ask your portfolio anything" — a Gemini tool-use loop over 9
   read-only data tools (`src/query/`) answers from the journal / forecasts / outcomes / wiki / trades /
   graph / research only (never recall), streams the answer + cited tools over SSE, and logs every Q&A to
   `query_log`. API `POST /api/query` + `GET /api/query/:id/stream`; an "Ask your portfolio" UI panel.
+  - **`@`-mention focus:** the input autocompletes tickers from the mentionable universe (holdings ∪ AI
+    book ∪ watchlist, `GET /api/query/tickers`). Mentioned tickers become `focusTickers` (client hint +
+    server re-parse) that instruct the model to scope its tool calls by ticker — hitting the narrow
+    scoped + graph-linked retrieval tiers instead of a broad FTS sweep (token efficiency). `list_lessons`
+    payloads are summarized for the same reason; full prose still reaches the UI as a source card.
+  - **Structured sources:** each evidence tool (`knowledge_search`, `list_lessons`, `journal_calls`)
+    derives `Citation[]` from its own result via an optional `cite()` — UI-only, never fed back to the
+    model, so it costs no extra tokens. Citations carry a `sourceId` and stream over SSE, render as a
+    grouped Sources panel (Research / Wiki / Journal), and persist in `query_log.citations_json`
+    (migration 017).
+  - **Chat UI:** the panel is a stacked session transcript (question bubble scrolls up, input clears,
+    auto-scroll) with **markdown-rendered** answers (`Markdown.tsx`, react-markdown + remark-gfm, no
+    typography plugin — mapped to the app's tokens). Every source card is clickable → `SourceDetailDialog`
+    fetches the full record (journal thesis + forecast/outcome via `/api/journal/:id`, full lesson prose
+    via `/api/wiki/lessons/:id`, or a research note's excerpt + origin link via `/api/knowledge/sources/:id`).
+  - **Multi-round tool fix:** Gemini 2.5 attaches a `thoughtSignature` to every function-call part that
+    the API requires echoed back verbatim; `toGenaiContents` now round-trips it through the neutral turn
+    type (dropping it 400'd every query that needed a second tool round).
 - **Thesis-driven AI universe + continuity (recent):** the AI's hunting universe is no longer dominated
   by the user's portfolio. Each run it merges its own holdings (`ai_held`) and its **carried-forward
   theses** (`ai_thesis` = open forecasts + names it recently rated BUY/ADD/WATCH within a lookback) with a

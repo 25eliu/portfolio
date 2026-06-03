@@ -16,6 +16,7 @@ const keys = {
   wiki: ["wiki"],
   trades: ["trades"],
   queryLog: ["queryLog"],
+  queryTickers: ["queryTickers"],
 };
 
 // Live-priced equity/P&L: the server reprices from fresh quotes on every request, so poll while the
@@ -77,7 +78,11 @@ export function useStartRun() {
 
 export function useSetRisk() {
   const invalidate = useInvalidateAll();
-  return useMutation({ mutationFn: (preset: RiskPreset) => client.setRisk(preset), onSuccess: invalidate });
+  return useMutation({ mutationFn: (preset: RiskPreset) => client.setRisk(preset, "user"), onSuccess: invalidate });
+}
+export function useSetAiRisk() {
+  const invalidate = useInvalidateAll();
+  return useMutation({ mutationFn: (preset: RiskPreset) => client.setRisk(preset, "ai"), onSuccess: invalidate });
 }
 
 export function useSetSchedule() {
@@ -141,3 +146,6 @@ export const useWikiMetrics = (window?: string) =>
 
 export const useTrades = () => useQuery({ queryKey: keys.trades, queryFn: client.trades });
 export const useQueryLog = () => useQuery({ queryKey: keys.queryLog, queryFn: client.queryLog });
+// The @-mention universe (holdings ∪ AI book ∪ watchlist). Refetched on focus; changes rarely.
+export const useMentionTickers = () =>
+  useQuery({ queryKey: keys.queryTickers, queryFn: client.queryTickers, staleTime: 60_000 });

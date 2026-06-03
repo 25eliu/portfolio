@@ -37,6 +37,8 @@ export type {
   TradeStatus,
   TradeAction,
   QueryLog,
+  Citation,
 } from "@shared/domain/index.ts";
 export type { PricedPortfolio, RunResult } from "@shared/pipeline/types.ts";
 export type { Run } from "@shared/db/repositories/runs.ts";
+export type { MentionTicker, MentionSource } from "@shared/query/tickers.ts";

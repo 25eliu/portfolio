@@ -1,6 +1,7 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
 import type { App } from "../app.ts";
+import type { Citation } from "../domain/index.ts";
 import { QUERY_TOOLS, QUERY_TOOLS_BY_NAME, type QueryTool } from "./tools.ts";
 
 /** Cap the tool-use loop so a runaway question can't burn unbounded LLM calls. */
@@ -19,15 +20,25 @@ export const SYSTEM_PROMPT = [
   "Be direct and quantitative. Prefer a short, specific answer grounded in the data over a long generic one.",
 ].join("\n");
 
-/** Streaming callback: answer token deltas + tool-call activity. */
+/** Streaming callback: answer token deltas, tool-call activity, and structured sources for the UI. */
 export type QuerySink = (
-  e: { kind: "delta"; text: string } | { kind: "tool"; name: string; args: Record<string, unknown> },
+  e:
+    | { kind: "delta"; text: string }
+    | { kind: "tool"; name: string; args: Record<string, unknown> }
+    | { kind: "source"; citations: Citation[] },
 ) => void;
+
+/**
+ * A model turn's tool call. `thoughtSignature` is Gemini 2.5's opaque per-call token: the API REQUIRES
+ * it be echoed back verbatim in the conversation history, or follow-up tool rounds 400. We carry it
+ * through the neutral type so the adapter can round-trip it (stub models in tests simply omit it).
+ */
+export type ToolCall = { name: string; args: Record<string, unknown>; thoughtSignature?: string };
 
 /** Neutral conversation turn — the Gemini adapter translates these to genai `Content`s. */
 export type QueryContent =
   | { role: "user"; text: string }
-  | { role: "model"; calls: { name: string; args: Record<string, unknown> }[] }
+  | { role: "model"; calls: ToolCall[] }
   | { role: "tool"; results: { name: string; result: unknown }[] };
 
 /** One model turn: given the conversation + tools, return tool calls and/or final text (streamed). */
@@ -35,7 +46,7 @@ export interface QueryModel {
   turn(
     input: { systemPrompt: string; contents: QueryContent[]; tools: QueryTool[] },
     sink: QuerySink,
-  ): Promise<{ calls: { name: string; args: Record<string, unknown> }[]; text: string }>;
+  ): Promise<{ calls: ToolCall[]; text: string }>;
 }
 
 /**
@@ -49,13 +60,23 @@ export async function answerQuery(
   question: string,
   model: QueryModel,
   sink: QuerySink,
-): Promise<{ answer: string; toolsUsed: string[] }> {
+  opts: { focusTickers?: string[] } = {},
+): Promise<{ answer: string; toolsUsed: string[]; citations: Citation[] }> {
+  const focus = [...new Set((opts.focusTickers ?? []).map((t) => t.toUpperCase()).filter(Boolean))];
+  // Token efficiency: tell the model to scope its tool calls to the @-mentioned tickers so retrieval
+  // hits the ticker-scoped + graph-linked tiers (narrow) instead of a broad library-wide FTS sweep.
+  const systemPrompt = focus.length
+    ? `${SYSTEM_PROMPT}\nThe user is asking specifically about ${focus.join(", ")}. Prefer tool calls scoped to these tickers (pass the \`ticker\` argument) and keep the answer focused on them.`
+    : SYSTEM_PROMPT;
+
   const contents: QueryContent[] = [{ role: "user", text: question }];
   const toolsUsed = new Set<string>();
+  const citations: Citation[] = [];
+  const seen = new Set<string>();
   let answer = "";
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const { calls, text } = await model.turn({ systemPrompt: SYSTEM_PROMPT, contents, tools: QUERY_TOOLS }, sink);
+    const { calls, text } = await model.turn({ systemPrompt, contents, tools: QUERY_TOOLS }, sink);
     if (text) answer = text;
     if (calls.length === 0) break;
 
@@ -65,24 +86,49 @@ export async function answerQuery(
       sink({ kind: "tool", name: call.name, args: call.args });
       toolsUsed.add(call.name);
       const tool = QUERY_TOOLS_BY_NAME.get(call.name);
+      let result: unknown;
       try {
-        results.push({ name: call.name, result: tool ? await tool.run(app, call.args) : { error: `unknown tool: ${call.name}` } });
+        result = tool ? await tool.run(app, call.args) : { error: `unknown tool: ${call.name}` };
       } catch (err) {
-        results.push({ name: call.name, result: { error: err instanceof Error ? err.message : String(err) } });
+        result = { error: err instanceof Error ? err.message : String(err) };
+      }
+      results.push({ name: call.name, result });
+      // Surface the structured sources behind this tool's result (UI-only; never fed back to the model).
+      const fresh = (tool?.cite?.(call.args, result) ?? []).filter((c) => {
+        const key = `${c.kind}:${c.sourceId ?? c.title}:${c.ticker ?? ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (fresh.length) {
+        citations.push(...fresh);
+        sink({ kind: "source", citations: fresh });
       }
     }
     contents.push({ role: "tool", results });
   }
 
-  return { answer: answer || "I couldn't find an answer in the available data.", toolsUsed: [...toolsUsed] };
+  return { answer: answer || "I couldn't find an answer in the available data.", toolsUsed: [...toolsUsed], citations };
 }
 
 // ---- Gemini adapter ---------------------------------------------------------
 
-const toGenaiContents = (contents: QueryContent[]) =>
+/**
+ * Translate neutral turns to genai `Content`s. Crucially, each model `functionCall` part carries its
+ * `thoughtSignature` back verbatim — Gemini 2.5 rejects multi-round tool histories that drop it. Exported
+ * for direct testing of that round-trip.
+ */
+export const toGenaiContents = (contents: QueryContent[]) =>
   contents.map((c) => {
     if (c.role === "user") return { role: "user", parts: [{ text: c.text }] };
-    if (c.role === "model") return { role: "model", parts: c.calls.map((fc) => ({ functionCall: { name: fc.name, args: fc.args } })) };
+    if (c.role === "model")
+      return {
+        role: "model",
+        parts: c.calls.map((fc) => ({
+          functionCall: { name: fc.name, args: fc.args },
+          ...(fc.thoughtSignature ? { thoughtSignature: fc.thoughtSignature } : {}),
+        })),
+      };
     return { role: "user", parts: c.results.map((r) => ({ functionResponse: { name: r.name, response: { result: r.result } } })) };
   });
 
@@ -102,18 +148,23 @@ export function createGeminiQueryModel(env: Env): QueryModel {
         },
       });
       let text = "";
-      const calls: { name: string; args: Record<string, unknown> }[] = [];
+      const calls: ToolCall[] = [];
       for await (const chunkUnknown of stream) {
         const chunk = chunkUnknown as {
           functionCalls?: { name?: string; args?: Record<string, unknown> }[];
-          candidates?: { content?: { parts?: { text?: string; thought?: boolean; functionCall?: { name?: string; args?: Record<string, unknown> } }[] } }[];
+          candidates?: {
+            content?: {
+              parts?: { text?: string; thought?: boolean; thoughtSignature?: string; functionCall?: { name?: string; args?: Record<string, unknown> } }[];
+            };
+          }[];
         };
         for (const p of chunk.candidates?.[0]?.content?.parts ?? []) {
           if (typeof p.text === "string" && p.text && !p.thought) {
             text += p.text;
             sink({ kind: "delta", text: p.text });
           }
-          if (p.functionCall?.name) calls.push({ name: p.functionCall.name, args: p.functionCall.args ?? {} });
+          // Capture the signature attached to THIS function-call part so it round-trips next round.
+          if (p.functionCall?.name) calls.push({ name: p.functionCall.name, args: p.functionCall.args ?? {}, thoughtSignature: p.thoughtSignature });
         }
         for (const fc of chunk.functionCalls ?? []) {
           if (fc.name && !calls.some((c) => c.name === fc.name && JSON.stringify(c.args) === JSON.stringify(fc.args ?? {}))) {

@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef } from "react";
+import type { Citation } from "./types.ts";
 
 /** A query SSE event (mirrors src/query/bus.ts), parsed loosely from JSON. */
 type QueryStreamEvent = {
@@ -9,6 +10,7 @@ type QueryStreamEvent = {
   text?: string;
   answer?: string;
   toolsUsed?: string[];
+  citations?: Citation[];
   message?: string;
 };
 
@@ -16,11 +18,19 @@ export type QueryState = {
   answer: string;
   tools: { name: string; args: Record<string, unknown> }[];
   toolsUsed: string[];
+  sources: Citation[];
   status: "running" | "done" | "error";
   errorMessage?: string;
 };
 
-const INITIAL: QueryState = { answer: "", tools: [], toolsUsed: [], status: "running" };
+const INITIAL: QueryState = { answer: "", tools: [], toolsUsed: [], sources: [], status: "running" };
+
+/** Stable identity for a source card, used to de-dupe the live stream against the final `done` list. */
+const sourceKey = (c: Citation) => `${c.kind}:${c.sourceId ?? c.title}:${c.ticker ?? ""}`;
+const mergeSources = (existing: Citation[], incoming: Citation[]): Citation[] => {
+  const seen = new Set(existing.map(sourceKey));
+  return [...existing, ...incoming.filter((c) => !seen.has(sourceKey(c)))];
+};
 
 function reduce(s: QueryState, e: QueryStreamEvent): QueryState {
   switch (e.type) {
@@ -28,10 +38,18 @@ function reduce(s: QueryState, e: QueryStreamEvent): QueryState {
       return INITIAL;
     case "tool":
       return { ...s, tools: [...s.tools, { name: e.name ?? "", args: e.args ?? {} }] };
+    case "source":
+      return { ...s, sources: mergeSources(s.sources, e.citations ?? []) };
     case "delta":
       return { ...s, answer: s.answer + (e.text ?? "") };
     case "done":
-      return { ...s, answer: e.answer ?? s.answer, toolsUsed: e.toolsUsed ?? s.toolsUsed, status: "done" };
+      return {
+        ...s,
+        answer: e.answer ?? s.answer,
+        toolsUsed: e.toolsUsed ?? s.toolsUsed,
+        sources: mergeSources(s.sources, e.citations ?? []),
+        status: "done",
+      };
     case "error":
       return { ...s, status: "error", errorMessage: e.message };
     default:

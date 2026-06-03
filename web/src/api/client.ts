@@ -11,6 +11,7 @@ import type {
   KnowledgeSource,
   KnowledgeVersion,
   MarketSnapshot,
+  MentionTicker,
   PricedPortfolio,
   QueryLog,
   RiskPreset,
@@ -72,9 +73,9 @@ export const client = {
   snapshots: () =>
     api<{ user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] }>("/snapshots"),
   status: () => api<{ lastRun: Run | null }>("/status"),
-  risk: () => api<{ risk: RiskProfile | null }>("/risk"),
-  setRisk: (preset: RiskPreset) =>
-    api<RiskProfile>("/risk", { method: "PUT", body: JSON.stringify({ preset }) }),
+  risk: () => api<{ risk: RiskProfile | null; user: RiskProfile | null; ai: RiskProfile | null }>("/risk"),
+  setRisk: (preset: RiskPreset, portfolio: "user" | "ai" = "user") =>
+    api<RiskProfile>("/risk", { method: "PUT", body: JSON.stringify({ preset, portfolio }) }),
   schedule: () => api<{ schedule: Schedule }>("/schedule"),
   setSchedule: (s: Schedule) =>
     api<Schedule>("/schedule", { method: "PUT", body: JSON.stringify(s) }),
@@ -120,10 +121,12 @@ export const client = {
   graphNode: (id: string) => api<{ node: KgNode; neighbors: KgNeighbor[] }>(`/graph/node/${id}`),
   wikiBriefing: () => api<{ briefing: Briefing | null }>("/wiki/briefing"),
   wikiLessons: () => api<{ lessons: WikiLesson[] }>("/wiki/lessons"),
+  wikiLesson: (id: string) => api<{ lesson: WikiLesson }>(`/wiki/lessons/${id}`),
   wikiMetrics: (window?: string) =>
     api<{ metrics: WikiMetric[] }>(`/wiki/metrics${window ? `?window=${window}` : ""}`),
   trades: () => api<{ trades: TradeDecision[] }>("/trades"),
-  askQuery: (question: string) =>
-    api<{ queryId: string }>("/query", { method: "POST", body: JSON.stringify({ question }) }),
+  askQuery: (question: string, tickers: string[] = []) =>
+    api<{ queryId: string }>("/query", { method: "POST", body: JSON.stringify({ question, tickers }) }),
+  queryTickers: () => api<{ tickers: MentionTicker[] }>("/query/tickers"),
   queryLog: () => api<{ queries: QueryLog[] }>("/query/log"),
 };

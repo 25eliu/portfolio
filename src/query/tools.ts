@@ -1,5 +1,5 @@
 import type { App } from "../app.ts";
-import { nodeId } from "../domain/index.ts";
+import { nodeId, type Citation } from "../domain/index.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "../pipeline/pricing.ts";
 import { buildFtsQuery } from "../knowledge/retrieve.ts";
 
@@ -14,6 +14,12 @@ export type QueryTool = {
   description: string;
   parameters: Record<string, unknown>;
   run(app: App, args: Record<string, unknown>): Promise<unknown> | unknown;
+  /**
+   * Optional: derive UI-facing source cards from this tool's result. Pure, synchronous, and run AFTER
+   * `run` on its own output — so it never touches the DB again and never adds model tokens. Only the
+   * evidence-bearing tools (research, wiki lessons, journal) implement it; data tools stay as badges.
+   */
+  cite?(args: Record<string, unknown>, result: unknown): Citation[];
 };
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -90,9 +96,15 @@ export const QUERY_TOOLS: QueryTool[] = [
     description: "Active and provisional performance-wiki lessons (evidence-gated, prose-from-metrics).",
     parameters: obj(),
     run(app) {
+      // Token efficiency: lessons are summarized to a single line in the model payload. The full prose
+      // still reaches the user as a source card via `cite()`, so nothing is lost from the UI.
       return app.repos.wiki
         .listLessons({ states: ["active", "provisional"] })
-        .map((l) => ({ id: l.id, title: l.title, state: l.state, n: l.n, body: l.body }));
+        .map((l) => ({ id: l.id, title: l.title, state: l.state, n: l.n, summary: l.body.slice(0, 240) }));
+    },
+    cite(_args, result) {
+      const rows = (result as { id: string; title: string; state: string; n: number }[]) ?? [];
+      return rows.map((l) => ({ kind: "lesson", title: l.title, sourceId: l.id, detail: `${l.state} · n=${l.n}` }));
     },
   },
   {
@@ -104,8 +116,15 @@ export const QUERY_TOOLS: QueryTool[] = [
       const date = str(args.date);
       const entries = date && !ticker ? app.repos.journalEntries.listDay(date) : app.repos.journalEntries.list({ ticker, date, limit: 40 });
       return cap(entries, 40).map((e) => ({
-        date: e.date, ticker: e.ticker, action: e.action, conviction: e.conviction, strategy: e.strategyFamily,
+        id: e.id, date: e.date, ticker: e.ticker, action: e.action, conviction: e.conviction, strategy: e.strategyFamily,
         direction: e.recommendation.prediction.direction, thesis: e.recommendation.thesis,
+      }));
+    },
+    cite(_args, result) {
+      const rows = (result as { id: string; date: string; ticker: string; action: string; conviction: number; thesis: string }[]) ?? [];
+      return cap(rows, 6).map((j) => ({
+        kind: "journal", title: `${j.ticker} — ${j.action}`, ticker: j.ticker, date: j.date,
+        detail: `conviction ${j.conviction}`, excerpt: j.thesis, sourceId: j.id,
       }));
     },
   },
@@ -151,8 +170,13 @@ export const QUERY_TOOLS: QueryTool[] = [
       const ticker = str(args.ticker)?.toUpperCase();
       const hits = app.repos.knowledge.searchActiveChunks(buildFtsQuery([query]), { ticker, limit: 6 });
       return {
-        excerpts: hits.map((h) => ({ title: h.title, trust: h.trust_class, date: h.created_at.slice(0, 10), text: h.text.slice(0, 600) })),
+        excerpts: hits.map((h) => ({ sourceId: h.source_id, title: h.title, trust: h.trust_class, date: h.created_at.slice(0, 10), text: h.text.slice(0, 600) })),
       };
+    },
+    cite(args, result) {
+      const ticker = str(args.ticker)?.toUpperCase();
+      const excerpts = (result as { excerpts?: { sourceId: string; title: string; trust: string; date: string; text: string }[] }).excerpts ?? [];
+      return excerpts.map((e) => ({ kind: "knowledge", title: e.title, ticker, trust: e.trust, date: e.date, excerpt: e.text, sourceId: e.sourceId }));
     },
   },
 ];

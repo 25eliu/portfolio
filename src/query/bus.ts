@@ -3,10 +3,13 @@
  * background `answerQuery` publishes typed events here; the SSE endpoint subscribes (with buffered
  * replay, since the client POSTs then opens the stream a beat later) and relays them to the browser.
  */
+import type { Citation } from "../domain/index.ts";
+
 export type QueryEventInput =
   | { type: "tool"; name: string; args: Record<string, unknown> }
+  | { type: "source"; citations: Citation[] }
   | { type: "delta"; text: string }
-  | { type: "done"; answer: string; toolsUsed: string[] }
+  | { type: "done"; answer: string; toolsUsed: string[]; citations: Citation[] }
   | { type: "error"; message: string };
 
 export type QueryEvent = QueryEventInput & { seq: number };

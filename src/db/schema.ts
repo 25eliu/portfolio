@@ -429,4 +429,10 @@ export const MIGRATIONS: ReadonlyArray<{ name: string; sql: string }> = [
       UPDATE portfolios SET cash = 100000 WHERE kind = 'ai_shadow';
     `,
   },
+  {
+    // Grounded queries now record the structured sources (citations) behind each answer so the UI can
+    // show them and history keeps them. Append-only column; existing rows default to an empty list.
+    name: "017_query_log_citations",
+    sql: `ALTER TABLE query_log ADD COLUMN citations_json TEXT NOT NULL DEFAULT '[]';`,
+  },
 ];

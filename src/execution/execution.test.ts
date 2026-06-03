@@ -45,24 +45,25 @@ describe("executeAiTrades (planner → ledger)", () => {
     expect(trades).toHaveLength(1);
     expect(trades[0]!.action).toBe("BUY");
     expect(trades[0]!.status).toBe("filled");
-    expect(trades[0]!.qty).toBe(100); // 10% of the AI's own $100k equity / $100 — never the user's portfolio
+    // Thesis-sized off the AI's own $100k equity: conv 0.8 × strong RR → frac 0.64 of the 10% cap → 64 shares.
+    expect(trades[0]!.qty).toBe(64); // never the user's portfolio, and no longer a flat fill-to-cap
 
     // The fill landed on the AI's isolated DB book: a holding row + debited cash.
     const holdings = app.repos.holdings.listByPortfolio(app.ai.id);
     expect(holdings).toHaveLength(1);
-    expect(holdings[0]).toMatchObject({ symbol: "AAPL", shares: 100, costBasis: 100, acquiredAt: "2026-06-01" });
-    expect(app.repos.portfolios.get(app.ai.id)?.cash).toBe(90_000);
+    expect(holdings[0]).toMatchObject({ symbol: "AAPL", shares: 64, costBasis: 100, acquiredAt: "2026-06-01" });
+    expect(app.repos.portfolios.get(app.ai.id)?.cash).toBe(93_600);
 
     // Nothing touched the broker account — it's a pure paper ledger.
     expect((await app.gateway.getPositions()).length).toBe(0);
   });
 
   test("compounding: a bigger book sizes a bigger position", async () => {
-    // Book at $200k → 10% cap = $20k → 200 shares at $100.
+    // Same thesis (frac 0.64), 2× the book → 2× the position: $200k → cap $20k → $12.8k → 128 shares.
     app.repos.portfolios.setCash(app.ai.id, 200_000);
     const summary = await executeAiTrades(app, reportFor(), "run-1", await ctxFor(app));
     expect(summary.filled).toBe(1);
-    expect(app.repos.tradeDecisions.listRecent()[0]!.qty).toBe(200);
+    expect(app.repos.tradeDecisions.listRecent()[0]!.qty).toBe(128); // exactly double the $100k book's 64
   });
 });
 

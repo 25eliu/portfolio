@@ -268,6 +268,35 @@ describe("watchlist", () => {
   });
 });
 
+describe("query @-mention tickers", () => {
+  test("GET /api/query/tickers returns the mentionable universe tagged by source", async () => {
+    await req("/api/watchlist", {
+      method: "POST", body: JSON.stringify({ symbol: "tsla" }), headers: { "Content-Type": "application/json" },
+    });
+    await req("/api/holdings", {
+      method: "POST", body: JSON.stringify({ symbol: "AAPL", shares: 10, costBasis: 100 }), headers: { "Content-Type": "application/json" },
+    });
+    const { tickers } = (await (await req("/api/query/tickers")).json()) as {
+      tickers: { symbol: string; sources: string[] }[];
+    };
+    const bySym = new Map(tickers.map((t) => [t.symbol, t.sources]));
+    expect(bySym.get("AAPL")).toEqual(["holding"]);
+    expect(bySym.get("TSLA")).toEqual(["watchlist"]);
+  });
+
+  test("POST /api/query accepts a tickers array without erroring (focus scoping)", async () => {
+    const res = await req("/api/query", {
+      method: "POST",
+      body: JSON.stringify({ question: "how is @NVDA?", tickers: ["NVDA"] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    // No GEMINI key in tests → the background job records an error, but the POST itself must accept the
+    // shape and hand back a queryId (the model-less failure surfaces over the stream, not here).
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { queryId: string }).toHaveProperty("queryId");
+  });
+});
+
 describe("knowledge library", () => {
   const noteBody = (over: Record<string, unknown> = {}) => ({
     title: "AAPL note",
@@ -390,6 +419,22 @@ describe("wiki", () => {
     const metrics = (await (await req("/api/wiki/metrics?window=all_time")).json()) as { metrics: unknown[] };
     expect(Array.isArray(metrics.metrics)).toBe(true);
   });
+
+  test("GET /wiki/lessons/:id returns a single lesson, or 404 when missing", async () => {
+    const now = "2026-06-01T00:00:00.000Z";
+    app.repos.wiki.upsertLesson({
+      id: "all_time:overall", title: "Momentum beats SPY", body: "**Across 22 calls**, momentum led by 3.1%.",
+      state: "active", cohortKind: "overall", cohortKey: "overall", window: "all_time", n: 22,
+      dateWindowStart: null, dateWindowEnd: null, sourceForecastIds: [], freshnessDeadline: null, metrics: {},
+      createdAt: now, updatedAt: now,
+    });
+    const ok = await req("/api/wiki/lessons/all_time:overall");
+    expect(ok.status).toBe(200);
+    expect((await ok.json()) as { lesson: { title: string } }).toMatchObject({ lesson: { title: "Momentum beats SPY" } });
+
+    const missing = await req("/api/wiki/lessons/nope");
+    expect(missing.status).toBe(404);
+  });
 });
 
 describe("grounded query", () => {
@@ -465,6 +510,14 @@ describe("risk", () => {
     expect(put.status).toBe(200);
     const got = (await (await req("/api/risk")).json()) as { risk: { preset: string } };
     expect(got.risk.preset).toBe("aggressive");
+  });
+
+  test("the AI book carries its own risk preset, independent of the user's", async () => {
+    await req("/api/risk", { method: "PUT", body: JSON.stringify({ preset: "aggressive", portfolio: "user" }), headers: { "Content-Type": "application/json" } });
+    await req("/api/risk", { method: "PUT", body: JSON.stringify({ preset: "conservative", portfolio: "ai" }), headers: { "Content-Type": "application/json" } });
+    const got = (await (await req("/api/risk")).json()) as { user: { preset: string }; ai: { preset: string } };
+    expect(got.user.preset).toBe("aggressive");
+    expect(got.ai.preset).toBe("conservative");
   });
 
   test("rejects an unknown preset", async () => {

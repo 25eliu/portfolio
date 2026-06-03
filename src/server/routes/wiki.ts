@@ -13,6 +13,13 @@ export function wikiRoutes(app: App): Hono {
     return c.json({ lessons: app.repos.wiki.listLessons(states ? { states: [...states] } : {}) });
   });
 
+  // Single lesson detail — backs the click-through from a grounded-query "Wiki lesson" source card.
+  r.get("/lessons/:id", (c) => {
+    const lesson = app.repos.wiki.getLesson(c.req.param("id"));
+    if (!lesson) return c.json({ error: "not found" }, 404);
+    return c.json({ lesson });
+  });
+
   r.get("/metrics", (c) => {
     const window = c.req.query("window");
     return c.json({ metrics: app.repos.wiki.listMetrics(window ? { window } : {}) });

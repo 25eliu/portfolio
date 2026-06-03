@@ -6,8 +6,6 @@ import { applyFills } from "./ledger.ts";
 
 export { planTrades } from "./plan.ts";
 
-/** Minimum reward:risk for a new BUY/ADD in v1 (per-preset thresholds are a Phase 5 refinement). */
-export const REWARD_RISK_FLOOR = 1.0;
 
 export type ExecutionContext = {
   ai: PricedPortfolio;
@@ -57,7 +55,6 @@ export async function executeAiTrades(
     },
     baselineCapital,
     preset,
-    rewardRiskFloor: REWARD_RISK_FLOOR,
     priceOf,
     submittedToday: (t) => app.repos.tradeDecisions.submittedOn(t, date),
     journalLink: (t) => ctx.journalLink.get(t) ?? { journalEntryId: null, forecastId: null },
