@@ -9,21 +9,28 @@ beforeEach(() => {
   repos = repositories(openMemoryDb());
 });
 
-function insertSource(id: string, trustClass: KnowledgeSource["trustClass"]) {
+function insertSource(
+  id: string,
+  trustClass: KnowledgeSource["trustClass"],
+  kind: KnowledgeSource["kind"] = trustClass === "self_curated" ? "fact" : "note",
+) {
   repos.knowledge.insertSource({
-    id, kind: trustClass === "self_curated" ? "fact" : "note", title: `t-${id}`,
+    id, kind, title: `t-${id}`,
     trustClass, scope: "global", scopeTicker: null, useInAnalysis: true,
     status: "active", origin: null, createdAt: NOW, updatedAt: NOW,
   });
 }
 
 describe("listUserSources", () => {
-  test("excludes self_curated facts (they live in the AI Library)", () => {
-    insertSource("u1", "private_note");
-    insertSource("a1", "self_curated");
+  test("allowlists the user's own note/url/upload kinds; excludes AI + system content", () => {
+    insertSource("u-note", "private_note", "note");
+    insertSource("u-url", "public_url", "url");
+    insertSource("u-file", "public_upload", "upload");
+    insertSource("ai-fact", "self_curated", "fact"); // AI Library — must not appear
+    insertSource("sys-lesson", "system_lesson", "fact"); // system-generated — must not appear
     const user = repos.knowledge.listUserSources();
-    expect(user.map((s) => s.id)).toEqual(["u1"]);
+    expect(user.map((s) => s.id).sort()).toEqual(["u-file", "u-note", "u-url"]);
     // listSources still returns everything (unchanged behavior)
-    expect(repos.knowledge.listSources().length).toBe(2);
+    expect(repos.knowledge.listSources().length).toBe(5);
   });
 });

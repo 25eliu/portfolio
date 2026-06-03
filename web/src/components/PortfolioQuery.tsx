@@ -97,13 +97,22 @@ export function PortfolioQuery() {
   const [detail, setDetail] = useState<Citation | null>(null);
   const [pending, setPending] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
+  // `stream` is shared across turns and keeps its last terminal status until the next query resets it.
+  // Without this guard, setting a new active turn would fold it immediately using the PREVIOUS answer
+  // (stale "done"). We only fold once we've seen this query's stream actually start ("running").
+  const startedRef = useRef(false);
 
   const stream = useQueryStream(active?.id ?? null);
 
   // Fold a finished in-flight turn into the transcript, then clear the active slot for the next question.
   const { status } = stream;
   useEffect(() => {
-    if (!active || (status !== "done" && status !== "error")) return;
+    if (!active) return;
+    if (status === "running") {
+      startedRef.current = true;
+      return;
+    }
+    if (!startedRef.current || (status !== "done" && status !== "error")) return;
     setTurns((t) => [
       ...t,
       {
@@ -134,6 +143,7 @@ export function PortfolioQuery() {
     if (!q || streaming) return;
     setInput("");
     setPending(true);
+    startedRef.current = false; // arm the fold guard for this new query's fresh stream
     try {
       // @-mentions scope retrieval server-side (fewer tokens); the server re-parses too, so this is a hint.
       const { queryId: id } = await client.askQuery(q, parseMentions(q));

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { createApp, type App } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
-import { markFor, trackOpenForecasts } from "./track.ts";
+import { markFor, trackOpenForecasts, assessInFlight, renderInFlight } from "./track.ts";
 import { newId, type ScoredForecast } from "../domain/index.ts";
 
 const NOW = "2026-06-01T00:00:00.000Z";
@@ -95,5 +95,35 @@ describe("trackOpenForecasts", () => {
 
   test("no open forecasts → tracks nothing, no throw", async () => {
     expect((await trackOpenForecasts(app)).tracked).toBe(0);
+  });
+});
+
+describe("renderInFlight", () => {
+  const base = { id: "x", forecastId: "f", ticker: "NVDA", date: "2026-06-03", markPrice: 100,
+    moveFromEntry: 0, progressToTarget: 0, progressToStop: 0, spyExcess: null, createdAt: "2026-06-03T00:00:00.000Z" };
+
+  test("summarizes today's marks (counts + avg unrealized R)", () => {
+    const text = renderInFlight([
+      { ...base, unrealizedR: 0.8, mfe: 1.0, mae: -0.1, status: "on_track" },
+      { ...base, forecastId: "g", unrealizedR: -0.6, mfe: 0.2, mae: -0.6, status: "near_stop" },
+    ] as any);
+    expect(text).toContain("IN-FLIGHT");
+    expect(text).toContain("1 on track");
+    expect(text).toContain("1 near stop");
+  });
+
+  test("empty marks → empty string (nothing to inject)", () => {
+    expect(renderInFlight([])).toBe("");
+  });
+
+  test("assessInFlight aggregates counts and averages", () => {
+    const a = assessInFlight([
+      { ...base, unrealizedR: 1.0, mfe: 1.0, mae: 0, status: "on_track" },
+      { ...base, forecastId: "g", unrealizedR: -1.0, mfe: 0, mae: -1.0, status: "at_risk" },
+    ] as any);
+    expect(a.total).toBe(2);
+    expect(a.onTrack).toBe(1);
+    expect(a.atRisk).toBe(1);
+    expect(a.avgUnrealizedR).toBeCloseTo(0, 5);
   });
 });

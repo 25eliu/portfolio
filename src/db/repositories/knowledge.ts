@@ -77,18 +77,19 @@ export function knowledgeRepo(db: DB) {
       return rows.map(sourceToDomain);
     },
 
-    /** User-owned sources only (notes/URLs/uploads). Excludes the AI's self_curated facts,
-     *  which live in the AI Library — keeps the personal library uncluttered. */
+    /** User-owned sources only — the notes/URLs/uploads the user ingested. Allowlists those kinds
+     *  rather than excluding `self_curated`, so AI facts AND any system-generated content (e.g.
+     *  `system_lesson`) can never surface in the personal library, whatever trust class they carry. */
     listUserSources(opts: { status?: SourceStatus } = {}): KnowledgeSource[] {
       const rows = opts.status
         ? db
             .query<SourceRow, [string]>(
-              "SELECT * FROM knowledge_sources WHERE trust_class <> 'self_curated' AND status = ? ORDER BY updated_at DESC",
+              "SELECT * FROM knowledge_sources WHERE kind IN ('note','url','upload') AND status = ? ORDER BY updated_at DESC",
             )
             .all(opts.status)
         : db
             .query<SourceRow, []>(
-              "SELECT * FROM knowledge_sources WHERE trust_class <> 'self_curated' ORDER BY updated_at DESC",
+              "SELECT * FROM knowledge_sources WHERE kind IN ('note','url','upload') ORDER BY updated_at DESC",
             )
             .all();
       return rows.map(sourceToDomain);

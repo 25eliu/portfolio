@@ -7,14 +7,17 @@ import type { App } from "../app.ts";
 const BACKFILL_DATE = "2026-06-01";
 
 /**
- * Stamp a cost basis + buy date on any My-Portfolio holding still missing one, so Total P&L stops
- * reading $0. Uses each symbol's open on {@link BACKFILL_DATE} (from daily bars); falls back to the
- * nearest earlier bar, then to the current quote. Idempotent: a holding is only ever stamped once
- * (`recordEntry` no-ops when a cost basis already exists), and the whole pass returns immediately
- * once nothing is untracked — cheap to call on every portfolio fetch.
+ * Stamp a cost basis + buy date on any holding still missing one, so Total P&L (and the day-one P&L
+ * baseline) stop reading $0. Covers BOTH books — My Portfolio and the AI's paper book — so the same
+ * entry-tracking guarantee holds across them. Uses each symbol's open on {@link BACKFILL_DATE} (from
+ * daily bars); falls back to the nearest earlier bar, then to the current quote. Idempotent: a holding
+ * is only ever stamped once (`recordEntry` no-ops when a cost basis already exists), and the pass
+ * returns immediately once nothing is untracked — cheap to call on every portfolio fetch.
  */
 export async function backfillUntrackedEntries(app: App): Promise<number> {
-  const untracked = app.repos.holdings.listByPortfolio(app.user.id).filter((h) => h.costBasis == null);
+  const untracked = [app.user.id, app.ai.id]
+    .flatMap((portfolioId) => app.repos.holdings.listByPortfolio(portfolioId))
+    .filter((h) => h.costBasis == null);
   if (untracked.length === 0) return 0;
 
   let stamped = 0;
