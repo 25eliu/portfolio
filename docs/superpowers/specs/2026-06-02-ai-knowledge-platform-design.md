@@ -2,39 +2,41 @@
 
 **Date:** 2026-06-02
 **Status:** Draft for review
-**Approach:** A (typed thesis table + graph-native tagging), shipped in two phases
+**Approach:** A (typed thesis table + graph-native tagging), shipped in three de-risked phases
 **Branch:** `feat/intel-platform-phases-3-5`
 
 ---
 
 ## 1. Problem
 
-The AI produces three kinds of knowledge, each with a gap:
+The AI produces knowledge in several places, each with a gap — and the new work must stay coherent with the **existing performance-wiki briefing that already drives analysis quality** (`compileWiki()` → injected at `src/llm/prompts.ts:103`).
 
 | Store | Today | Gap |
 |-------|-------|-----|
-| **Knowledge Library** (`knowledge_sources`) | `GET /knowledge/sources` returns `listSources()` — **everything**, including `trust_class: "self_curated"` AI facts, which `KnowledgeLibrary.tsx` even badges `"ai-curated"`. | AI facts pollute the user's personal library; no day-sectioning, tags, or search. |
-| **Self-curated facts** (`CuratedMemory.tsx` + `/knowledge/curated`) | Already day-sectioned + collapsible; written by `curateFacts()` each run. | Not searchable, not tagged; archive isn't visibly "gone"; cramped beside the personal library. |
-| **AI sector / market thesis** | Computed ephemerally (`collectAiThesisTickers`) and discarded. A per-report `MarketContext` (SPY trend + macro) exists but isn't an outlook. | Sector / theme / regime conclusions are **never stored or shown**, not reachable by the query bot, not carried forward. |
+| **Knowledge Library** (`knowledge_sources`) | `GET /knowledge/sources` returns `listSources()` — **everything**, including `self_curated` AI facts (`KnowledgeLibrary.tsx` even badges them `"ai-curated"`). | Must be **user-only**; AI facts leak in. No day-sectioning/tags/search. |
+| **Self-curated facts** (`CuratedMemory.tsx`, `curateFacts()`) | Day-sectioned + collapsible. 5 hard gates (citation, ≤140 chars, exact-hash dedup, 3/run, 40/scope) + a soft prompt bar. | **No significance or near-duplicate gate** → "genuinely worth noting" is hoped for, not enforced. Not searchable, not tagged. |
+| **Performance wiki / briefing** (`compileWiki()`) | Cohort metrics from **resolved** outcomes + lessons + an **Open Book** that marks live calls to today's price. | The Open Book is **briefing text only — never persisted**; **no daily MFE/MAE or drift tracking**. Performance is assessed only once, at the horizon (`resolveAt`). |
+| **AI sector / market thesis** | Ephemeral (`collectAiThesisTickers`), discarded. | Never stored, shown, graph-linked, fed back, or query-reachable. |
 
 ## 2. Goal
 
-A neat, dense, **tagged** AI-knowledge store that is **separated** from the personal library, **day-sectioned / collapsible / searchable**, **outlook-bearing** (sector / theme / regime views persisted and surfaced), with **archive = gone from view** (provenance kept), exposed through **one canonical tagged-JSON shape** any consumer can use (analysis pipeline, query bot, future platforms), and fully **human-browsable**.
+A neat, dense, **tagged** AI-knowledge store, **separated** from the user library, **day-sectioned / collapsible / searchable**, **outlook-bearing**, with **archive = gone from view**, all **coherent with the performance wiki** (one trusted briefing, one knowledge graph) and exposed through **one canonical tagged-JSON shape** any consumer can use. Plus: the wiki **tracks and assesses its calls daily**, not only at resolution. Fully human-browsable.
 
-## 3. Approach (A) and why it's split into two phases
+## 3. Approach (A) and phasing rationale
 
-Approach A: theses get a typed `ai_theses` table; tags are knowledge-graph nodes + `tagged_with` edges (no parallel tag table to drift); facts stay in `knowledge_sources` and are resurfaced, not migrated.
+Approach A: theses get a typed `ai_theses` table; tags are knowledge-graph nodes + `tagged_with` edges (no parallel table to drift); facts stay in `knowledge_sources`, resurfaced not migrated; **theses and daily tracking flow through the existing `compileWiki()` briefing and the knowledge graph** so the LLM keeps a single, trusted knowledge basis.
 
-**The risk is not uniform.** Separating the library and tagging is pure plumbing over tables and patterns that already exist. The one genuinely novel, quality-sensitive piece is *getting the LLM to author a good cross-cutting sector/theme/regime outlook every run*. So we isolate that:
+The risk is uneven, so we isolate it across three independently shippable phases:
 
-- **Phase 1 — Separate & Tag (de-risked core).** No schema migration, no pipeline or LLM changes. Ships standalone value: a clean personal library, a real AI Library with search + tags, archive-hidden, and a canonical API.
-- **Phase 2 — Theses & Market View.** Adds the `ai_theses` table, the LLM outlook contract, the synthesis + carry-forward, and the Market View UI. Builds directly on Phase 1's tagging, serializer, and query tool.
+- **Phase 1 — User-only library + quality-gated, tagged AI Library.** No migration. Low risk. Makes the personal library user-only, raises the curation bar so only genuinely-noteworthy facts persist, and gives AI facts a searchable/tag-filterable/archive-hidden home.
+- **Phase 2 — Daily performance tracking.** One migration. Persists the (currently ephemeral) Open Book as daily marks with running MFE/MAE/drift, and assesses in-flight calls daily — feeding the **same** briefing the LLM already trusts.
+- **Phase 3 — Theses & Market View.** One migration. The LLM authors a cross-cutting outlook each run; it is compiled **into the wiki briefing + graph** (like lessons) and surfaced in a Market View. Builds on P1's tagging + P2's richer daily signal.
 
-Each phase is independently shippable and testable. Phase 2 does not refactor Phase 1; it extends it.
+P1 and P2 are independent; P3 depends on both. No phase refactors an earlier one — each extends shared pieces (the canonical shape §4, the tag substrate §5, the `compileWiki` briefing).
 
-## 4. The canonical shape (both phases serialize to this)
+## 4. The canonical shape (P1 + P3 serialize to this)
 
-One JSON shape for facts and theses — the "ready for many platforms" contract. Phase 1 emits the `kind: "fact"` variant; Phase 2 fills in the thesis fields.
+One JSON shape for facts and theses — the "ready for many platforms" contract. P1 emits the fact variant; P3 fills thesis fields.
 
 ```ts
 type AiInsight = {
@@ -48,6 +50,7 @@ type AiInsight = {
   stance: string | null;           // null for facts
   conviction: number | null;       // null for facts
   horizon: string | null;          // null for facts
+  significance: number | null;     // facts: model-rated decision value (P1); theses: conviction echo
   tags: { dimension: string; value: string; source: "ai" | "human" }[];
   tickers: string[];
   sources: { title: string; url: string }[];
@@ -58,7 +61,7 @@ type AiInsight = {
 
 ## 5. Tagging model (shared substrate, built in Phase 1)
 
-Tags are **knowledge-graph nodes + `tagged_with` edges** — keeping the substrate canonical (no derived duplicate). Dimensions map to node types:
+Tags are **knowledge-graph nodes + `tagged_with` edges** — keeping the substrate canonical (the same graph the wiki lessons link into via `linkLessonGraph`). Dimensions:
 
 | Dimension | Node | Edge from insight node |
 |-----------|------|------------------------|
@@ -68,122 +71,165 @@ Tags are **knowledge-graph nodes + `tagged_with` edges** — keeping the substra
 | direction | new `tag:direction:bullish` | `tagged_with` |
 | horizon | new `tag:horizon:3mo` | `tagged_with` |
 
-Every insight already has (or gets) a graph node: facts use `source:<id>` (`curate.ts:114`); theses use `thesis:<id>` (Phase 2). Edge `data_json` carries `{ source: "ai" | "human" }` so human edits are distinguishable and survive re-tagging. Filtering reads the already-indexed `kg_edges` (`idx_kgedge_dst`, `idx_kgedge_rel`). A thin **`insightTags` repo** wraps edge read/write/delete with a typed API and powers `GET /tags` (taxonomy + counts).
-
-*Rejected:* a denormalized `insight_tags` table — faster joins but duplicates the graph and can drift; indexed edges are fast enough.
+Facts use the existing `source:<id>` node (`curate.ts:114`); theses use `thesis:<id>` (P3). Edge `data_json` carries `{ source: "ai" | "human" }` so human edits survive re-tagging. Filtering reads indexed `kg_edges`; a thin **`insightTags` repo** wraps read/write/delete and powers `GET /tags`. *Rejected:* a denormalized `insight_tags` table — duplicates the graph and can drift.
 
 ---
 
-## Phase 1 — Separate & Tag the AI Library
+## Phase 1 — User-only library + quality-gated, tagged AI Library
 
-**No migration. No pipeline/LLM change.** Touches repos, routes, one new serializer, the tag repo, and the frontend.
+**No migration.** Repos, routes, serializer, tag repo, a tighter curation gate (one additive `memorableFacts` field), and frontend.
 
-### 1.1 Split the libraries
-- New `knowledge.listUserSources()` (or `listSources({ excludeTrust: ["self_curated"] })`); `GET /knowledge/sources` uses it. `KnowledgeLibrary.tsx` drops the `self_curated` render path — AI facts no longer appear in the personal library.
+### 1.1 Make the Knowledge Library user-only
+- New `knowledge.listUserSources()` (excludes `self_curated`); `GET /knowledge/sources` uses it. `KnowledgeLibrary.tsx` drops the `self_curated` path — AI facts no longer appear in the personal library. (Regression-tested.)
 
-### 1.2 Tagging
-- Add the `insightTags` repo (§5) over `kg_nodes`/`kg_edges`; new node types `tag` (and `thesis`, reserved for Phase 2) — `kg_nodes.type` is free-text, no schema change.
-- Extend `curateFacts` auto-tagging: it already writes `source —mentions→ ticker`; add the ticker's `sector` tag (from the ticker's existing `belongs_to` edge when present). Existing facts already carry `mentions→ticker`, so they are **immediately ticker-filterable with no backfill**; sector backfill optional.
-- Human edits: `PUT /ai-insights/:kind/:id/tags` with `{ add[], remove[] }`, writing `source:"human"` edges.
+### 1.2 Raise the self-curation bar to "genuinely worth noting"
+Beyond today's 5 gates, add a **significance + structural-category gate** (the only LLM-contract change in P1 — additive, with safe defaults so a malformed value never breaks a recommendation):
+```ts
+// MemorableFact gains:
+significance: z.number().min(0).max(1).default(0).catch(0),   // model-rated decision value
+category: z.enum(["moat","secular","management","capital_structure",
+                  "regulatory","unit_economics"]).nullable().default(null).catch(null),
+```
+`curateFacts` then:
+- **Significance threshold** — persist only `significance ≥ 0.6` *and* a recognized `category` (the prompt already names exactly these structural categories).
+- **Keep top-N by significance** per run (not first-3) so the strongest survive the cap.
+- **Near-duplicate guard** — in addition to exact-hash dedup, reject a fact whose normalized-token Jaccard overlap with an existing active fact in scope exceeds a threshold (cheap, no embeddings).
+- Prompt update (`src/llm/prompts.ts:156`) asks the model to emit `significance` + `category` and reiterates the durable-only bar.
 
-### 1.3 Canonical serializer + AI Library API
-- `serializeInsight()` producing `AiInsight` (fact variant) — golden-tested so Phase 2 extends it without breaking consumers.
-- Routes (new `src/server/routes/aiKnowledge.ts`, pattern from `routes/knowledge.ts`):
-  - `GET /ai-library/days` → `[{ date, factCount }]`
-  - `GET /ai-library/day/:date` → `{ date, facts: AiInsight[] }`
-  - `GET /ai-library/search?q=&dimension=&value=&from=&to=` (FTS over fact chunks + tag filter)
-  - `GET /tags` · `PUT /ai-insights/:kind/:id/tags` · `DELETE /ai-insights/:kind/:id` (archive → hidden)
-- `search_ai_insights({ q, dimension, value })` query-bot tool (facts), with `cite()` emitting `sources`.
+Result: the self-curated memory holds only durable, citable, distinct, decision-relevant facts.
 
-### 1.4 Frontend
-- `CuratedMemory.tsx` → **`AiLibrary.tsx`**: keep day-sectioned/collapsible; add a **search bar** + **tag-chip filters**; rows show editable tag chips; list is **active-only** with a "show archived" toggle. Promote to its own `Section` ("AI knowledge library"), separate from the personal library.
-- `web/src/api/{client,hooks}.ts`: `AiInsight`/`Tag` types; `useAiLibraryDays/Day/Search`, `useTags`, `useEditInsightTags`; update `useKnowledgeSources` to the curated-excluded list.
+### 1.3 Tagging
+- Add the `insightTags` repo (§5); new node types `tag` (and `thesis`, reserved). Extend `curateFacts` to also tag the ticker's `sector` (from its `belongs_to` edge). Existing facts already have `mentions→ticker`, so they're ticker-filterable with **no backfill**.
+- Human edits: `PUT /ai-insights/:kind/:id/tags` `{ add[], remove[] }` writing `source:"human"`.
 
-### 1.5 Phase 1 done = 
-Personal library is clean; AI facts have a searchable, tag-filterable, archive-hidden home; tags are editable; one canonical API serves them. Nothing in the analysis pipeline changed.
+### 1.4 Canonical serializer + AI Library API
+- `serializeInsight()` → `AiInsight` (fact variant), golden-tested.
+- New `src/server/routes/aiKnowledge.ts`: `GET /ai-library/days` · `/day/:date` · `/search?q=&dimension=&value=&from=&to=` · `GET /tags` · `PUT /ai-insights/:kind/:id/tags` · `DELETE /ai-insights/:kind/:id` (archive→hidden).
+- `search_ai_insights` query-bot tool (facts) with `cite()`.
+
+### 1.5 Frontend
+- `CuratedMemory.tsx` → **`AiLibrary.tsx`**: day-sectioned/collapsible + **search bar** + **tag-chip filters**; rows show editable tag chips and the significance/category; **active-only** with a "show archived" toggle; promoted to its own `Section`.
+- `client/hooks`: `AiInsight`/`Tag` types; `useAiLibraryDays/Day/Search`, `useTags`, `useEditInsightTags`; `useKnowledgeSources` → curated-excluded list.
+
+**Done =** personal library is user-only; AI memory holds only genuinely-noteworthy, tagged, searchable, archive-hidden facts.
 
 ---
 
-## Phase 2 — Theses & Market View
+## Phase 2 — Daily performance tracking (assess calls every day, not just at resolution)
 
-Adds the outlook. The risky part — LLM authoring the outlook — is the only novel logic; everything else reuses Phase 1.
+Persists the ephemeral Open Book and assesses in-flight calls daily, feeding the **same** `compileWiki()` briefing the LLM already trusts.
 
-### 2.1 Data — migration `018_ai_theses`
+### 2.1 Data — migration `018_forecast_daily_marks`
+```sql
+CREATE TABLE forecast_daily_marks (
+  id              TEXT PRIMARY KEY,
+  forecast_id     TEXT NOT NULL REFERENCES scored_forecasts(id) ON DELETE CASCADE,
+  ticker          TEXT NOT NULL,
+  date            TEXT NOT NULL,            -- YYYY-MM-DD mark date
+  mark_price      REAL NOT NULL,
+  move_from_entry REAL NOT NULL,            -- pct since reference/entry
+  progress_to_target REAL,                  -- 0..1
+  progress_to_stop   REAL,                  -- 0..1
+  unrealized_r    REAL,                     -- (mark-entry)/(entry-stop), signed
+  mfe             REAL NOT NULL,            -- running max favorable excursion to date
+  mae             REAL NOT NULL,            -- running max adverse excursion to date
+  spy_excess      REAL,                     -- excess vs benchmark since entry
+  status          TEXT NOT NULL,            -- on_track | near_target | at_risk | near_stop
+  created_at      TEXT NOT NULL,
+  UNIQUE (forecast_id, date)
+);
+CREATE INDEX idx_fdm_forecast ON forecast_daily_marks(forecast_id);
+CREATE INDEX idx_fdm_date     ON forecast_daily_marks(date);
+```
+
+### 2.2 Daily job
+- New `src/resolution/track.ts` `trackOpenForecasts(app)`, called in `dailyRun()` right after pricing / before `compileWiki()` (it reuses `computeOpenBook` math + `getQuotes`). For each `listOpen()` forecast it upserts today's mark and **rolls MFE/MAE forward** (max of prior mark and today's excursion). Idempotent per `(forecast_id, date)`.
+- Marks are immutable history; resolution at horizon stays authoritative (bar-based) and can cross-check against accumulated MFE/MAE.
+
+### 2.3 Feed the wiki / briefing (alignment)
+- The Open Book section of the briefing now reads **persisted marks** (today + trajectory) instead of recomputing from scratch — same render, now historized.
+- Add an **In-Flight assessment** computed from the latest marks per run: counts of on_track/at_risk/near_stop, mean unrealized R, share positive vs SPY. Append it to the `compileWiki()` briefing body (a small "IN-FLIGHT (marked today)" block) and persist it with the briefing — so the LLM sees "how are my open calls actually tracking" daily, not just resolved history.
+
+### 2.4 Surfacing
+- Journal entry detail gains a **daily-progress mini-series** (move-from-entry / MFE / MAE over days) from `forecast_daily_marks`.
+- New tools/route: `GET /forecasts/:id/marks`; query-bot tool `forecast_progress({ ticker })` for "how is my NVDA call doing day-to-day".
+
+**Done =** every open call is marked and assessed daily, persisted and historized, and the daily assessment is part of the trusted briefing.
+
+---
+
+## Phase 3 — Theses & Market View
+
+The LLM authors a cross-cutting outlook each run; it is compiled **into the wiki briefing + knowledge graph** and surfaced in a Market View. Builds on P1 tagging + P2 daily signal.
+
+### 3.1 Data — migration `019_ai_theses`
 ```sql
 CREATE TABLE ai_theses (
   id            TEXT PRIMARY KEY,
-  run_id        TEXT,
-  report_id     TEXT,
-  date          TEXT NOT NULL,              -- YYYY-MM-DD (day-section key)
+  run_id        TEXT, report_id TEXT,
+  date          TEXT NOT NULL,              -- day-section key
   created_at    TEXT NOT NULL,
   level         TEXT NOT NULL,              -- regime | sector | theme
-  subject       TEXT NOT NULL,              -- "market" | sector | theme name
+  subject       TEXT NOT NULL,              -- "market" | sector | theme
   subject_key   TEXT NOT NULL,              -- normalized (level+slug) — supersede key
   stance        TEXT NOT NULL,              -- risk_on|neutral|risk_off|defensive | bullish|bearish|neutral
-  conviction    REAL NOT NULL,              -- 0..1
-  horizon       TEXT NOT NULL,              -- reuse Horizon enum
-  summary       TEXT NOT NULL DEFAULT '',   -- one-line headline
-  thesis        TEXT NOT NULL,              -- dense reasoning prose
+  conviction    REAL NOT NULL,
+  horizon       TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  thesis        TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'active', -- active | superseded | archived
   supersedes_id TEXT,
-  data_json     TEXT NOT NULL DEFAULT '{}'  -- {tickers[], sources[], sectorCode, metrics}
+  data_json     TEXT NOT NULL DEFAULT '{}'  -- {tickers[], sources[], metrics}
 );
-CREATE INDEX idx_thesis_date    ON ai_theses(date);
-CREATE INDEX idx_thesis_level   ON ai_theses(level);
+CREATE INDEX idx_thesis_date ON ai_theses(date);
 CREATE INDEX idx_thesis_subject ON ai_theses(subject_key);
-CREATE INDEX idx_thesis_status  ON ai_theses(status);
+CREATE INDEX idx_thesis_status ON ai_theses(status);
 CREATE VIRTUAL TABLE ai_theses_fts USING fts5(thesis_id UNINDEXED, text);
 ```
-**Supersede-by-subject:** a new thesis for an existing `subject_key` flips the prior `active` row to `superseded` and links it via `supersedes_id`. Market View shows the active view; the chain is the "how this evolved" history. (Mirrors wiki-lesson supersede + `curate.ts` `enforceCap`.)
+**Supersede-by-subject:** a new thesis for an existing `subject_key` flips the prior `active` row to `superseded` and links via `supersedes_id` (mirrors wiki-lesson supersede + `enforceCap`).
 
-### 2.2 LLM contract (the risk — isolated here)
+### 3.2 LLM contract (the isolated risk)
 ```ts
-const ThesisItem = z.object({
-  subject: z.string(), stance: z.string(),
+const ThesisItem = z.object({ subject: z.string(), stance: z.string(),
   conviction: z.number().min(0).max(1), horizon: Horizon,
   summary: z.string(), thesis: z.string(),
-  tickers: z.array(Symbol).default([]), sources: z.array(Source).default([]),
-});
-const Outlook = z.object({
-  regime:  ThesisItem.nullable().default(null),
+  tickers: z.array(Symbol).default([]), sources: z.array(Source).default([]) });
+const Outlook = z.object({ regime: ThesisItem.nullable().default(null),
   sectors: z.array(ThesisItem).default([]).catch([]),  // cap 8
-  themes:  z.array(ThesisItem).default([]).catch([]),   // cap 6
-});
-// DailyReport gains: outlook: Outlook.nullable().default(null)   (null offline/fake)
+  themes:  z.array(ThesisItem).default([]).catch([]) });// cap 6
+// DailyReport gains: outlook: Outlook.nullable().default(null)
 ```
-Model-authored, grounded with citations — not a deterministic average. Caps mirror `MAX_FACTS_PER_RUN` bloat control.
+Model-authored, citation-grounded. The prompt that elicits it is shown the current Open-Book/in-flight assessment (P2) and active theses, so the outlook is consistent with how its calls are actually tracking.
 
-### 2.3 Persist + carry-forward
-- New `src/knowledge/curateTheses.ts` (parallel to `curate.ts`), called right after `persistCuratedFacts` with run/report provenance: insert row + FTS, upsert `thesis:<id>` node, auto-tag (sector/theme/direction(stance)/horizon + `mentions` tickers + `supports/cites` evidence), supersede prior subject.
-- `compileOutlookBriefing(app)` → compact summary of **active** theses (e.g. *"Semis: bullish 0.7 (3mo)"*), injected alongside the wiki briefing into the next run — the model sees its own standing view instead of recomputing.
+### 3.3 Persist + integrate with the wiki (alignment, not a bolt-on)
+- New `src/knowledge/curateTheses.ts` (parallel to `curate.ts`), called after `persistCuratedFacts`: insert row + FTS, upsert `thesis:<id>` node, auto-tag (sector/theme/direction/horizon + `mentions` tickers), link evidence (`supports`/`cites`/`derived_from` → sources, journal entries, and the P2 marks), supersede prior subject.
+- **Briefing integration:** extend `compileWiki()` to append an **OUTLOOK** section (current active regime + sector/theme leans) to the one briefing body, and graph-link theses exactly as `linkLessonGraph` does for lessons. This replaces the earlier "separate `compileOutlookBriefing` injection" idea — there remains a single trusted briefing.
 
-### 2.4 API + query tools (extend Phase 1)
-- `serializeInsight()` now fills thesis fields; `search_ai_insights` includes theses.
-- `GET /market-view/current` · `/days` · `/day/:date` · `/subject/:level/:subject` (supersede history).
-- Query tools: `market_view`, `sector_outlook({ sector })`.
+### 3.4 API + query tools + UI
+- `serializeInsight()` fills thesis fields; `search_ai_insights` includes theses.
+- `GET /market-view/current` · `/days` · `/day/:date` · `/subject/:level/:subject` (history); tools `market_view`, `sector_outlook({ sector })`.
+- **`MarketView.tsx`** (own `Section`, after "Daily recommendations"): regime banner, sector leans (color by stance, conviction bar, expand → thesis + tickers + sources + the open calls backing it), themes, day-sectioned history + per-subject evolution. `AiLibrary` day groups also show theses.
+- Existing `MarketContextBanner` stays; the regime thesis references it.
 
-### 2.5 Frontend
-- **`MarketView.tsx`** (new `Section`, after "Daily recommendations"): regime banner (stance + conviction + horizon + thesis), sector leans (color by stance, conviction bar, expand → thesis + tickers + sources), themes, day-sectioned history + per-subject evolution. Searchable/tag-filterable via Phase 1 components.
-- `AiLibrary.tsx` day groups now also show theses; `client/hooks` gain `Thesis`/`MarketView` types + `useMarketViewCurrent/Days/Day`.
-- Existing `MarketContextBanner` stays in recommendations; the regime thesis references it, not replaces it.
+**Done =** the AI's sector/theme/regime view is stored, tagged, graph-linked, compiled into the trusted briefing, query-reachable, and human-browsable.
 
 ---
 
 ## 6. Testing (TDD, 80%+, per phase)
 
-**Phase 1:** `listUserSources` excludes `self_curated` (regression: AI facts absent from `/knowledge/sources`); `insightTags` edge read/write/delete; `curateFacts` sector auto-tag; `serializeInsight` golden (fact); routes `/ai-library/*`, `/tags`, tag-edit, archive-hides (`server.test.ts` pattern); `search_ai_insights` + `cite()` (`tools.test.ts` pattern); `AiLibrary` render test.
-
-**Phase 2:** `Outlook`/`ThesisItem` parse + caps (8/6) + stance-per-level/horizon enums; `curateTheses` persists row + FTS + node/edges + tags + supersede-by-`subject_key` + dedup + provenance; `ai_theses` repo `listDays/listDay`/current-by-subject/history; `serializeInsight` golden (thesis); `/market-view/*` routes; `market_view`/`sector_outlook` tools; `compileOutlookBriefing` includes active theses; `MarketView` render test.
+- **P1:** `listUserSources` excludes `self_curated` (regression); significance/category gate + near-dup guard + top-N-by-significance in `curateFacts`; `insightTags` edge read/write/delete; sector auto-tag; `serializeInsight` golden (fact); `/ai-library/*`, `/tags`, tag-edit, archive-hides (`server.test.ts`); `search_ai_insights` + `cite()` (`tools.test.ts`); `AiLibrary` render.
+- **P2:** `trackOpenForecasts` upsert + idempotent per day + MFE/MAE roll-forward + status thresholds; `forecast_daily_marks` repo; briefing In-Flight block; `/forecasts/:id/marks` + `forecast_progress` tool; Journal mini-series render.
+- **P3:** `Outlook`/`ThesisItem` parse + caps (8/6) + stance-per-level; `curateTheses` persist + FTS + node/edges + tags + supersede + provenance; `ai_theses` repo days/current/history; `compileWiki` OUTLOOK section + graph links; `serializeInsight` golden (thesis); `/market-view/*`; `market_view`/`sector_outlook`; `MarketView` render.
 
 ## 7. Migration / rollout
 
-- Phase 1: **no migration**. Phase 2: `018_ai_theses` (+ `ai_theses_fts` + indexes), append-only; shipped migrations untouched; no thesis backfill (accrues from next run). `kg_nodes.type` gains `tag`, `thesis` (free-text column).
-- Keep `architecture-and-roadmap.md` updated in the same change (per the architecture-doc convention).
+- P1: **no migration**. P2: `018_forecast_daily_marks`. P3: `019_ai_theses` (+ FTS). All append-only; shipped migrations untouched; no backfill (marks/theses accrue from the next run). `kg_nodes.type` gains `tag`, `thesis` (free-text column).
+- Keep `architecture-and-roadmap.md` updated in the same change (architecture-doc convention).
 
 ## 8. Open decisions (confirm at review)
 
-1. **Phasing** — ship Phase 1 (separate + tag) standalone, then Phase 2 (theses + Market View)? → recommended.
-2. **Outlook generation** — model-authored (spec'd) vs deterministic aggregate.
-3. **Regime stance vocabulary** — `{risk_on, neutral, risk_off, defensive}` for regime; `Direction` for sector/theme.
-4. **Market View placement** — own `Section` after "Daily recommendations".
-5. **Outlook tiers** — ship all three (regime + sector + theme) vs regime-only; caps 8 sectors / 6 themes.
+1. **Phasing** — P1 (library) → P2 (daily tracking) → P3 (theses), each shipped standalone? → recommended.
+2. **Significance gate** — threshold `≥0.6` + required structural `category` for a fact to persist? → recommended.
+3. **Daily tracking scope** — mark only the AI's **open scored forecasts** each day (recommended), or every analyzed ticker even when no call was made?
+4. **Outlook** — model-authored (spec'd) vs deterministic aggregate; stance vocab `{risk_on,neutral,risk_off,defensive}` (regime) + `Direction` (sector/theme); caps 8/6; ship all three tiers vs regime-only.
+5. **Market View placement** — own `Section` after "Daily recommendations".
