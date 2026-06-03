@@ -26,6 +26,21 @@ import type {
   WikiMetric,
 } from "./types.ts";
 
+export type ForecastDailyMark = {
+  id: string; forecastId: string; ticker: string; date: string; markPrice: number;
+  moveFromEntry: number; progressToTarget: number; progressToStop: number;
+  unrealizedR: number | null; mfe: number; mae: number; spyExcess: number | null;
+  status: "on_track" | "near_target" | "at_risk" | "near_stop"; createdAt: string;
+};
+export type InFlightAssessment = {
+  date: string | null; total: number; onTrack: number; atRisk: number; nearStop: number;
+  nearTarget: number; avgUnrealizedR: number | null; avgMfe: number | null; avgMae: number | null;
+};
+export type InFlightCall = {
+  forecastId: string; ticker: string; side: string | null; resolveBy: string | null;
+  movePct: number; unrealizedR: number | null; mfe: number; mae: number; status: string;
+};
+
 export type SourcePatch = {
   title?: string;
   scope?: "global" | "ticker";
@@ -155,6 +170,8 @@ export const client = {
   wikiLesson: (id: string) => api<{ lesson: WikiLesson }>(`/wiki/lessons/${id}`),
   wikiMetrics: (window?: string) =>
     api<{ metrics: WikiMetric[] }>(`/wiki/metrics${window ? `?window=${window}` : ""}`),
+  wikiInFlight: () => api<{ assessment: InFlightAssessment; calls: InFlightCall[] }>("/wiki/in-flight"),
+  forecastMarks: (id: string) => api<{ marks: ForecastDailyMark[] }>(`/wiki/forecasts/${id}/marks`),
   trades: () => api<{ trades: TradeDecision[] }>("/trades"),
   askQuery: (question: string, tickers: string[] = []) =>
     api<{ queryId: string }>("/query", { method: "POST", body: JSON.stringify({ question, tickers }) }),

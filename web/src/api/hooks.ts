@@ -173,6 +173,9 @@ export const useWikiBriefing = () => useQuery({ queryKey: [...keys.wiki, "briefi
 export const useWikiLessons = () => useQuery({ queryKey: [...keys.wiki, "lessons"], queryFn: client.wikiLessons });
 export const useWikiMetrics = (window?: string) =>
   useQuery({ queryKey: [...keys.wiki, "metrics", window ?? "all"], queryFn: () => client.wikiMetrics(window) });
+export const useWikiInFlight = () => useQuery({ queryKey: [...keys.wiki, "in-flight"], queryFn: client.wikiInFlight });
+export const useForecastMarks = (id: string | null) =>
+  useQuery({ queryKey: [...keys.wiki, "marks", id], queryFn: () => client.forecastMarks(id!), enabled: id != null });
 
 export const useTrades = () => useQuery({ queryKey: keys.trades, queryFn: client.trades });
 export const useQueryLog = () => useQuery({ queryKey: keys.queryLog, queryFn: client.queryLog });

@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { BookMarked, TrendingUp } from "lucide-react";
 import type { LessonState, WikiLesson, WikiMetric } from "../api/types.ts";
-import { useWikiBriefing, useWikiLessons, useWikiMetrics } from "../api/hooks.ts";
+import { useForecastMarks, useWikiBriefing, useWikiInFlight, useWikiLessons, useWikiMetrics } from "../api/hooks.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
 
@@ -20,6 +21,7 @@ export function Wiki() {
   const briefing = useWikiBriefing();
   const lessons = useWikiLessons();
   const metrics = useWikiMetrics("all_time");
+  const inFlight = useWikiInFlight();
 
   const overall = metrics.data?.metrics.find((m) => m.cohortKey === "overall");
   const loading = briefing.isLoading || lessons.isLoading;
@@ -54,6 +56,8 @@ export function Wiki() {
               </pre>
             </div>
           )}
+
+          {(inFlight.data?.calls.length ?? 0) > 0 && <InFlightPanel data={inFlight.data!} />}
 
           <div className="space-y-2">
             {(lessons.data?.lessons ?? []).map((l) => (
@@ -101,6 +105,64 @@ function LessonRow({ lesson }: { lesson: WikiLesson }) {
         <span className="tnum ml-auto text-[10px] text-text-muted">n={lesson.n}</span>
       </div>
       <p className="text-[11px] leading-relaxed text-text-muted">{lesson.body}</p>
+    </div>
+  );
+}
+
+function InFlightPanel({ data }: { data: { assessment: import("../api/client.ts").InFlightAssessment; calls: import("../api/client.ts").InFlightCall[] } }) {
+  const a = data.assessment;
+  const r = (x: number | null) => (x == null ? "—" : `${x.toFixed(2)}R`);
+  return (
+    <div className="mt-5">
+      <p className="mb-2 text-[11px] uppercase tracking-wide text-text-muted">
+        In-flight book{a.date ? ` · marked ${a.date}` : ""} · {a.total} open
+      </p>
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-muted">
+        <span className="text-pos">{a.onTrack} on track</span>
+        <span>{a.atRisk} at risk</span>
+        <span className="text-neg">{a.nearStop} near stop</span>
+        <span>{a.nearTarget} near target</span>
+        <span>avg {r(a.avgUnrealizedR)}</span>
+        <span>MFE {r(a.avgMfe)}</span>
+        <span>MAE {r(a.avgMae)}</span>
+      </div>
+      <div className="divide-y divide-hairline">
+        {data.calls.map((c) => (
+          <InFlightRow key={c.forecastId} call={c} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InFlightRow({ call }: { call: import("../api/client.ts").InFlightCall }) {
+  const [open, setOpen] = useState(false);
+  const marks = useForecastMarks(open ? call.forecastId : null);
+  const bad = call.status === "near_stop" || call.status === "at_risk";
+  return (
+    <div className="py-2">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 text-left text-[12px]">
+        <span className="font-medium text-text">{call.ticker}</span>
+        <span className="text-text-muted">{call.side}</span>
+        <span className={bad ? "text-neg" : "text-pos"}>{pct(call.movePct)}</span>
+        <span className="text-text-muted">{call.unrealizedR == null ? "—" : `${call.unrealizedR.toFixed(2)}R`}</span>
+        <span className="ml-auto text-[10px] text-text-muted">{call.status}{call.resolveBy ? ` · by ${call.resolveBy}` : ""}</span>
+      </button>
+      {open && (
+        <div className="mt-2 flex items-end gap-0.5">
+          {(marks.data?.marks ?? []).map((m) => {
+            const h = Math.min(24, Math.max(2, Math.round(Math.abs(m.moveFromEntry) * 120)));
+            return (
+              <span
+                key={m.date}
+                title={`${m.date}: ${pct(m.moveFromEntry)} · ${m.unrealizedR == null ? "—" : m.unrealizedR.toFixed(2)}R · ${m.status}`}
+                className={`w-1.5 rounded-sm ${m.moveFromEntry >= 0 ? "bg-pos/60" : "bg-neg/60"}`}
+                style={{ height: `${h}px` }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
