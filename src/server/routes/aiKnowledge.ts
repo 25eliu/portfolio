@@ -26,7 +26,7 @@ export function aiKnowledgeRoutes(app: App): Hono {
     const counts = new Map<string, { factCount: number; thesisCount: number }>();
     const bump = (date: string, key: "factCount" | "thesisCount") => {
       const e = counts.get(date) ?? { factCount: 0, thesisCount: 0 };
-      e[key]++; counts.set(date, e);
+      counts.set(date, { ...e, [key]: e[key] + 1 }); // immutable: replace, don't mutate in place
     };
     for (const f of app.repos.knowledge.listCuratedFacts()) bump(f.createdAt.slice(0, 10), "factCount");
     for (const t of app.repos.aiTheses.listActive()) bump(t.date, "thesisCount");

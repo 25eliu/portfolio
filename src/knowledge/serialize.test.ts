@@ -54,4 +54,8 @@ test("serializeThesis → AiInsight (thesis variant)", () => {
   expect(i.conviction).toBe(0.7);
   expect(i.tickers).toEqual(["NVDA"]);
   expect(i.sources).toEqual([{ title: "x", url: "https://x.com", sourceId: "src_1" }]);
+  expect(i.tags).toContainEqual({ dimension: "sector", value: "Semiconductors", source: "ai" });
+  expect(i.tags).toContainEqual({ dimension: "direction", value: "bullish", source: "ai" });
+  expect(i.tags).toContainEqual({ dimension: "horizon", value: "3mo", source: "ai" });
+  expect(i.tags).toContainEqual({ dimension: "ticker", value: "NVDA", source: "ai" });
 });
