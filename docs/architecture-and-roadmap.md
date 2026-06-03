@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-02._
+> _Last updated: 2026-06-03._
 
 ## 1. Product direction
 
@@ -132,6 +132,15 @@ computed facts; it does not replace the database or grade the model from memory.
   (`KNOWLEDGE_RELEVANCE_FLOOR`; ticker-scoped + graph-linked hits bypass it). The floor mechanism is wired
   and tunable but **defaults permissive (0)** because BM25 is corpus-relative and near-zero on a small KB;
   the ≤6-excerpt / ≤4000-char budget bounds tokens regardless. Tighten once the KB is large.
+- **AI Knowledge Platform — Phase 2 (implemented):** daily performance tracking for open forecasts.
+  `forecast_daily_marks` (migration 018) stores one immutable MTM row per open forecast per day (move
+  since entry, progress to target/stop, unrealized R, running MFE/MAE, status). `trackOpenForecasts`
+  runs at pipeline step 2b.5 — after resolution, before the wiki compile — and marks the prior open
+  book at today's price (current-run forecasts are first marked next run). The in-flight assessment
+  (`assessInFlight` / `renderInFlight`) is injected into the **wiki briefing** and surfaces as the
+  "In-flight book" panel in `Wiki.tsx`. The Journal is unchanged. Reachable via
+  `GET /api/wiki/in-flight`, `GET /api/wiki/forecasts/:id/marks`, and the `forecast_progress` query
+  tool. See §12 Phase 2 entry for full detail.
 - **AI Knowledge Platform — Phase 1 (implemented):** the self-curated AI insight layer. See §12 Phase 1
   entry for the full breakdown. Key pieces landed in this iteration:
   - **Self-curation quality gate** (`src/knowledge/curate.ts`): a fact is kept only if `significance ≥ 0.6`
@@ -287,11 +296,12 @@ Use first-class SQLite tables for common queries. The knowledge graph (§5a) sit
 relationship queries and provenance.
 
 ```text
-journal_entries       every recommendation, scored or unscored
-scored_forecasts      complete actionable plans and scoring policy
-forecast_outcomes     resolution result and measured performance
-trade_decisions       proposed, skipped, submitted, filled, failed
-execution_settings    paper auto-execution enabled flag
+journal_entries         every recommendation, scored or unscored
+scored_forecasts        complete actionable plans and scoring policy
+forecast_daily_marks    daily MTM for OPEN forecasts (one row per forecast × day)
+forecast_outcomes       resolution result and measured performance
+trade_decisions         proposed, skipped, submitted, filled, failed
+execution_settings      paper auto-execution enabled flag
 recommendation_evidence exact chunks used by each recommendation
 ```
 
@@ -500,6 +510,8 @@ recommendations.
 GET    /api/wiki/briefing
 GET    /api/wiki/lessons
 GET    /api/wiki/metrics
+GET    /api/wiki/in-flight               (current in-flight assessment across open forecasts)
+GET    /api/wiki/forecasts/:id/marks     (full daily-mark history for one forecast)
 GET    /api/graph/nodes
 GET    /api/graph/node/:id
 ```
@@ -530,9 +542,11 @@ Current single-dashboard structure (as built):
 
 > **Status (current):** the Active slice and Phases **3A, 3B, 3C, 3D, and 4** are **implemented** on a
 > shared knowledge-graph substrate (§5a), plus all of **Phase 5** (grounded NL query + mature risk
-> controls), and **AI Knowledge Platform Phase 1** (curated AI insight library, graph tagging, AI Library
-> UI, `search_ai_insights` query tool). Remaining: **AI Knowledge Platform Phases 2–3** and **Phase 6**
-> (validation and polish).
+> controls), **AI Knowledge Platform Phase 1** (curated AI insight library, graph tagging, AI Library
+> UI, `search_ai_insights` query tool), and **AI Knowledge Platform Phase 2** (daily performance tracking
+> — `forecast_daily_marks`, `trackOpenForecasts`, `assessInFlight`, wiki briefing + Performance Wiki
+> "In-flight book" panel, `forecast_progress` query tool). Remaining: **Phase 3** (theses + Market View)
+> and **Phase 6** (validation and polish).
 
 ### Active slice — scheduler and performance correctness ✅ done
 
@@ -592,6 +606,37 @@ Current single-dashboard structure (as built):
   and strategy-family eligibility, all enforced in `execution/plan.ts` (entries gated; exits never
   gated). Advisory and AI-paper risk profiles are independent (`/api/risk?portfolio=ai`), settable in
   the UI. Allowed/eligible sets are documented in `domain/risk.ts`.
+
+### Phase 2 — AI Knowledge Platform (daily performance tracking) ✅ done
+
+> _Spec: `docs/superpowers/specs/2026-06-02-ai-knowledge-platform-design.md`_
+>
+> Phase 3 (theses + Market View) is designed but pending.
+
+**Goal:** continuously mark every open scored forecast to current price so performance is visible daily,
+not only at horizon resolution — producing running MTM marks, intra-horizon health signals, and a live
+in-flight assessment fed back into the AI's analysis briefing.
+
+- **`forecast_daily_marks` table (migration 018):** one immutable row per open forecast per day,
+  recording `mark_price`, `move_from_entry`, `progress_to_target`, `progress_to_stop`, `unrealized_r`,
+  running `mfe` / `mae`, `spy_excess`, and a `status` bucket
+  (`on_track | near_target | at_risk | near_stop`). Upsert-idempotent; a same-day re-run replaces the
+  row cleanly. Domain type `ForecastDailyMark` in `src/domain/forecastMark.ts`; repo exposes `upsert`,
+  `listForForecast`, `priorMark` (MFE/MAE roll-forward), and `forDate`.
+- **`trackOpenForecasts` in the daily pipeline (step 2b.5):** runs inside `dailyRun` after forecast
+  resolution (step 2b) and before the wiki compile (step 3). It marks the **prior open book** at
+  today's price — forecasts created in the current run are first marked on the *next* run. Idempotent
+  on re-runs.
+- **In-flight assessment (`assessInFlight` / `renderInFlight`):** aggregates the fresh marks into a
+  compact structured summary (open count, at-risk count, near-target count, best/worst mover, mean
+  unrealized R). This assessment is injected into the **wiki briefing** so the AI reads live book
+  health alongside resolved calibration. It is also surfaced in the **Performance Wiki** view
+  (`Wiki.tsx`) as the "In-flight book" panel. The Journal is unchanged — it remains the immutable
+  recommendation and outcome ledger and receives no in-flight data.
+- **API surface:** `GET /api/wiki/in-flight` (current assessment), `GET /api/wiki/forecasts/:id/marks`
+  (full mark history for a forecast).
+- **`forecast_progress` query tool:** added to `src/query/tools.ts` so "ask your portfolio" can pull
+  per-forecast mark history and the current in-flight summary, grounded and cited.
 
 ### Phase 1 — AI Knowledge Platform ✅ done (Phase 1 of 3)
 
