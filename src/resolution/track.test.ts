@@ -38,6 +38,17 @@ describe("markFor", () => {
     expect(today.mae).toBeCloseTo(-0.5, 5);
     expect(today.status).toBe("at_risk");
   });
+
+  test("uses short-side math for a bearish forecast marked down (favorable)", () => {
+    // bearish: target below ref (80), stop above (110); a drop to 90 is favorable.
+    const f = forecast({ side: "bearish", referencePrice: 100, target: 80, stop: 110 });
+    const m = markFor(f, { markPrice: 90, date: "2026-06-03", spyPrice: null, prior: null, now: "2026-06-03T00:00:00.000Z" });
+    expect(m.moveFromEntry).toBeCloseTo(-0.1, 5); // price fell 10%
+    expect(m.progressToTarget).toBeCloseTo(0.5, 5); // (100-90)/(100-80)
+    expect(m.progressToStop).toBeCloseTo(-1.0, 5); // moved away from the stop
+    expect(m.unrealizedR).toBeCloseTo(1.0, 5); // (100-90)/(110-100) — favorable for a short
+    expect(m.status).toBe("on_track");
+  });
 });
 
 describe("trackOpenForecasts", () => {
