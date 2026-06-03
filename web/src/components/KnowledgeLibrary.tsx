@@ -26,7 +26,9 @@ const TRUST_LABEL: Partial<Record<TrustClass, string>> = {
   private_note: "private note",
   system_lesson: "system",
 };
-const KIND_ICON = { upload: Upload, url: Globe, note: StickyNote, fact: Sparkles } as const;
+// `citation` sources are AI thesis provenance — excluded from this user library at runtime, but the
+// map must cover every SourceKind so the icon lookup type-checks.
+const KIND_ICON = { upload: Upload, url: Globe, note: StickyNote, fact: Sparkles, citation: Globe } as const;
 
 type Tab = "note" | "url" | "upload";
 
