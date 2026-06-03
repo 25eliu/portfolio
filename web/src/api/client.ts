@@ -76,6 +76,8 @@ export type AiInsight = {
   provenance: { runId: string | null; reportId: string | null; journalEntryId?: string };
 };
 export type AiLibraryDay = { date: string; factCount: number };
+export type MarketView = { regime: AiInsight | null; sectors: AiInsight[]; themes: AiInsight[] };
+export type MarketViewDay = { date: string; count: number };
 export type TagCount = { dimension: string; value: string; count: number };
 export type TagEdit = { add: { dimension: string; value: string }[]; remove: { dimension: string; value: string }[] };
 
@@ -171,6 +173,10 @@ export const client = {
   wikiMetrics: (window?: string) =>
     api<{ metrics: WikiMetric[] }>(`/wiki/metrics${window ? `?window=${window}` : ""}`),
   wikiInFlight: () => api<{ assessment: InFlightAssessment; calls: InFlightCall[] }>("/wiki/in-flight"),
+  marketViewCurrent: () => api<MarketView>("/market-view/current"),
+  marketViewDays: () => api<{ days: MarketViewDay[] }>("/market-view/days"),
+  marketViewDay: (date: string) => api<{ theses: AiInsight[] }>(`/market-view/day/${date}`),
+  marketViewSubject: (level: string, subject: string) => api<{ history: AiInsight[] }>(`/market-view/subject/${level}/${encodeURIComponent(subject)}`),
   forecastMarks: (id: string) => api<{ marks: ForecastDailyMark[] }>(`/wiki/forecasts/${id}/marks`),
   trades: () => api<{ trades: TradeDecision[] }>("/trades"),
   askQuery: (question: string, tickers: string[] = []) =>

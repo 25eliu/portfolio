@@ -177,6 +177,11 @@ export const useWikiInFlight = () => useQuery({ queryKey: [...keys.wiki, "in-fli
 export const useForecastMarks = (id: string | null) =>
   useQuery({ queryKey: [...keys.wiki, "marks", id], queryFn: () => client.forecastMarks(id!), enabled: id != null });
 
+const marketViewKey = ["marketView"] as const;
+export const useMarketViewCurrent = () => useQuery({ queryKey: [...marketViewKey, "current"], queryFn: client.marketViewCurrent });
+export const useMarketViewSubject = (level: string | null, subject: string | null) =>
+  useQuery({ queryKey: [...marketViewKey, "subject", level, subject], queryFn: () => client.marketViewSubject(level!, subject!), enabled: !!(level && subject) });
+
 export const useTrades = () => useQuery({ queryKey: keys.trades, queryFn: client.trades });
 export const useQueryLog = () => useQuery({ queryKey: keys.queryLog, queryFn: client.queryLog });
 // The @-mention universe (holdings ∪ AI book ∪ watchlist). Refetched on focus; changes rarely.

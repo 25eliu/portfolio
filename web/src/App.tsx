@@ -16,6 +16,7 @@ import { AiTrades } from "./components/AiTrades.tsx";
 import { Journal } from "./components/Journal.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
 import { AiLibrary } from "./components/AiLibrary.tsx";
+import { MarketView } from "./components/MarketView.tsx";
 import { Wiki } from "./components/Wiki.tsx";
 import { PortfolioQuery } from "./components/PortfolioQuery.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
@@ -25,17 +26,21 @@ import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { SummaryBand } from "./components/SummaryBand.tsx";
 import { TickerManager } from "./components/TickerManager.tsx";
 import { Card, CardHeader } from "./components/ui/Card.tsx";
+import { SegmentedControl } from "./components/ui/SegmentedControl.tsx";
 import { Skeleton } from "./components/ui/Skeleton.tsx";
 import type { HorizonKey } from "./lib/horizon.ts";
+import type { PnlMode } from "./lib/format.ts";
 
 function Section({
   title,
   index,
   children,
+  action,
 }: {
   title: string;
   index: number;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <motion.section
@@ -43,7 +48,10 @@ function Section({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.06, ease: [0.22, 1, 0.36, 1] }}
     >
-      <h2 className="eyebrow mb-3">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="eyebrow">{title}</h2>
+        {action}
+      </div>
       {children}
     </motion.section>
   );
@@ -54,7 +62,22 @@ export default function App() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [horizon, setHorizon] = useState<HorizonKey>("3M");
+  const [pnlMode, setPnlMode] = useState<PnlMode>("usd");
   const [journalTicker, setJournalTicker] = useState<string | undefined>(undefined);
+
+  // One global $/% control for all P&L figures (overview band + both portfolio panels).
+  const pnlToggle = (
+    <SegmentedControl<PnlMode>
+      value={pnlMode}
+      onChange={setPnlMode}
+      size="sm"
+      className="self-start"
+      options={[
+        { value: "usd", label: "$" },
+        { value: "pct", label: "%" },
+      ]}
+    />
+  );
 
   const portfolios = usePortfolios();
   const recommendations = useRecommendations();
@@ -109,7 +132,7 @@ export default function App() {
       />
 
       <main className="mx-auto max-w-[1400px] space-y-10 px-6 py-8">
-        <Section title="Overview" index={0}>
+        <Section title="Overview" index={0} action={portfolios.data ? pnlToggle : null}>
           {portfolios.data ? (
             <SummaryBand
               user={portfolios.data.user}
@@ -117,6 +140,7 @@ export default function App() {
               snapshots={snapshots.data}
               horizon={horizon}
               onHorizonChange={setHorizon}
+              pnlMode={pnlMode}
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -144,12 +168,12 @@ export default function App() {
           </Card>
         </Section>
 
-        <Section title="Portfolios" index={2}>
+        <Section title="Portfolios" index={2} action={portfolios.data ? pnlToggle : null}>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {portfolios.data ? (
               <>
-                <PortfolioPanel p={portfolios.data.user} badge="advisory" tone="accent" />
-                <PortfolioPanel p={portfolios.data.ai} badge="paper · auto" tone="pos" />
+                <PortfolioPanel p={portfolios.data.user} badge="advisory" tone="accent" pnlMode={pnlMode} />
+                <PortfolioPanel p={portfolios.data.ai} badge="paper · auto" tone="pos" pnlMode={pnlMode} />
               </>
             ) : portfolios.isError ? (
               <div className="card col-span-full p-10 text-center text-sm text-text-muted">
@@ -181,29 +205,33 @@ export default function App() {
           )}
         </Section>
 
-        <Section title="AI trading" index={4}>
+        <Section title="Market view" index={4}>
+          <MarketView />
+        </Section>
+
+        <Section title="AI trading" index={5}>
           <AiTrades />
         </Section>
 
-        <Section title="Journal &amp; query" index={5}>
+        <Section title="Journal &amp; query" index={6}>
           <div id="journal">
             <Journal ticker={journalTicker} onClearFilter={() => setJournalTicker(undefined)} />
           </div>
         </Section>
 
-        <Section title="Knowledge library" index={6}>
+        <Section title="Knowledge library" index={7}>
           <KnowledgeLibrary />
         </Section>
 
-        <Section title="AI knowledge library" index={7}>
+        <Section title="AI knowledge library" index={8}>
           <AiLibrary />
         </Section>
 
-        <Section title="Performance wiki" index={8}>
+        <Section title="Performance wiki" index={9}>
           <Wiki />
         </Section>
 
-        <Section title="Ask your portfolio" index={9}>
+        <Section title="Ask your portfolio" index={10}>
           <PortfolioQuery />
         </Section>
       </main>
