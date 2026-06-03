@@ -1,5 +1,5 @@
 import type { App } from "../app.ts";
-import { nodeId, type Citation } from "../domain/index.ts";
+import { nodeId, thesisSubjectKey, type Citation } from "../domain/index.ts";
 import { priceAiPortfolio, priceUserPortfolio } from "../pipeline/pricing.ts";
 import { buildFtsQuery } from "../knowledge/retrieve.ts";
 import { serializeFact, serializeThesis } from "../knowledge/serialize.ts";
@@ -248,7 +248,7 @@ export const QUERY_TOOLS: QueryTool[] = [
     run(app, args) {
       const sector = str(args.sector);
       if (!sector) return { history: [] };
-      const key = `sector:${sector.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
+      const key = thesisSubjectKey("sector", sector); // same normalization persistOutlook used to write the key
       return { history: cap(app.repos.aiTheses.historyForSubject(key), 10).map((t) => ({ date: t.date, stance: t.stance, conviction: t.conviction, status: t.status, thesis: t.thesis })) };
     },
   },
