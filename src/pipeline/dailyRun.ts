@@ -5,6 +5,7 @@ import { generateFakeReport } from "./fakeReport.ts";
 import { generateLlmReport } from "./llmReport.ts";
 import { persistJournal } from "./journal.ts";
 import { persistCuratedFacts } from "../knowledge/curate.ts";
+import { persistOutlook } from "../knowledge/curateTheses.ts";
 import { resolveDueForecasts } from "../resolution/index.ts";
 import { trackOpenForecasts } from "../resolution/track.ts";
 import { compileWiki } from "../wiki/index.ts";
@@ -66,6 +67,15 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
     });
     if (tracked.tracked > 0) console.log(`[tracking] marked=${tracked.tracked}`);
 
+    // Step 2b.6 — expire theses the model stopped re-affirming (past their freshness deadline), so the
+    // wiki outlook + market view reflect only currently-held views. Idempotent + date-only; graceful.
+    try {
+      const expired = app.repos.aiTheses.expireStale(date);
+      if (expired.length > 0) console.log(`[theses] expired=${expired.length}`);
+    } catch (err) {
+      console.warn(`[theses] expiry failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     // Step 2c — compile the performance wiki from resolved outcomes (after resolution, before analysis)
     // so the freshest, evidence-gated briefing is injected into this run. Degrades gracefully.
     const wiki = await compileWiki(app).catch((err) => {
@@ -103,6 +113,14 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
       }
     } catch (err) {
       console.warn(`[curate] step failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Step 4c — persist the run's outlook as superseding, tagged, cited, graph-linked theses. Graceful.
+    try {
+      const theses = persistOutlook(app, report, runId, new Date().toISOString());
+      if (theses.added > 0) console.log(`[theses] added=${theses.added}`);
+    } catch (err) {
+      console.warn(`[theses] step failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Step 5 — the AI acts on its own book: deterministic paper trades from the same analysis, filled

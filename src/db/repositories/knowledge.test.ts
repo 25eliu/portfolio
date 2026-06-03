@@ -34,3 +34,13 @@ describe("listUserSources", () => {
     expect(repos.knowledge.listSources().length).toBe(5);
   });
 });
+
+describe("findOrCreateCitationSource", () => {
+  test("citation sources resolve via getSource but are excluded from the personal library and curated facts", () => {
+    const id = repos.knowledge.findOrCreateCitationSource("https://x.com/a", "X", NOW);
+    expect(repos.knowledge.getSource(id)?.kind).toBe("citation");
+    expect(repos.knowledge.findOrCreateCitationSource("https://x.com/a", "X", NOW)).toBe(id); // deduped by URL
+    expect(repos.knowledge.listUserSources().some((s) => s.id === id)).toBe(false);
+    expect(repos.knowledge.listCuratedFacts().some((f) => f.id === id)).toBe(false);
+  });
+});

@@ -8,7 +8,7 @@ import { Symbol } from "./holding.ts";
  */
 
 // "fact" is a single self-curated claim the analyzer distilled from its own research (Phase 3C-fact).
-export const SourceKind = z.enum(["upload", "url", "note", "fact"]);
+export const SourceKind = z.enum(["upload", "url", "note", "fact", "citation"]);
 export type SourceKind = z.infer<typeof SourceKind>;
 
 // "self_curated" facts come from the LLM's own analysis (public-web grounded), distinct from the

@@ -5,6 +5,7 @@ import {
   KnowledgeSource,
   KnowledgeVersion,
   RecommendationEvidence,
+  newId,
   type SourceStatus,
 } from "../../domain/index.ts";
 
@@ -340,6 +341,23 @@ export function knowledgeRepo(db: DB) {
             LIMIT ?`,
         )
         .all(limit);
+    },
+
+    /** Resolve a thesis citation URL to a stable knowledge_sources id (deduped by origin URL). Creates a
+     *  lightweight `citation` source (no chunks; not analysis-injected) so thesis citations RESOLVE in the
+     *  source dialog and graph, without polluting the personal library or the analysis retrieval set. */
+    findOrCreateCitationSource(url: string, title: string, now: string): string {
+      const existing = db
+        .query<{ id: string }, [string]>("SELECT id FROM knowledge_sources WHERE kind = 'citation' AND origin = ? LIMIT 1")
+        .get(url);
+      if (existing) return existing.id;
+      const id = newId();
+      this.insertSource({
+        id, kind: "citation", title: title?.trim() || url, trustClass: "public_url",
+        scope: "global", scopeTicker: null, useInAnalysis: false, status: "active", origin: url,
+        createdAt: now, updatedAt: now,
+      });
+      return id;
     },
 
     // ---- ingestion runs --------------------------------------------------
