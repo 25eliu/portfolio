@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-03 (AI Knowledge Platform Phase 3 complete: theses + Market View)._
+> _Last updated: 2026-06-04 (planner exits honor explicit SELL/TRIM verdicts, not just price direction)._
 
 ## 1. Product direction
 
@@ -330,6 +330,13 @@ portfolio should begin recording real A/B behavior before the full wiki compiler
   (direction/conviction/target/stop) into BUY/ADD/TRIM/SELL orders using the risk presets, the book's
   **own current equity** as the exposure cap (compounding), current exposure, confidence, and a
   reward:risk floor. The LLM never sizes or selects.
+- **Exits honor the model's verdict, not just price direction.** On a held name, an explicit `SELL`
+  action fully exits regardless of `prediction.direction` (so a "thesis broken / better use of capital"
+  call with a neutral outlook still sells), and an explicit `TRIM` reduces the position by a fixed
+  fraction (`TRIM_FRACTION`, ⅓) — at least back to the cap if overweight. A bearish direction still
+  forces a full exit, and a neutral-but-overweight position still trims back to the cap. Explicit
+  SELL/TRIM are excluded from the entry pass so a held name is never both sold and added in one run.
+  As always, the action only selects which branch fires — the deterministic planner sets the quantity.
 - Guards: duplicate-order (same name same day), max-position, max-position-count, available-cash, and
   exposure (= equity) caps. Concurrent runs are already serialized.
 - **Fills are simulated deterministically** (`src/execution/ledger.ts`, `applyFills`): one transaction;

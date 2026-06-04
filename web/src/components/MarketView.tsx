@@ -3,11 +3,9 @@ import { ChevronDown } from "lucide-react";
 import type { AiInsight } from "../api/client.ts";
 import { useMarketViewCurrent, useMarketViewSubject } from "../api/hooks.ts";
 import { cn } from "../lib/cn.ts";
+import { stanceTone } from "../lib/stance.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
-
-const stanceTone = (s: string | null): "pos" | "neg" | "neutral" =>
-  s === "bullish" || s === "risk_on" ? "pos" : s === "bearish" || s === "risk_off" || s === "defensive" ? "neg" : "neutral";
 
 /** The AI's current market outlook: regime banner + sector leans + named themes, each with its evolution. */
 export function MarketView() {

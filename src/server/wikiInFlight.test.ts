@@ -41,11 +41,23 @@ const req = (path: string) => server.fetch(new Request(`http://test/api${path}`)
 describe("wiki in-flight API", () => {
   test("GET /wiki/in-flight returns today's assessment + open calls", async () => {
     const body = (await (await req("/wiki/in-flight")).json()) as {
-      assessment: { total: number; onTrack: number }; calls: { ticker: string; side: string | null; status: string }[];
+      assessment: { total: number; onTrack: number };
+      calls: {
+        ticker: string; side: string | null; status: string;
+        thesis: string | null; rationale: string | null;
+        entry: number | null; stop: number | null; target: number | null; markPrice: number;
+      }[];
     };
     expect(body.assessment.total).toBe(1);
     expect(body.calls[0]!.ticker).toBe("NVDA");
     expect(body.calls[0]!.side).toBe("bullish");
+    // Drill-down feedback fields are serialized from the forecast + its journal entry.
+    expect(body.calls[0]!.thesis).toBe("t");
+    expect(body.calls[0]!.rationale).toBe("y");
+    expect(body.calls[0]!.entry).toBe(100);
+    expect(body.calls[0]!.stop).toBe(90);
+    expect(body.calls[0]!.target).toBe(120);
+    expect(typeof body.calls[0]!.markPrice).toBe("number");
   });
 
   test("GET /wiki/in-flight is zeroed when nothing is open", async () => {

@@ -181,6 +181,8 @@ const marketViewKey = ["marketView"] as const;
 export const useMarketViewCurrent = () => useQuery({ queryKey: [...marketViewKey, "current"], queryFn: client.marketViewCurrent });
 export const useMarketViewSubject = (level: string | null, subject: string | null) =>
   useQuery({ queryKey: [...marketViewKey, "subject", level, subject], queryFn: () => client.marketViewSubject(level!, subject!), enabled: !!(level && subject) });
+export const useMarketViewDay = (date: string | null) =>
+  useQuery({ queryKey: [...marketViewKey, "day", date], queryFn: () => client.marketViewDay(date!), enabled: date != null });
 
 export const useTrades = () => useQuery({ queryKey: keys.trades, queryFn: client.trades });
 export const useQueryLog = () => useQuery({ queryKey: keys.queryLog, queryFn: client.queryLog });

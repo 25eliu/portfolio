@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Recommendation, RISK_PRESETS, type Direction } from "../domain/index.ts";
+import { type Action, Recommendation, RISK_PRESETS, type Direction } from "../domain/index.ts";
 import { planTrades, sizeFraction, type PlanInput, type PlanPosition } from "./plan.ts";
 
 const BALANCED = RISK_PRESETS.balanced; // minConfidence 0.58, rewardRiskFloor 1.5, maxPositionPct 10
@@ -7,6 +7,7 @@ const BALANCED = RISK_PRESETS.balanced; // minConfidence 0.58, rewardRiskFloor 1
 function rec(over: {
   ticker?: string;
   direction: Direction;
+  action?: Action;
   conviction?: number;
   target?: number | null;
   stop?: number | null;
@@ -17,7 +18,7 @@ function rec(over: {
   return Recommendation.parse({
     ticker: over.ticker ?? "AAPL",
     held: false,
-    action: over.direction === "bullish" ? "BUY" : over.direction === "bearish" ? "SELL" : "HOLD",
+    action: over.action ?? (over.direction === "bullish" ? "BUY" : over.direction === "bearish" ? "SELL" : "HOLD"),
     conviction: over.conviction ?? 0.7,
     strategyFamily: over.strategy ?? "momentum",
     thesis: "t",
@@ -201,6 +202,34 @@ describe("planTrades — exits", () => {
   test("HOLD (no decision) for a neutral position within the cap", () => {
     const account = { cash: 0, positionsValue: 5_000, positions: [pos("AAPL", 50)] };
     expect(plan({ recommendations: [rec({ direction: "neutral" })], account })).toHaveLength(0);
+  });
+
+  test("honors an explicit SELL verdict even when the outlook is neutral", () => {
+    // Within-cap, neutral outlook would normally HOLD — the explicit SELL must still fully exit.
+    const account = { cash: 0, positionsValue: 5_000, positions: [pos("AAPL", 50)] };
+    const decisions = plan({ recommendations: [rec({ direction: "neutral", action: "SELL" })], account });
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.action).toBe("SELL");
+    expect(decisions[0]!.side).toBe("sell");
+    expect(decisions[0]!.qty).toBe(50);
+    expect(decisions[0]!.reason).toContain("explicit SELL");
+  });
+
+  test("an explicit SELL on a bullish-outlook held name exits and is not also queued as an ADD", () => {
+    const account = { cash: 100_000, positionsValue: 5_000, positions: [pos("AAPL", 50)] };
+    const decisions = plan({ recommendations: [rec({ direction: "bullish", action: "SELL", conviction: 0.9 })], account });
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.action).toBe("SELL");
+    expect(decisions[0]!.qty).toBe(50);
+  });
+
+  test("honors an explicit TRIM on a within-cap position (fractional haircut)", () => {
+    const account = { cash: 0, positionsValue: 6_000, positions: [pos("AAPL", 60)] };
+    const [d] = plan({ recommendations: [rec({ direction: "neutral", action: "TRIM" })], account });
+    expect(d!.action).toBe("TRIM");
+    expect(d!.side).toBe("sell");
+    expect(d!.qty).toBe(20); // trim ⅓ of $6,000 = $2,000 / $100
+    expect(d!.reason).toContain("explicit TRIM");
   });
 });
 

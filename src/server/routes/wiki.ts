@@ -35,9 +35,14 @@ export function wikiRoutes(app: App): Hono {
     const calls = marks
       .map((m) => {
         const f = app.repos.scoredForecasts.get(m.forecastId);
+        const je = f ? app.repos.journalEntries.get(f.journalEntryId) : null;
         return {
           forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
           movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
+          // Drill-down feedback fields: original thesis + the price levels that define the call's risk frame.
+          entry: f?.entry ?? null, stop: f?.stop ?? null, target: f?.target ?? null,
+          markPrice: m.markPrice, conviction: f?.conviction ?? null,
+          thesis: je?.recommendation.thesis ?? null, rationale: je?.recommendation.prediction.rationale ?? null,
         };
       })
       .sort(

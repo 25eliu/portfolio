@@ -220,7 +220,10 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         sink?.({ kind: "stage", stage: "structure" });
         const args = await structure(buildOutlookStructurePrompt(ctx.date, text), { name: "submit_outlook" }, outlookFunctionDeclaration, sink);
         const parsed = Outlook.safeParse(args ?? {});
-        if (!parsed.success) return { regime: null, sectors: [], themes: [] };
+        if (!parsed.success) {
+          console.warn(`[outlook] schema parse failed, returning empty: ${parsed.error.message}`);
+          return { regime: null, sectors: [], themes: [] };
+        }
         const withSrc = (it: typeof parsed.data.sectors[number]) => ({ ...it, sources: it.sources.length ? it.sources : sources });
         return {
           regime: parsed.data.regime ? withSrc(parsed.data.regime) : null,

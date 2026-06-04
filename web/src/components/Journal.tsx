@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { ChevronDown, X } from "lucide-react";
+import type { AiInsight } from "../api/client.ts";
 import type { Action, ForecastOutcome, JournalEntry, OutcomeKind } from "../api/types.ts";
-import { useJournal, useJournalDay, useJournalDays, useJournalEntry } from "../api/hooks.ts";
+import { useJournal, useJournalDay, useJournalDays, useJournalEntry, useMarketViewDay } from "../api/hooks.ts";
 import { cn } from "../lib/cn.ts";
 import { usd } from "../lib/format.ts";
+import { stanceTone } from "../lib/stance.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
 
@@ -102,6 +104,7 @@ function DayGroupedJournal() {
 function DayGroup({ day, defaultOpen }: { day: { date: string; count: number; scored: number }; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const entries = useJournalDay(open ? day.date : null);
+  const outlook = useMarketViewDay(open ? day.date : null);
 
   return (
     <div>
@@ -119,6 +122,7 @@ function DayGroup({ day, defaultOpen }: { day: { date: string; count: number; sc
       </button>
       {open && (
         <div className="border-l border-hairline pl-3 pb-2">
+          <DayOutlookBanner theses={outlook.data?.theses ?? []} />
           {entries.isLoading ? (
             <Skeleton className="h-12 w-full" />
           ) : (
@@ -130,6 +134,52 @@ function DayGroup({ day, defaultOpen }: { day: { date: string; count: number; sc
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The AI's overall market outlook recorded that day — regime + sector leans + named themes — shown
+ * above the day's per-stock calls so each day reads as a complete record (the cross-cutting thesis that
+ * framed those calls). Sourced from `ai_theses` via /market-view/day; renders nothing on days with no
+ * outlook (e.g. calls recorded before the outlook feature shipped).
+ */
+function DayOutlookBanner({ theses }: { theses: AiInsight[] }) {
+  if (theses.length === 0) return null;
+  const regime = theses.find((t) => t.level === "regime") ?? null;
+  const sectors = theses.filter((t) => t.level === "sector");
+  const themes = theses.filter((t) => t.level === "theme");
+  return (
+    <div className="glass mb-3 mt-3 space-y-2 p-3">
+      <p className="eyebrow">Market outlook</p>
+      {regime && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="font-medium text-text-secondary">Regime</span>
+          <Badge tone={stanceTone(regime.stance)} dot>{regime.stance}</Badge>
+          {regime.conviction != null && (
+            <span className="text-text-muted">{regime.conviction.toFixed(2)} · {regime.horizon}</span>
+          )}
+          {(regime.headline || regime.body) && (
+            <span className="text-text-muted">— {regime.headline || regime.body}</span>
+          )}
+        </div>
+      )}
+      {sectors.length > 0 && <OutlookLeanRow label="Sectors" items={sectors} />}
+      {themes.length > 0 && <OutlookLeanRow label="Themes" items={themes} />}
+    </div>
+  );
+}
+
+function OutlookLeanRow({ label, items }: { label: string; items: AiInsight[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+      <span className="font-medium text-text-secondary">{label}</span>
+      {items.map((i) => (
+        <span key={i.id} className="flex items-center gap-1">
+          <span className="text-text-secondary">{i.subject}</span>
+          <Badge tone={stanceTone(i.stance)}>{i.stance}</Badge>
+        </span>
+      ))}
     </div>
   );
 }

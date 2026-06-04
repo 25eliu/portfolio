@@ -35,6 +35,8 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const SIZE_FLOOR = 0.25;
 /** Reward:risk points above the preset's floor at which the RR contribution saturates to full. */
 const RR_SPAN = 2.0;
+/** An explicit TRIM verdict with no cap breach still takes this fraction of the position off the table. */
+const TRIM_FRACTION = 1 / 3;
 
 /**
  * Thesis-driven position size as a fraction (SIZE_FLOOR..1) of the per-position cap. Scales with the
@@ -85,37 +87,53 @@ export function planTrades(input: PlanInput): TradeDecision[] {
   const decide = (rec: Recommendation, side: "buy" | "sell", action: TradeDecision["action"], qty: number, price: number, status: TradeDecision["status"], reason: string): TradeDecision =>
     ({ ...base(rec), side, action, qty, intendedPrice: round2(price), notional: round2(qty * price), status, reason });
 
-  // Split by current direction; held vs flat.
+  // Classify each rec once so it's handled by exactly one pass. A held position is an exit/trim
+  // candidate when the model EXPLICITLY says SELL/TRIM or when its outlook is non-bullish; an explicit
+  // SELL/TRIM is excluded from entries so a held name is never both sold and added in the same run.
   const held = (t: string) => bySymbol.has(t);
-  const exits = input.recommendations.filter((r) => held(r.ticker) && (r.prediction.direction === "bearish" || r.prediction.direction === "neutral"));
+  const isExitVerdict = (r: Recommendation) =>
+    held(r.ticker) &&
+    (r.action === "SELL" || r.action === "TRIM" || r.prediction.direction === "bearish" || r.prediction.direction === "neutral");
+  const exits = input.recommendations.filter(isExitVerdict);
   const entries = input.recommendations
-    .filter((r) => r.prediction.direction === "bullish" && r.conviction >= preset.minConfidence)
+    .filter((r) => !isExitVerdict(r) && r.prediction.direction === "bullish" && r.conviction >= preset.minConfidence)
     .sort((a, b) => b.conviction - a.conviction);
 
   // ---- Pass 1: exits & trims on held positions (always permitted; not cash-gated) ----
   for (const rec of exits) {
     const pos = bySymbol.get(rec.ticker)!;
     const price = input.priceOf(rec.ticker) ?? pos.price;
+    // An explicit SELL exits regardless of price outlook; a bearish outlook also forces a full exit.
+    const wantsExit = rec.action === "SELL" || rec.prediction.direction === "bearish";
+    // An explicit TRIM reduces even within cap; a neutral-but-overweight position trims back to cap.
+    const wantsTrim = rec.action === "TRIM" || (rec.prediction.direction === "neutral" && pos.marketValue > maxPosValue + price);
     if (input.submittedToday(rec.ticker)) {
-      decisions.push(decide(rec, "sell", rec.prediction.direction === "bearish" ? "SELL" : "TRIM", 0, price, "skipped", "already traded today"));
+      decisions.push(decide(rec, "sell", wantsExit ? "SELL" : "TRIM", 0, price, "skipped", "already traded today"));
       continue;
     }
-    if (rec.prediction.direction === "bearish") {
-      // Full exit — long-only thesis turned negative.
-      decisions.push(decide(rec, "sell", "SELL", pos.shares, price, "proposed", `thesis bearish (conv ${rec.conviction.toFixed(2)})`));
+    if (wantsExit) {
+      // Full exit — explicit SELL verdict, or a long-only thesis that turned negative.
+      const reason = rec.action === "SELL" ? `explicit SELL verdict (conv ${rec.conviction.toFixed(2)})` : `thesis bearish (conv ${rec.conviction.toFixed(2)})`;
+      decisions.push(decide(rec, "sell", "SELL", pos.shares, price, "proposed", reason));
       deployedValue -= pos.marketValue;
       cash += pos.shares * price;
       positionsCount -= 1;
-    } else if (pos.marketValue > maxPosValue + price) {
-      // Neutral but overweight — trim back to the position cap.
-      const sellShares = Math.floor((pos.marketValue - maxPosValue) / price);
+    } else if (wantsTrim) {
+      // Two trim sources: an explicit TRIM verdict takes a fixed slice off (at least back to the cap if
+      // overweight); a merely neutral-but-overweight position just reverts to the cap. The LLM sets the
+      // intent, never the size — the deterministic reduction is computed here.
+      const overweightValue = Math.max(0, pos.marketValue - maxPosValue);
+      const isExplicitTrim = rec.action === "TRIM";
+      const reductionValue = round2(isExplicitTrim ? Math.max(pos.marketValue * TRIM_FRACTION, overweightValue) : overweightValue);
+      const sellShares = Math.floor(reductionValue / price);
       if (sellShares >= 1) {
-        decisions.push(decide(rec, "sell", "TRIM", sellShares, price, "proposed", `trim to ${preset.maxPositionPct}% cap`));
+        const reason = isExplicitTrim ? `explicit TRIM — reduce ~${Math.round(TRIM_FRACTION * 100)}%` : `trim to ${preset.maxPositionPct}% cap`;
+        decisions.push(decide(rec, "sell", "TRIM", sellShares, price, "proposed", reason));
         deployedValue -= sellShares * price;
         cash += sellShares * price;
       }
     }
-    // else neutral & within cap → HOLD (no decision row).
+    // else → HOLD (no decision row).
   }
 
   // ---- Pass 2: entries (BUY new / ADD to held) by conviction, capital- and guard-constrained ----

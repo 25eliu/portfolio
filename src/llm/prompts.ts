@@ -136,6 +136,7 @@ export function buildTickerStructurePrompt(
           ``,
           `You HOLD ${t.symbol}. Decide exactly one — and do not default to HOLD to avoid committing:`,
           `  ADD (high-quality dip / thesis strengthening), TRIM (overextended / risk management), HOLD (thesis intact & fairly valued), SELL (thesis broken or better uses of capital).`,
+          `Your action is acted on directly: SELL exits the whole position and TRIM reduces it, independent of prediction.direction — a SELL does NOT need a bearish outlook to justify it. Set prediction.direction to your honest price outlook regardless.`,
         ]
       : [
           `When cash is scarce, prefer WATCH over BUY when there isn't cash to act.`,

@@ -39,6 +39,10 @@ export type InFlightAssessment = {
 export type InFlightCall = {
   forecastId: string; ticker: string; side: string | null; resolveBy: string | null;
   movePct: number; unrealizedR: number | null; mfe: number; mae: number; status: string;
+  // Drill-down feedback fields: original thesis + the price levels that frame the call's risk.
+  entry: number | null; stop: number | null; target: number | null;
+  markPrice: number; conviction: number | null;
+  thesis: string | null; rationale: string | null;
 };
 
 export type SourcePatch = {
