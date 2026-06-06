@@ -6,6 +6,11 @@
 >
 > **Paper‑trading only. For research and education. Not investment advice.**
 
+> 🧠 **Inspired by [Andrej Karpathy](https://twitter.com/karpathy)'s idea of an LLM that maintains its own
+> evolving _wiki_.** Instead of re‑reasoning from scratch each run, this system distills what it learns
+> into a compact, trusted **wiki + knowledge graph** and *compiles* it back into every decision — the
+> guiding principle throughout is **"compile, don't re‑derive."**
+
 Built with **Bun · TypeScript · SQLite · React · Tailwind**. Your real holdings are mirrored
 **advisory‑only and can never place orders**; a separate self‑contained **$100k AI paper book** trades
 on its own and is benchmarked A/B against you and SPY.
@@ -29,11 +34,6 @@ Most "AI stock picker" tools generate a fresh opinion every day and forget it. T
   sources connected by typed edges, with an LLM **graph‑librarian** that maintains the connections.
 
 The result is a trader whose confidence is *earned from its own measured record*, not asserted.
-
-> **Inspiration.** The knowledge layer is inspired by Andrej Karpathy's idea of an LLM that maintains its
-> own evolving **wiki** of distilled knowledge — rather than re‑deriving everything each run, the system
-> *compiles* what it has learned into a compact, trusted briefing and a knowledge graph it reads back.
-> The guiding principle throughout is **"compile, don't re‑derive."**
 
 ## The self‑improvement loop
 
