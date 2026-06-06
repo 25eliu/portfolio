@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-05 (Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; knowledge-graph visualization)._
+> _Last updated: 2026-06-05 (Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; knowledge-graph visualization; LLM graph-librarian)._
 
 ## 1. Product direction
 
@@ -227,7 +227,7 @@ flowchart TD
     D --> E[5. Build universe: user-held + watchlist + scan + ai_held + ai_thesis]
     E --> F[6. Retrieve scoped, relevance-gated evidence]
     F --> G[7. Analyze tickers - research then structure]
-    G --> H[8. Persist report + journal forecasts]
+    G --> H[8. Persist report + journal forecasts + theses; graph-librarian enriches concept edges]
     H --> I[9. Plan + fill AI paper trades on the $100k DB ledger]
     I --> J[10. Re-price AI post-trade + persist snapshots]
     J --> K[Done: stream completion and refresh UI]
@@ -332,6 +332,18 @@ traversable. Concrete records (chunks, forecasts, outcomes) stay in their first-
 holds the canonical concepts and the relationships between everything, and is what retrieval and the
 wiki briefing are compiled against. "Compile, don't re-derive" is preserved: the LLM never reads the
 graph or journal raw — it reads the deterministic, linted briefing and the delimited untrusted evidence.
+
+**Graph librarian (LLM-maintained associations, implemented).** Each run, after theses/lessons are
+persisted, an LLM **graph-librarian** pass (`src/knowledge/librarian.ts`, pipeline Step 4d) proposes
+associative edges — `related_to` / `contradicts` — *between existing concept nodes* (themes, sectors,
+lessons, strategies, theses) that membership wiring can't infer. This is the division of labor for "the
+KB maintained by the LLM optimally": the LLM enriches the **web of concepts**, while deterministic code
+keeps owning ground-truth memberships and the entire computed metrics/calibration layer. Every proposal
+is **gated** before any write (both endpoints must be real nodes, no self-loops, `contradicts` only
+between lessons/theses, symmetric pairs normalized, capped per run) and tagged `data.source = "librarian"`
+so it is auditable and reversible. The librarian never creates nodes, never prunes, and never touches
+forecasts/outcomes/metrics. `proposeGraphEdges` is a single structure call; offline it degrades to a
+deterministic fake.
 
 ## 6. Typed journal and trade audit
 

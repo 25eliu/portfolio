@@ -81,6 +81,32 @@ export const deliberationFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
+/** The function declaration the graph librarian calls to propose associative edges between existing
+ *  concept nodes. Each edge is gated (endpoints must exist, type-checked) before any write. */
+export const graphEdgesFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_graph_edges",
+  description: "Return proposed associative edges between EXISTING knowledge-graph concept nodes.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      edges: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            src_id: { type: Type.STRING, description: "exact id of a node from the provided list" },
+            rel: { type: Type.STRING, enum: ["related_to", "contradicts"] },
+            dst_id: { type: Type.STRING, description: "exact id of a different node from the list" },
+            rationale: { type: Type.STRING, description: "one short clause on why they relate/conflict" },
+          },
+          required: ["src_id", "rel", "dst_id"],
+        },
+      },
+    },
+    required: ["edges"],
+  },
+};
+
 const thesisItemSchema = {
   type: Type.OBJECT,
   properties: {

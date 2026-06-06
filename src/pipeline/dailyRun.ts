@@ -6,6 +6,7 @@ import { generateLlmReport } from "./llmReport.ts";
 import { persistJournal } from "./journal.ts";
 import { persistCuratedFacts } from "../knowledge/curate.ts";
 import { persistOutlook } from "../knowledge/curateTheses.ts";
+import { runGraphLibrarian } from "../knowledge/librarian.ts";
 import { resolveDueForecasts } from "../resolution/index.ts";
 import { trackOpenForecasts } from "../resolution/track.ts";
 import { compileWiki } from "../wiki/index.ts";
@@ -121,6 +122,16 @@ export async function dailyRun(app: App, opts: { runId?: string } = {}): Promise
       if (theses.added > 0) console.log(`[theses] added=${theses.added}`);
     } catch (err) {
       console.warn(`[theses] step failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Step 4d — graph librarian: the LLM proposes associative edges (related_to / contradicts) between
+    // existing concept nodes; every proposal is gated before persisting (endpoints must exist, type-
+    // checked, capped, source-tagged). Enriches the navigable graph; never touches metrics/calibration.
+    try {
+      const lib = await runGraphLibrarian(app, new Date().toISOString());
+      if (lib.added > 0) console.log(`[librarian] added=${lib.added} rejected=${lib.rejected}`);
+    } catch (err) {
+      console.warn(`[librarian] step failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Step 5 — the AI acts on its own book: deterministic paper trades from the same analysis, filled

@@ -1,4 +1,4 @@
-import type { Outlook, Recommendation, ScanCandidate, Source } from "../domain/index.ts";
+import type { LibrarianNode, Outlook, ProposedEdge, Recommendation, ScanCandidate, Source } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { TickerInput } from "./prompts.ts";
 
@@ -34,6 +34,12 @@ export interface Analyzer {
    * author a regime call + sector leans + named themes. Never fatal — returns an empty outlook on failure.
    */
   synthesizeOutlook(ctx: MarketContext, recs: Recommendation[], sink?: StreamSink): Promise<Outlook>;
+  /**
+   * Graph librarian (KB maintenance): given concept nodes, propose associative edges between them
+   * (`related_to` / `contradicts`) that membership-based wiring can't infer. The pipeline gates every
+   * proposal before persisting. Never fatal — returns [] on failure.
+   */
+  proposeGraphEdges(nodes: LibrarianNode[]): Promise<ProposedEdge[]>;
 }
 
 /** Deterministic offline analyzer for tests — never calls the network; emits synthetic stream events. */
@@ -114,6 +120,11 @@ export function createMockAnalyzer(): Analyzer {
         sectors: [{ subject: "Information Technology", stance: "bullish", conviction: 0.6, horizon: "3mo", summary: "mock", thesis: "mock sector thesis", tickers: ["NVDA"], sources: [] }],
         themes: [{ subject: "AI infrastructure", stance: "bullish", conviction: 0.6, horizon: "6mo", summary: "mock", thesis: "mock theme thesis", tickers: [], sources: [] }],
       };
+    },
+    async proposeGraphEdges(nodes): Promise<ProposedEdge[]> {
+      // Deterministic: associate the two most-recent concept nodes so the gating path is exercised offline.
+      if (nodes.length < 2) return [];
+      return [{ srcId: nodes[0]!.id, rel: "related_to", dstId: nodes[1]!.id, rationale: "mock association" }];
     },
   };
 }

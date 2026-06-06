@@ -3,7 +3,7 @@ import { createApp, type App } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
 import { createFakeGateway } from "../market/index.ts";
 import { createMockAnalyzer, type Analyzer } from "../llm/analyze.ts";
-import { AI_STARTING_CASH, Recommendation } from "../domain/index.ts";
+import { AI_STARTING_CASH, Recommendation, type KgNodeType } from "../domain/index.ts";
 import { dailyRun } from "./dailyRun.ts";
 
 /** A stub analyzer that rates everything bullish with a clean target/stop, so the AI will want to buy. */
@@ -73,6 +73,17 @@ describe("dailyRun → AI execution", () => {
     // Capital discipline: total filled BUY notional never exceeds the book's starting equity.
     const deployed = filled.filter((t) => t.side === "buy").reduce((s, t) => s + t.notional, 0);
     expect(deployed).toBeLessThanOrEqual(AI_STARTING_CASH + 1); // +1 for rounding
+  });
+
+  test("the graph librarian adds a gated, source-tagged edge between concept nodes during the run", async () => {
+    await dailyRun(app);
+    const conceptTypes: KgNodeType[] = ["theme", "sector", "strategy_family", "lesson", "thesis"];
+    const conceptNodes = conceptTypes.flatMap((t) => app.repos.graph.listNodes({ type: t }));
+    const librarianEdge = conceptNodes
+      .flatMap((n) => app.repos.graph.neighbors(n.id, { direction: "out" }))
+      .find((nb) => nb.edge.data.source === "librarian");
+    expect(librarianEdge).toBeDefined();
+    expect(["related_to", "contradicts"]).toContain(librarianEdge!.edge.rel);
   });
 
   test("a second run sees the AI's positions in the universe (no duplicate same-day buys)", async () => {

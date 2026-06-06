@@ -66,6 +66,22 @@ export const KgEdge = z.object({
 });
 export type KgEdge = z.infer<typeof KgEdge>;
 
+/**
+ * An edge the LLM "graph librarian" proposes between two EXISTING concept nodes (graph maintenance).
+ * Deliberately limited to associative relationships code can't infer; gated + source-tagged before any
+ * write, and never touches the computed metrics/calibration layer.
+ */
+export const ProposedEdge = z.object({
+  srcId: z.string().min(1),
+  rel: z.enum(["related_to", "contradicts"]),
+  dstId: z.string().min(1),
+  rationale: z.string().default(""),
+});
+export type ProposedEdge = z.infer<typeof ProposedEdge>;
+
+/** A concept node projected for the graph librarian (id + type + label + summary). */
+export type LibrarianNode = { id: string; type: string; label: string; summary: string };
+
 /** A node plus the edge that reached it — the unit returned by neighbor/backlink traversals. */
 export const KgNeighbor = z.object({
   edge: KgEdge,

@@ -74,6 +74,10 @@ grounded questions about its own record:
   and the conviction calibration above. The dashboard renders it as a navigable **ego graph**: start
   from any entity and walk the connections (focal node + neighbors, click to re-center), with deep
   links from recommendations and lessons.
+- **LLM graph-librarian** — each run, an LLM pass proposes associative edges (`related_to` /
+  `contradicts`) between existing concept nodes that membership wiring can't infer. Every proposal is
+  **gated** (real endpoints, type-checked, capped) and tagged `source: librarian` so it's auditable and
+  reversible. The LLM enriches the *web of concepts*; deterministic code keeps owning the scoreboard.
 
 Next: **Phase 6** (validation & polish) and the **data integrations** in
 [`docs/integrations-roadmap.md`](docs/integrations-roadmap.md).
@@ -133,7 +137,7 @@ scheduler:
 6. Retrieve scoped research-library evidence (graph-aware)
 7. Analyze tickers (three-stage Gemini: research → deliberate → structure)
 8. Calibrate conviction from the wiki track record (graph-propagated, dampen-only)
-9. Persist report + journal + scored forecasts (incl. deliberation + calibration chain)
+9. Persist report + journal + scored forecasts + theses; **graph-librarian** enriches concept edges
 10. Propose and execute guarded AI paper trades (deterministic, regime-aware planner)
 11. Persist trade decisions + snapshots → stream completion to the UI
 ```

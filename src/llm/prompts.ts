@@ -1,4 +1,4 @@
-import type { Deliberation, Fundamentals, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
+import type { Deliberation, Fundamentals, LibrarianNode, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
 import { renderEvidenceBlock } from "../knowledge/retrieve.ts";
 
 /** The AI's most recent prior call on a ticker, fed back for day-to-day continuity. */
@@ -218,6 +218,31 @@ export function buildTickerStructurePrompt(
     sources.length
       ? [`Research source URLs (set citationUrl to one of these):`, ...sources.slice(0, 12).map((s, i) => `  [${i + 1}] ${s.url}${s.title ? ` — ${s.title}` : ""}`)].join("\n")
       : `(No research source URLs were captured this run — return memorableFacts: [].)`,
+  ].join("\n");
+}
+
+/**
+ * Graph-librarian prompt (KB maintenance): given existing concept nodes, ask the model to propose
+ * associative edges BETWEEN THEM. Single structure call (no grounding) — pure reasoning over the given
+ * ids. Every proposal is gated downstream, so the prompt optimizes for high-signal, conservative links.
+ */
+export function buildLibrarianPrompt(nodes: LibrarianNode[]): string {
+  const lines = nodes.map(
+    (n) => `  ${n.id} (${n.type})${n.label && n.label !== n.id ? ` — ${n.label}` : ""}${n.summary ? `: ${n.summary.slice(0, 120)}` : ""}`,
+  );
+  return [
+    `You are a knowledge-graph librarian for a trading-research system. Below are concept nodes`,
+    `(themes, sectors, strategies, lessons, theses). Propose a SMALL set of high-signal relationships`,
+    `BETWEEN THESE EXISTING NODES that simple membership tags don't already capture:`,
+    `  - related_to: two concepts that share drivers, co-move, or one enables/explains the other.`,
+    `  - contradicts: two LESSONS or THESES that genuinely conflict.`,
+    `Rules: use ONLY the exact ids listed below; never link a node to itself; prefer a few strong links`,
+    `over many weak ones; at most ~10 edges. If nothing is clearly related, return an empty list.`,
+    ``,
+    `Nodes:`,
+    ...lines,
+    ``,
+    `Call submit_graph_edges with edges: [{ src_id, rel, dst_id, rationale }] using only ids above.`,
   ].join("\n");
 }
 

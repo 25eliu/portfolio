@@ -8,7 +8,7 @@
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
-import { Deliberation, Outlook, Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
+import { Deliberation, Outlook, Prediction, ProposedEdge, Recommendation, ScanCandidate, type LibrarianNode } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { Analyzer, StreamSink } from "./analyze.ts";
 import { normalizeAction } from "./normalize.ts";
@@ -17,13 +17,14 @@ import {
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
   buildMarketContextPrompt,
+  buildLibrarianPrompt,
   buildOutlookResearchPrompt,
   buildOutlookStructurePrompt,
   buildTickerResearchPrompt,
   buildTickerStructurePrompt,
   type TickerInput,
 } from "./prompts.ts";
-import { candidatesFunctionDeclaration, deliberationFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+import { candidatesFunctionDeclaration, deliberationFunctionDeclaration, graphEdgesFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
 
 /** Parse a submit_deliberation function-call payload (snake_case) into the Deliberation schema. */
 function parseDeliberation(args: Record<string, unknown> | undefined): Deliberation | null {
@@ -267,6 +268,26 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
       } catch (err) {
         console.warn(`[outlook] failed: ${err instanceof Error ? err.message : String(err)}`);
         return { regime: null, sectors: [], themes: [] };
+      }
+    },
+
+    async proposeGraphEdges(nodes: LibrarianNode[]): Promise<ProposedEdge[]> {
+      if (nodes.length < 3) return [];
+      try {
+        // Single structure call — pure reasoning over the given node ids, no grounding needed.
+        const args = await structure(buildLibrarianPrompt(nodes), { name: "submit_graph_edges" }, graphEdgesFunctionDeclaration);
+        const raw = (args as { edges?: unknown[] } | undefined)?.edges ?? [];
+        const out: ProposedEdge[] = [];
+        for (const e of raw) {
+          const r = e as Record<string, unknown>;
+          const parsed = ProposedEdge.safeParse({ srcId: r.src_id, rel: r.rel, dstId: r.dst_id, rationale: typeof r.rationale === "string" ? r.rationale : "" });
+          if (parsed.success) out.push(parsed.data);
+        }
+        console.log(`[librarian] model proposed ${raw.length} edges, ${out.length} parsed`);
+        return out;
+      } catch (err) {
+        console.warn(`[librarian] failed: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
       }
     },
   };
