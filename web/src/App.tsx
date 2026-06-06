@@ -29,6 +29,7 @@ import { TickerManager } from "./components/TickerManager.tsx";
 import { Card, CardHeader } from "./components/ui/Card.tsx";
 import { SegmentedControl } from "./components/ui/SegmentedControl.tsx";
 import { Skeleton } from "./components/ui/Skeleton.tsx";
+import { ViewInGraphProvider } from "./lib/graphFocus.tsx";
 import type { HorizonKey } from "./lib/horizon.ts";
 import type { PnlMode } from "./lib/format.ts";
 
@@ -118,6 +119,7 @@ export default function App() {
   };
 
   return (
+    <ViewInGraphProvider value={viewInGraph}>
     <div className="min-h-screen">
       <Atmosphere />
       <Toaster
@@ -208,7 +210,6 @@ export default function App() {
                   setJournalTicker(ticker);
                   document.getElementById("journal")?.scrollIntoView({ behavior: "smooth" });
                 }}
-                onViewInGraph={viewInGraph}
               />
             </>
           )}
@@ -243,7 +244,7 @@ export default function App() {
         </Section>
 
         <Section title="Performance wiki" index={10}>
-          <Wiki onViewInGraph={viewInGraph} />
+          <Wiki />
         </Section>
 
         <Section title="Ask your portfolio" index={11}>
@@ -254,5 +255,6 @@ export default function App() {
       {showManager && <TickerManager onClose={() => setShowManager(false)} />}
       {showSchedule && <ScheduleDialog onClose={() => setShowSchedule(false)} />}
     </div>
+    </ViewInGraphProvider>
   );
 }

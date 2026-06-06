@@ -9,6 +9,7 @@ import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
 import { Term } from "./ui/Term.tsx";
 import { nodeId } from "./graph/nodeStyle.ts";
+import { useViewInGraph } from "../lib/graphFocus.tsx";
 
 const STATE_TONE: Record<LessonState, "pos" | "accent" | "neutral" | "warn"> = {
   active: "pos",
@@ -22,7 +23,7 @@ const STATE_TONE: Record<LessonState, "pos" | "accent" | "neutral" | "warn"> = {
 const pct = (x: number | null) => (x == null ? "—" : `${(x * 100).toFixed(0)}%`);
 
 /** Region 6 — the performance wiki: compiled briefing, evidence-gated lessons, calibration metrics. */
-export function Wiki({ onViewInGraph }: { onViewInGraph?: (nodeId: string) => void }) {
+export function Wiki() {
   const briefing = useWikiBriefing();
   const lessons = useWikiLessons();
   const metrics = useWikiMetrics("all_time");
@@ -66,7 +67,7 @@ export function Wiki({ onViewInGraph }: { onViewInGraph?: (nodeId: string) => vo
 
           <div className="space-y-2">
             {(lessons.data?.lessons ?? []).map((l) => (
-              <LessonRow key={l.id} lesson={l} onViewInGraph={onViewInGraph} />
+              <LessonRow key={l.id} lesson={l} />
             ))}
           </div>
         </div>
@@ -99,7 +100,8 @@ function Stat({ label, value, icon }: { label: ReactNode; value: string; icon?: 
   );
 }
 
-function LessonRow({ lesson, onViewInGraph }: { lesson: WikiLesson; onViewInGraph?: (nodeId: string) => void }) {
+function LessonRow({ lesson }: { lesson: WikiLesson }) {
+  const onViewInGraph = useViewInGraph();
   return (
     <div className="rounded-lg border border-hairline bg-surface-2/30 p-3">
       <div className="mb-1 flex items-center gap-2">

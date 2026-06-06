@@ -6,6 +6,8 @@ import { cn } from "../lib/cn.ts";
 import { stanceTone } from "../lib/stance.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
+import { nodeId } from "./graph/nodeStyle.ts";
+import { useViewInGraph } from "../lib/graphFocus.tsx";
 
 /** The AI's current market outlook: regime banner + sector leans + named themes, each with its evolution. */
 export function MarketView() {
@@ -54,7 +56,10 @@ function Group({ title, items }: { title: string; items: AiInsight[] }) {
 
 function Lean({ insight }: { insight: AiInsight }) {
   const [open, setOpen] = useState(false);
+  const onViewInGraph = useViewInGraph();
   const history = useMarketViewSubject(open ? insight.level : null, open ? insight.subject : null);
+  // Sector/theme leans map to a graph node; the regime is market-wide and has no single node.
+  const graphNodeId = insight.level === "sector" || insight.level === "theme" ? nodeId(insight.level, insight.subject) : null;
   return (
     <div className="py-2">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 text-left">
@@ -85,6 +90,14 @@ function Lean({ insight }: { insight: AiInsight }) {
                 <a key={s.url} href={s.url} target="_blank" rel="noreferrer" className="text-[11px] text-accent hover:underline">{s.title}</a>
               ))}
             </div>
+          )}
+          {onViewInGraph && graphNodeId && (
+            <button
+              onClick={() => onViewInGraph(graphNodeId)}
+              className="mt-2 text-[11px] text-text-muted transition-colors hover:text-accent"
+            >
+              View {insight.subject} in graph →
+            </button>
           )}
         </div>
       )}

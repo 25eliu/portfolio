@@ -8,6 +8,7 @@ import { Badge } from "./ui/Badge.tsx";
 import { Term } from "./ui/Term.tsx";
 import { DeliberationPanel, CalibrationChain } from "./Reasoning.tsx";
 import { nodeId } from "./graph/nodeStyle.ts";
+import { useViewInGraph } from "../lib/graphFocus.tsx";
 
 /** Screen types from the discovery layer get a visually distinct (accent) tone. */
 const DISCOVERY_SCREENS = new Set(["sentiment", "thematic"]);
@@ -50,12 +51,11 @@ function sentimentTone(s: number): { tone: "pos" | "neg" | "warn"; label: string
 export function RecommendationCard({
   r,
   onViewJournal,
-  onViewInGraph,
 }: {
   r: Recommendation;
   onViewJournal?: (ticker: string) => void;
-  onViewInGraph?: (nodeId: string) => void;
 }) {
+  const onViewInGraph = useViewInGraph();
   const [open, setOpen] = useState(false);
   const hasDetail =
     r.technicals.rsi14 != null ||

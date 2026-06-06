@@ -11,6 +11,8 @@ import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
 import { Term } from "./ui/Term.tsx";
 import { DeliberationPanel, CalibrationChain } from "./Reasoning.tsx";
+import { nodeId } from "./graph/nodeStyle.ts";
+import { useViewInGraph } from "../lib/graphFocus.tsx";
 
 /** Format an ISO calendar date (YYYY-MM-DD) as a readable day header, e.g. "Mon, Jun 2 2026". */
 function dayLabel(date: string): string {
@@ -244,6 +246,7 @@ function JournalRow({ entry }: { entry: JournalEntry }) {
 
 function JournalDetail({ entry }: { entry: JournalEntry }) {
   const detail = useJournalEntry(entry.id);
+  const onViewInGraph = useViewInGraph();
   const rec = entry.recommendation;
   const pred = rec.prediction;
   const forecast = detail.data?.forecast ?? null;
@@ -326,6 +329,15 @@ function JournalDetail({ entry }: { entry: JournalEntry }) {
             );
           })}
         </div>
+      )}
+
+      {onViewInGraph && (
+        <button
+          onClick={() => onViewInGraph(nodeId("ticker", entry.ticker))}
+          className="text-[11px] text-text-muted transition-colors hover:text-accent"
+        >
+          View {entry.ticker} in graph →
+        </button>
       )}
     </div>
   );

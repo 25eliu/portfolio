@@ -16,14 +16,12 @@ function Group({
   recs,
   emptyLabel = "None",
   onViewJournal,
-  onViewInGraph,
 }: {
   title: string;
   subtitle: string;
   recs: Recommendation[];
   emptyLabel?: string;
   onViewJournal?: (ticker: string) => void;
-  onViewInGraph?: (nodeId: string) => void;
 }) {
   return (
     <div className="mb-8">
@@ -39,7 +37,7 @@ function Group({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {recs.map((r) => (
-            <RecommendationCard key={r.ticker} r={r} onViewJournal={onViewJournal} onViewInGraph={onViewInGraph} />
+            <RecommendationCard key={r.ticker} r={r} onViewJournal={onViewJournal} />
           ))}
         </div>
       )}
@@ -50,11 +48,9 @@ function Group({
 export function Recommendations({
   report,
   onViewJournal,
-  onViewInGraph,
 }: {
   report: DailyReport | null;
   onViewJournal?: (ticker: string) => void;
-  onViewInGraph?: (nodeId: string) => void;
 }) {
   if (!report || report.recommendations.length === 0) {
     return (
@@ -82,7 +78,6 @@ export function Recommendations({
         subtitle="what to do with what you own"
         recs={held}
         onViewJournal={onViewJournal}
-        onViewInGraph={onViewInGraph}
       />
       <Group
         title="Opportunities"
@@ -90,7 +85,6 @@ export function Recommendations({
         recs={opp}
         emptyLabel="No opportunities surfaced — scan sources may be unavailable, or nothing screened in today."
         onViewJournal={onViewJournal}
-        onViewInGraph={onViewInGraph}
       />
     </div>
   );
