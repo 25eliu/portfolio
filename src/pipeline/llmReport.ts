@@ -1,7 +1,7 @@
 import type { App } from "../app.ts";
 import { newId, nodeId, type DailyReport, type Recommendation, type ScanCandidate } from "../domain/index.ts";
 import type { StreamSink } from "../llm/analyze.ts";
-import { computeTechnicals } from "../analysis/technicals.ts";
+import { computeTechnicals, computeBeta } from "../analysis/technicals.ts";
 import { calibrateConviction } from "../analysis/calibration.ts";
 import { regimeFromContext } from "../analysis/regime.ts";
 import { buildMarketContext } from "../analysis/marketContext.ts";
@@ -156,6 +156,10 @@ export async function generateLlmReport(
   });
   emit({ type: "phase", phase: "analyze", label: `Analyzing ${universe.symbols.length} tickers` });
 
+  // Benchmark bars fetched once for local beta (Tier-0, no extra provider) — each ticker's beta is the
+  // returns-regression vs SPY over the lookback.
+  const spyBars = await app.gateway.getBars("SPY", LOOKBACK).catch(() => [] as Awaited<ReturnType<typeof app.gateway.getBars>>);
+
   const results = await mapLimit(universe.symbols, app.env.LLM_CONCURRENCY, async (symbol) => {
     const entry = universe.bySymbol.get(symbol) as UniverseEntry;
     const tickerSink: StreamSink = (e) => {
@@ -170,7 +174,7 @@ export async function generateLlmReport(
         app.fundamentals.get(symbol),
       ]);
       referencePrices.set(symbol, quote.price); // the live baseline the journal scores this call against
-      const technicals = computeTechnicals(bars, null); // beta wired from FMP profile in a later pass
+      const technicals = computeTechnicals(bars, spyBars.length ? computeBeta(bars, spyBars) : null);
       // Graph-aware retrieval, expanded with the candidate's screen (strategy signal) for broader recall.
       const extraTerms = entry.candidate?.screen ? [entry.candidate.screen] : [];
       const evidence = retrieveEvidence(app, symbol, { extraTerms });

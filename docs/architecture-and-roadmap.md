@@ -192,9 +192,10 @@ place orders.
 
 - Add focused tests for contribution-neutral return calculations.
 - Keep the Playwright critical path aligned with implemented UI behavior.
-- Wire real beta enrichment into technical calculations; it is currently passed as `null`.
+- ~~Wire real beta enrichment~~ ✅ done — `computeBeta` (returns-regression vs SPY, Tier-0, no provider)
+  is wired into `computeTechnicals` in `generateLlmReport`.
 - Consider frontend code-splitting; the production bundle triggers Vite's large-chunk warning (the new
-  journal/knowledge/wiki panels add to it).
+  journal/knowledge/wiki/graph panels add to it).
 
 ## 3. Plan evolution
 
