@@ -33,6 +33,12 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
   const positions = new Map<string, Lot>();
 
   const priceNow = (symbol: string) => fakePrice(symbol, now());
+  /** Previous calendar day's deterministic close — the day-P&L baseline. */
+  const prevCloseNow = (symbol: string) => {
+    const d = new Date(`${now()}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return fakePrice(symbol, d.toISOString().slice(0, 10));
+  };
 
   const positionList = (): BrokerPosition[] =>
     [...positions.entries()].map(([symbol, lot]) => {
@@ -43,15 +49,16 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): MarketGateway 
         avgEntry: lot.avgEntry,
         currentPrice,
         marketValue: Math.round(lot.shares * currentPrice * 100) / 100,
+        previousClose: prevCloseNow(symbol),
       };
     });
 
   const marketData = {
     async getQuote(symbol: string): Promise<Quote> {
-      return { symbol, price: priceNow(symbol) };
+      return { symbol, price: priceNow(symbol), previousClose: prevCloseNow(symbol) };
     },
     async getQuotes(symbols: string[]): Promise<Quote[]> {
-      return symbols.map((s) => ({ symbol: s, price: priceNow(s) }));
+      return symbols.map((s) => ({ symbol: s, price: priceNow(s), previousClose: prevCloseNow(s) }));
     },
     // Returns one bar per calendar day as a deterministic approximation (no market-close filtering).
     async getBars(symbol: string, lookbackDays: number): Promise<Bar[]> {

@@ -42,21 +42,39 @@ describe("loadEnv", () => {
 
   test("defaults the Phase 2 analysis knobs", () => {
     const e = loadEnv({});
-    expect(e.GEMINI_MODEL).toBe("gemini-3.1-pro-preview");
+    expect(e.GEMINI_MODEL).toBe("gemini-3.5-flash");
     expect(e.GEMINI_THINKING_LEVEL).toBe("medium");
     expect(e.LLM_CONCURRENCY).toBe(4);
-    expect(e.MAX_SCAN_CANDIDATES).toBe(8);
+    expect(e.MAX_SCAN_CANDIDATES).toBe(12);
+    expect(e.MAX_THEMATIC_CANDIDATES).toBe(5);
+    expect(e.MAX_WATCH_SURFACED).toBe(6);
     expect(e.GEMINI_API_KEY).toBe("");
     expect(e.FMP_API_KEY).toBe("");
   });
 
-  test("coerces LLM_CONCURRENCY and MAX_SCAN_CANDIDATES", () => {
-    const e = loadEnv({ LLM_CONCURRENCY: "8", MAX_SCAN_CANDIDATES: "12" });
+  test("coerces LLM_CONCURRENCY, MAX_SCAN_CANDIDATES, and MAX_WATCH_SURFACED", () => {
+    const e = loadEnv({ LLM_CONCURRENCY: "8", MAX_SCAN_CANDIDATES: "12", MAX_WATCH_SURFACED: "3" });
     expect(e.LLM_CONCURRENCY).toBe(8);
     expect(e.MAX_SCAN_CANDIDATES).toBe(12);
+    expect(e.MAX_WATCH_SURFACED).toBe(3);
   });
 
   test("rejects an invalid thinking level", () => {
     expect(() => loadEnv({ GEMINI_THINKING_LEVEL: "ultra" })).toThrow(/Invalid environment/);
+  });
+
+  test("defaults the AI-universe + knowledge knobs", () => {
+    const e = loadEnv({});
+    expect(e.MAX_SCAN_CANDIDATES).toBe(12); // widened from 8
+    expect(e.AI_THESIS_LOOKBACK_DAYS).toBe(7);
+    expect(e.MAX_AI_THESIS).toBe(15);
+    expect(e.KNOWLEDGE_RELEVANCE_FLOOR).toBe(0); // fully permissive default; tighten via env var
+  });
+
+  test("coerces the new AI-universe knobs", () => {
+    const e = loadEnv({ AI_THESIS_LOOKBACK_DAYS: "14", MAX_AI_THESIS: "20", KNOWLEDGE_RELEVANCE_FLOOR: "-0.5" });
+    expect(e.AI_THESIS_LOOKBACK_DAYS).toBe(14);
+    expect(e.MAX_AI_THESIS).toBe(20);
+    expect(e.KNOWLEDGE_RELEVANCE_FLOOR).toBe(-0.5);
   });
 });

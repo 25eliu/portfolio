@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { Bar } from "../market/types.ts";
-import { computeTechnicals, ema, rsi, sma } from "./technicals.ts";
+import { computeBeta, computeTechnicals, ema, rsi, sma } from "./technicals.ts";
 
 const bar = (date: string, c: number, v = 1_000_000): Bar => ({
   date, open: c, high: c, low: c, close: c, volume: v,
 });
 const series = (closes: number[]): Bar[] =>
   closes.map((c, i) => bar(`2026-01-${String(i + 1).padStart(2, "0")}`, c));
+
+/** N=70 bars with sequential UTC dates; closes compounded from per-step returns scaled by `mult`. */
+const RET = Array.from({ length: 70 }, (_, i) => ((i % 5) - 2) / 100); // -0.02..0.02, mean ~0, has variance
+function fromReturns(mult: number, n = RET.length): Bar[] {
+  const closes = [100];
+  for (let i = 1; i < n; i++) closes.push(closes[i - 1]! * (1 + mult * RET[i]!));
+  return closes.map((c, i) => bar(new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10), c));
+}
 
 describe("sma", () => {
   test("simple average of the last n", () => {
@@ -49,6 +57,30 @@ describe("computeTechnicals", () => {
     const t = computeTechnicals(series([10, 11, 12]), null);
     expect(t.price).toBe(12);
     expect(t.sma200).toBeNull();
+  });
+});
+
+describe("computeBeta", () => {
+  test("a ticker that moves 2x the benchmark each day → beta ≈ 2", () => {
+    expect(computeBeta(fromReturns(2), fromReturns(1))).toBeCloseTo(2, 2);
+  });
+  test("a ticker that tracks the benchmark exactly → beta ≈ 1", () => {
+    expect(computeBeta(fromReturns(1), fromReturns(1))).toBeCloseTo(1, 2);
+  });
+  test("an inverse ticker → negative beta", () => {
+    expect(computeBeta(fromReturns(-1), fromReturns(1))).toBeCloseTo(-1, 2);
+  });
+  test("too few overlapping sessions → null", () => {
+    expect(computeBeta(fromReturns(2, 30), fromReturns(1, 30))).toBeNull();
+  });
+  test("a flat (zero-variance) benchmark → null", () => {
+    const flat = Array.from({ length: 70 }, (_, i) => bar(new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10), 100));
+    expect(computeBeta(fromReturns(1), flat)).toBeNull();
+  });
+  test("only counts shared dates (misaligned tails ignored)", () => {
+    const spy = fromReturns(1);
+    const ticker = fromReturns(2).map((b) => ({ ...b, date: `x-${b.date}` })); // no shared dates
+    expect(computeBeta(ticker, spy)).toBeNull();
   });
 });
 

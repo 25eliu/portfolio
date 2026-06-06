@@ -5,20 +5,10 @@ import type { Action, Recommendation } from "../api/types.ts";
 import { cn } from "../lib/cn.ts";
 import { usd } from "../lib/format.ts";
 import { Badge } from "./ui/Badge.tsx";
-import { Tooltip } from "./ui/Tooltip.tsx";
-import { GLOSSARY } from "../lib/glossary.ts";
-
-function Term({ k, children }: { k: string; children: ReactNode }) {
-  const def = GLOSSARY[k];
-  if (!def) return <>{children}</>;
-  return (
-    <Tooltip content={def}>
-      <span className="cursor-help underline decoration-dotted decoration-text-muted underline-offset-2">
-        {children}
-      </span>
-    </Tooltip>
-  );
-}
+import { Term } from "./ui/Term.tsx";
+import { DeliberationPanel, CalibrationChain } from "./Reasoning.tsx";
+import { nodeId } from "./graph/nodeStyle.ts";
+import { useViewInGraph } from "../lib/graphFocus.tsx";
 
 /** Screen types from the discovery layer get a visually distinct (accent) tone. */
 const DISCOVERY_SCREENS = new Set(["sentiment", "thematic"]);
@@ -58,7 +48,14 @@ function sentimentTone(s: number): { tone: "pos" | "neg" | "warn"; label: string
   return { tone: "warn", label: "neutral" };
 }
 
-export function RecommendationCard({ r }: { r: Recommendation }) {
+export function RecommendationCard({
+  r,
+  onViewJournal,
+}: {
+  r: Recommendation;
+  onViewJournal?: (ticker: string) => void;
+}) {
+  const onViewInGraph = useViewInGraph();
   const [open, setOpen] = useState(false);
   const hasDetail =
     r.technicals.rsi14 != null ||
@@ -94,6 +91,13 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
         />
       </div>
 
+      {/* Decision Engine v2 — how the track record dampened conviction (graph-propagated calibration) */}
+      {r.calibration && (
+        <div className="mb-3">
+          <CalibrationChain stated={r.conviction} calibration={r.calibration} />
+        </div>
+      )}
+
       {/* prediction — direction + horizon + expected return */}
       <div className="mb-3 border-b border-hairline pb-3">
         <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
@@ -101,7 +105,7 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             {pred.direction}
           </span>
           <span className="text-text-muted">·</span>
-          <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+          <span className="rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
             {pred.horizon}
           </span>
           {pred.expectedReturnPct != null && (
@@ -163,12 +167,19 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
 
       <p className="mb-3 text-[13px] leading-relaxed text-text-secondary">{r.thesis}</p>
 
+      {/* Decision Engine v2 — the bull/bear deliberation that preceded the verdict */}
+      {r.deliberation && (
+        <div className="mb-3">
+          <DeliberationPanel deliberation={r.deliberation} />
+        </div>
+      )}
+
       {r.signals.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {r.signals.map((s) => (
             <span
               key={s}
-              className="rounded-md border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-secondary"
+              className="rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-secondary"
             >
               {s}
             </span>
@@ -268,6 +279,21 @@ export function RecommendationCard({ r }: { r: Recommendation }) {
             </div>
           )}
         </>
+      )}
+
+      {(onViewJournal || onViewInGraph) && (
+        <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-2.5 text-[11px]">
+          {onViewJournal && (
+            <button onClick={() => onViewJournal(r.ticker)} className="flex-1 text-text-muted transition-colors hover:text-accent">
+              View in journal →
+            </button>
+          )}
+          {onViewInGraph && (
+            <button onClick={() => onViewInGraph(nodeId("ticker", r.ticker))} className="flex-1 text-text-muted transition-colors hover:text-accent">
+              View in graph →
+            </button>
+          )}
+        </div>
       )}
     </article>
   );

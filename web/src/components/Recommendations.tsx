@@ -14,10 +14,14 @@ function Group({
   title,
   subtitle,
   recs,
+  emptyLabel = "None",
+  onViewJournal,
 }: {
   title: string;
   subtitle: string;
   recs: Recommendation[];
+  emptyLabel?: string;
+  onViewJournal?: (ticker: string) => void;
 }) {
   return (
     <div className="mb-8">
@@ -28,12 +32,12 @@ function Group({
       </div>
       {recs.length === 0 ? (
         <div className="rounded-xl border border-dashed border-hairline p-5 text-center text-[11px] text-text-muted">
-          None
+          {emptyLabel}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {recs.map((r) => (
-            <RecommendationCard key={r.ticker} r={r} />
+            <RecommendationCard key={r.ticker} r={r} onViewJournal={onViewJournal} />
           ))}
         </div>
       )}
@@ -41,7 +45,13 @@ function Group({
   );
 }
 
-export function Recommendations({ report }: { report: DailyReport | null }) {
+export function Recommendations({
+  report,
+  onViewJournal,
+}: {
+  report: DailyReport | null;
+  onViewJournal?: (ticker: string) => void;
+}) {
   if (!report || report.recommendations.length === 0) {
     return (
       <div className="card flex flex-col items-center justify-center gap-1.5 p-10 text-center">
@@ -67,11 +77,14 @@ export function Recommendations({ report }: { report: DailyReport | null }) {
         title="Your positions"
         subtitle="what to do with what you own"
         recs={held}
+        onViewJournal={onViewJournal}
       />
       <Group
         title="Opportunities"
         subtitle="ideas you don't own yet"
         recs={opp}
+        emptyLabel="No opportunities surfaced — scan sources may be unavailable, or nothing screened in today."
+        onViewJournal={onViewJournal}
       />
     </div>
   );

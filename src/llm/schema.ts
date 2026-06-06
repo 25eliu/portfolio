@@ -40,8 +40,98 @@ export const recommendationFunctionDeclaration: FunctionDeclaration = {
         },
         required: ["direction", "horizon", "invalidation", "rationale"],
       },
+      // Durable facts to add to the system's self-curated long-term memory (0..3, each cited).
+      memorableFacts: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            fact: { type: Type.STRING, description: "one durable, structural claim, ≤140 chars" },
+            citationUrl: { type: Type.STRING, description: "a research source URL backing the fact" },
+            scope: { type: Type.STRING, enum: ["ticker", "global"] },
+            significance: { type: Type.NUMBER, description: "lasting decision value 0..1; only ≥0.6 is kept" },
+            category: { type: Type.STRING, enum: ["moat", "secular", "management", "capital_structure", "regulatory", "unit_economics"], description: "structural category of the fact" },
+          },
+          required: ["fact", "significance", "category"],
+        },
+      },
     },
     required: ["ticker", "action", "conviction", "strategyFamily", "thesis", "signals", "prediction"],
+  },
+};
+
+/** The function declaration Gemini calls to return its bull/bear deliberation (Decision Engine v2,
+ *  the structured stage between research and the final recommendation). Re-validated with Zod after. */
+export const deliberationFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_deliberation",
+  description: "Return the bull/bear deliberation for one ticker BEFORE committing to a verdict.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      bull_case: { type: Type.STRING, description: "the strongest evidence-grounded case FOR acting" },
+      bear_case: { type: Type.STRING, description: "the strongest credible counter-thesis AGAINST acting" },
+      key_uncertainties: { type: Type.ARRAY, items: { type: Type.STRING }, description: "unknowns that most affect the outcome" },
+      disconfirmers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "specific, testable facts/events that would prove this call WRONG" },
+      base_rate_note: { type: Type.STRING, nullable: true, description: "realistic base rate of success for this kind of setup" },
+      reversal_check: { type: Type.STRING, nullable: true, description: "if this contradicts a prior call, why the change is warranted; else null" },
+      provisional_stance: { type: Type.STRING, enum: ["bullish", "bearish", "neutral"] },
+      provisional_conviction: { type: Type.NUMBER, description: "calibrated probability 0..1; uncertain ≈ 0.5" },
+    },
+    required: ["bull_case", "bear_case", "provisional_stance", "provisional_conviction"],
+  },
+};
+
+/** The function declaration the graph librarian calls to propose associative edges between existing
+ *  concept nodes. Each edge is gated (endpoints must exist, type-checked) before any write. */
+export const graphEdgesFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_graph_edges",
+  description: "Return proposed associative edges between EXISTING knowledge-graph concept nodes.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      edges: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            src_id: { type: Type.STRING, description: "exact id of a node from the provided list" },
+            rel: { type: Type.STRING, enum: ["related_to", "contradicts"] },
+            dst_id: { type: Type.STRING, description: "exact id of a different node from the list" },
+            rationale: { type: Type.STRING, description: "one short clause on why they relate/conflict" },
+          },
+          required: ["src_id", "rel", "dst_id"],
+        },
+      },
+    },
+    required: ["edges"],
+  },
+};
+
+const thesisItemSchema = {
+  type: Type.OBJECT,
+  properties: {
+    subject: { type: Type.STRING },
+    stance: { type: Type.STRING },
+    conviction: { type: Type.NUMBER, description: "0..1" },
+    horizon: { type: Type.STRING, enum: ["1d", "1w", "1mo", "3mo", "6mo", "1y"] },
+    summary: { type: Type.STRING, description: "one-line headline" },
+    thesis: { type: Type.STRING, description: "dense reasoning, 1-3 sentences" },
+    tickers: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["subject", "stance", "conviction", "horizon", "thesis"],
+};
+
+export const outlookFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_outlook",
+  description: "Return the cross-cutting market outlook: regime + sector leans + named themes.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      regime: { ...thesisItemSchema, nullable: true, description: "subject='market'; stance risk_on|neutral|risk_off|defensive" },
+      sectors: { type: Type.ARRAY, items: thesisItemSchema, description: "≤8 GICS sectors; stance bullish|bearish|neutral" },
+      themes: { type: Type.ARRAY, items: thesisItemSchema, description: "≤6 named cross-cutting themes; stance bullish|bearish|neutral" },
+    },
+    required: ["sectors", "themes"],
   },
 };
 

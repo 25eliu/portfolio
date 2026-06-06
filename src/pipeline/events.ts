@@ -16,7 +16,7 @@ export type RunEventInput =
   | { type: "context:delta"; channel: "thinking" | "text"; text: string }
   | { type: "context:tool"; query?: string; sources?: Source[] }
   | { type: "context:done"; summary: string }
-  | { type: "ticker:start"; symbol: string; stage: "research" | "structure" }
+  | { type: "ticker:start"; symbol: string; stage: "research" | "deliberate" | "structure" }
   | { type: "ticker:delta"; symbol: string; channel: "thinking" | "text"; text: string }
   | { type: "ticker:tool"; symbol: string; query?: string; sources?: Source[] }
   | { type: "ticker:done"; symbol: string; action: string; conviction: number }
@@ -112,6 +112,7 @@ export function logEvent(e: RunEventInput): void {
       break;
     case "ticker:start":
       if (e.stage === "research") console.log(`  · ${e.symbol} researching…`);
+      else if (e.stage === "deliberate") console.log(`  · ${e.symbol} deliberating (bull/bear)…`);
       break;
     case "ticker:tool":
     case "context:tool": {

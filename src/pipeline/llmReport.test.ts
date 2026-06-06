@@ -23,13 +23,40 @@ describe("generateLlmReport", () => {
     const app = makeApp();
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
     app.repos.watchlist.add({ symbol: "MSFT" });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     expect(() => DailyReport.parse(report)).not.toThrow();
     expect(report.source).toBe("llm");
     const tickers = report.recommendations.map((r) => r.ticker);
     expect(tickers).toContain("AAPL");
     expect(tickers).toContain("MSFT");
     expect(report.marketContext).not.toBeNull();
+  });
+
+  test("attaches the deliberation + graph-calibration fields to every recommendation (Decision Engine v2)", async () => {
+    const app = makeApp();
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
+    const { report } = await generateLlmReport(app);
+    for (const rec of report.recommendations) {
+      // Bull/bear deliberation is present and structured.
+      expect(rec.deliberation).not.toBeNull();
+      expect(typeof rec.deliberation!.bearCase).toBe("string");
+      // Calibration ran: a planner-facing conviction + an auditable factor are attached, stated is preserved.
+      expect(rec.calibratedConviction).not.toBeNull();
+      expect(rec.calibration).not.toBeNull();
+      expect(rec.calibration!.factor).toBeLessThanOrEqual(1);
+      expect(rec.calibratedConviction!).toBeLessThanOrEqual(rec.conviction); // dampen-only
+    }
+  });
+
+  test("emits the deliberate stage between research and structure", async () => {
+    const app = makeApp();
+    app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
+    const events: import("./events.ts").RunEventInput[] = [];
+    await generateLlmReport(app, (e) => events.push(e));
+    const aaplStages = events
+      .filter((e): e is Extract<import("./events.ts").RunEventInput, { type: "ticker:start" }> => e.type === "ticker:start" && e.symbol === "AAPL")
+      .map((e) => e.stage);
+    expect(aaplStages).toContain("deliberate");
   });
 
   test("one failing ticker is skipped, not fatal", async () => {
@@ -42,7 +69,7 @@ describe("generateLlmReport", () => {
     const app = makeApp(flaky);
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
     app.repos.watchlist.add({ symbol: "MSFT" });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     const tickers = report.recommendations.map((r) => r.ticker);
     expect(tickers).not.toContain("AAPL");
     expect(tickers).toContain("MSFT");
@@ -89,7 +116,7 @@ describe("generateLlmReport", () => {
     expect(discovered.length).toBeGreaterThan(0);
     const app = makeApp(analyzer);
     app.repos.holdings.upsert(app.user.id, { symbol: "AAPL", shares: 5 });
-    const report = await generateLlmReport(app);
+    const { report } = await generateLlmReport(app);
     const tickers = report.recommendations.map((r) => r.ticker);
     expect(discovered.some((c) => tickers.includes(c.symbol))).toBe(true);
   });

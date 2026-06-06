@@ -1,5 +1,5 @@
 /**
- * Gemini analyzer — TWO-STAGE design, now STREAMING (confirmed against gemini-3.1-pro-preview).
+ * Gemini analyzer — TWO-STAGE design, now STREAMING (confirmed against Gemini 3.x; default gemini-3.5-flash).
  *
  * Stage A — RESEARCH: Search-only call → research text + real `groundingMetadata.groundingChunks`.
  * Stage B — STRUCTURE: function-tool-only call (mode ANY) over the research → schema-valid args.
@@ -8,19 +8,40 @@
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
-import { Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
+import { Deliberation, Outlook, Prediction, ProposedEdge, Recommendation, ScanCandidate, type LibrarianNode } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { Analyzer, StreamSink } from "./analyze.ts";
 import { normalizeAction } from "./normalize.ts";
 import {
+  buildDeliberationPrompt,
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
   buildMarketContextPrompt,
+  buildLibrarianPrompt,
+  buildOutlookResearchPrompt,
+  buildOutlookStructurePrompt,
   buildTickerResearchPrompt,
   buildTickerStructurePrompt,
   type TickerInput,
 } from "./prompts.ts";
-import { candidatesFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+import { candidatesFunctionDeclaration, deliberationFunctionDeclaration, graphEdgesFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+
+/** Parse a submit_deliberation function-call payload (snake_case) into the Deliberation schema. */
+function parseDeliberation(args: Record<string, unknown> | undefined): Deliberation | null {
+  if (!args) return null;
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const result = Deliberation.safeParse({
+    bullCase: typeof args.bull_case === "string" ? args.bull_case : "",
+    bearCase: typeof args.bear_case === "string" ? args.bear_case : "",
+    keyUncertainties: strings(args.key_uncertainties),
+    disconfirmers: strings(args.disconfirmers),
+    baseRateNote: typeof args.base_rate_note === "string" ? args.base_rate_note : null,
+    reversalCheck: typeof args.reversal_check === "string" ? args.reversal_check : null,
+    provisionalStance: args.provisional_stance,
+    provisionalConviction: args.provisional_conviction,
+  });
+  return result.success ? result.data : null;
+}
 
 const THINKING: Record<Env["GEMINI_THINKING_LEVEL"], ThinkingLevel> = {
   low: ThinkingLevel.LOW,
@@ -125,9 +146,24 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
     async analyzeTicker(input: TickerInput, ctx: MarketContext, sink?: StreamSink): Promise<Recommendation> {
       sink?.({ kind: "stage", stage: "research" });
       const { text, sources } = await research(buildTickerResearchPrompt(input, ctx), sink);
+      // Stage A.5 — bull/bear deliberation (Decision Engine v2). Non-fatal: on failure the recommendation
+      // still proceeds without it, so a flaky extra call never blocks the verdict.
+      sink?.({ kind: "stage", stage: "deliberate" });
+      let deliberation: Deliberation | null = null;
+      try {
+        const dargs = await structure(
+          buildDeliberationPrompt(input, ctx, text),
+          { name: "submit_deliberation" },
+          deliberationFunctionDeclaration,
+          sink,
+        );
+        deliberation = parseDeliberation(dargs);
+      } catch (err) {
+        console.warn(`[deliberate] ${input.symbol} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
       sink?.({ kind: "stage", stage: "structure" });
       const args = await structure(
-        buildTickerStructurePrompt(input, ctx, text),
+        buildTickerStructurePrompt(input, ctx, text, sources, deliberation),
         { name: "submit_recommendation" },
         recommendationFunctionDeclaration,
         sink,
@@ -166,6 +202,7 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         held: input.held,
         action: normalizeAction(String(args.action ?? (input.held ? "HOLD" : "PASS")), input.held),
         prediction,
+        deliberation,
         technicals: input.technicals,
         fundamentals: input.fundamentals,
         priceTargetUpside: upside,
@@ -200,8 +237,56 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
           const parsed = ScanCandidate.safeParse({ ...(item as object), sources });
           if (parsed.success) out.push(parsed.data);
         }
+        // Surface the funnel: if the model returned candidates but none parsed, that's a schema
+        // mismatch silently dropping every opportunity — log it rather than return a quiet [].
+        console.log(`[discovery] model returned ${raw.length} candidates, ${out.length} parsed`);
         return out.slice(0, count);
-      } catch {
+      } catch (err) {
+        console.warn(`[discovery] failed: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
+      }
+    },
+
+    async synthesizeOutlook(ctx: MarketContext, recs: Recommendation[], sink?: StreamSink): Promise<Outlook> {
+      try {
+        sink?.({ kind: "stage", stage: "research" });
+        const recLines = recs.slice(0, 40).map((r) => `  ${r.ticker}: ${r.action} (${r.prediction.direction}, conv ${r.conviction.toFixed(2)})`);
+        const { text, sources } = await research(buildOutlookResearchPrompt(ctx.date, ctx.macroSummary, recLines), sink);
+        sink?.({ kind: "stage", stage: "structure" });
+        const args = await structure(buildOutlookStructurePrompt(ctx.date, text), { name: "submit_outlook" }, outlookFunctionDeclaration, sink);
+        const parsed = Outlook.safeParse(args ?? {});
+        if (!parsed.success) {
+          console.warn(`[outlook] schema parse failed, returning empty: ${parsed.error.message}`);
+          return { regime: null, sectors: [], themes: [] };
+        }
+        const withSrc = (it: typeof parsed.data.sectors[number]) => ({ ...it, sources: it.sources.length ? it.sources : sources });
+        return {
+          regime: parsed.data.regime ? withSrc(parsed.data.regime) : null,
+          sectors: parsed.data.sectors.map(withSrc),
+          themes: parsed.data.themes.map(withSrc),
+        };
+      } catch (err) {
+        console.warn(`[outlook] failed: ${err instanceof Error ? err.message : String(err)}`);
+        return { regime: null, sectors: [], themes: [] };
+      }
+    },
+
+    async proposeGraphEdges(nodes: LibrarianNode[]): Promise<ProposedEdge[]> {
+      if (nodes.length < 3) return [];
+      try {
+        // Single structure call — pure reasoning over the given node ids, no grounding needed.
+        const args = await structure(buildLibrarianPrompt(nodes), { name: "submit_graph_edges" }, graphEdgesFunctionDeclaration);
+        const raw = (args as { edges?: unknown[] } | undefined)?.edges ?? [];
+        const out: ProposedEdge[] = [];
+        for (const e of raw) {
+          const r = e as Record<string, unknown>;
+          const parsed = ProposedEdge.safeParse({ srcId: r.src_id, rel: r.rel, dstId: r.dst_id, rationale: typeof r.rationale === "string" ? r.rationale : "" });
+          if (parsed.success) out.push(parsed.data);
+        }
+        console.log(`[librarian] model proposed ${raw.length} edges, ${out.length} parsed`);
+        return out;
+      } catch (err) {
+        console.warn(`[librarian] failed: ${err instanceof Error ? err.message : String(err)}`);
         return [];
       }
     },

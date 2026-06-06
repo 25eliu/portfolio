@@ -1,4 +1,4 @@
-import type { Recommendation, ScanCandidate, Source } from "../domain/index.ts";
+import type { LibrarianNode, Outlook, ProposedEdge, Recommendation, ScanCandidate, Source } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { TickerInput } from "./prompts.ts";
 
@@ -8,7 +8,7 @@ import type { TickerInput } from "./prompts.ts";
  */
 export type StreamSink = (
   e:
-    | { kind: "stage"; stage: "research" | "structure" }
+    | { kind: "stage"; stage: "research" | "deliberate" | "structure" }
     | { kind: "thinking"; text: string }
     | { kind: "text"; text: string }
     | { kind: "tool"; query?: string; sources?: Source[] },
@@ -29,6 +29,17 @@ export interface Analyzer {
    * sources. Never fatal — returns [] on failure.
    */
   discoverOpportunities(ctx: MarketContext, count: number, sink?: StreamSink): Promise<ScanCandidate[]>;
+  /**
+   * Cross-cutting outlook synthesis (Phase 3): given the market context and this run's recommendations,
+   * author a regime call + sector leans + named themes. Never fatal — returns an empty outlook on failure.
+   */
+  synthesizeOutlook(ctx: MarketContext, recs: Recommendation[], sink?: StreamSink): Promise<Outlook>;
+  /**
+   * Graph librarian (KB maintenance): given concept nodes, propose associative edges between them
+   * (`related_to` / `contradicts`) that membership-based wiring can't infer. The pipeline gates every
+   * proposal before persisting. Never fatal — returns [] on failure.
+   */
+  proposeGraphEdges(nodes: LibrarianNode[]): Promise<ProposedEdge[]>;
 }
 
 /** Deterministic offline analyzer for tests — never calls the network; emits synthetic stream events. */
@@ -43,6 +54,7 @@ export function createMockAnalyzer(): Analyzer {
         query: `${input.symbol} latest news`,
         sources: [{ title: "example.com", url: "https://example.com" }],
       });
+      sink?.({ kind: "stage", stage: "deliberate" });
       sink?.({ kind: "stage", stage: "structure" });
       return {
         ticker: input.symbol,
@@ -52,6 +64,18 @@ export function createMockAnalyzer(): Analyzer {
         strategyFamily: "trend",
         thesis: `mock thesis for ${input.symbol}`,
         signals: ["mock"],
+        deliberation: {
+          bullCase: `mock bull case for ${input.symbol}`,
+          bearCase: `mock bear case for ${input.symbol}`,
+          keyUncertainties: ["mock uncertainty"],
+          disconfirmers: ["mock disconfirmer"],
+          baseRateNote: null,
+          reversalCheck: null,
+          provisionalStance: "neutral",
+          provisionalConviction: 0.5,
+        },
+        calibratedConviction: null,
+        calibration: null,
         prediction: {
           direction: "neutral",
           horizon: "1mo",
@@ -72,6 +96,9 @@ export function createMockAnalyzer(): Analyzer {
         priceTargetUpside: null,
         sources: [],
         screen: input.screen,
+        memorableFacts: [
+          { fact: `mock durable fact for ${input.symbol}`, citationUrl: "https://example.com", scope: "ticker", significance: 0.9, category: "moat" },
+        ],
       };
     },
     async marketMacro(_date, _trend, _pct, sink) {
@@ -85,6 +112,19 @@ export function createMockAnalyzer(): Analyzer {
         { symbol: "SOFI", screen: "sentiment", reason: "mock sentiment: credible-investor interest", sources: [] },
       ];
       return seed.slice(0, Math.max(0, count));
+    },
+    async synthesizeOutlook(_ctx, _recs, sink): Promise<Outlook> {
+      sink?.({ kind: "text", text: "synthesizing outlook…" });
+      return {
+        regime: { subject: "market", stance: "risk_on", conviction: 0.55, horizon: "1mo", summary: "mock constructive", thesis: "mock regime thesis", tickers: [], sources: [] },
+        sectors: [{ subject: "Information Technology", stance: "bullish", conviction: 0.6, horizon: "3mo", summary: "mock", thesis: "mock sector thesis", tickers: ["NVDA"], sources: [] }],
+        themes: [{ subject: "AI infrastructure", stance: "bullish", conviction: 0.6, horizon: "6mo", summary: "mock", thesis: "mock theme thesis", tickers: [], sources: [] }],
+      };
+    },
+    async proposeGraphEdges(nodes): Promise<ProposedEdge[]> {
+      // Deterministic: associate the two most-recent concept nodes so the gating path is exercised offline.
+      if (nodes.length < 2) return [];
+      return [{ srcId: nodes[0]!.id, rel: "related_to", dstId: nodes[1]!.id, rationale: "mock association" }];
     },
   };
 }

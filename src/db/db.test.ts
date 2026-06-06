@@ -68,7 +68,9 @@ describe("snapshots + market snapshots", () => {
       date: "2026-06-01",
       totalValue: 1100,
       cash: 100,
-      positions: [{ symbol: "AAPL", shares: 5, price: 200, marketValue: 1000 }],
+      positions: [
+        { symbol: "AAPL", shares: 5, price: 200, marketValue: 1000, dayPnL: null, totalPnL: null, costBasis: null, acquiredAt: null },
+      ],
     });
     const all = repos.snapshots.listByPortfolio(pid);
     expect(all.map((s) => s.date)).toEqual(["2026-05-30", "2026-06-01"]);
@@ -103,6 +105,7 @@ describe("reports", () => {
       source: "fake",
       recommendations: [],
       marketContext: null,
+      outlook: null,
     });
     expect(repos.reports.latest()?.date).toBe("2026-06-01");
   });
@@ -122,6 +125,7 @@ describe("reports", () => {
         sources: [{ title: "X", url: "https://example.com" }],
         macro: null,
       },
+      outlook: null,
     });
     const latest = repos.reports.latest();
     expect(latest?.marketContext?.spyTrend).toBe("up");
@@ -139,6 +143,7 @@ describe("reports", () => {
       source: "llm",
       recommendations: [],
       marketContext: null,
+      outlook: null,
     });
     // A NEWER legacy row from the old schema (technicals.macd used to be a string).
     db.query(

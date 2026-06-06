@@ -7,6 +7,14 @@ export const PricedPosition = z.object({
   shares: z.number(),
   price: z.number().nonnegative(),
   marketValue: z.number(),
+  /** Today's move on this name: shares × (price − previous market close). Null if no baseline. */
+  dayPnL: z.number().nullable().default(null),
+  /** Lifetime move since entry: shares × (price − costBasis/avgEntry). Null when no cost basis. */
+  totalPnL: z.number().nullable().default(null),
+  /** Average cost per share (user cost basis or broker avg entry). Null when untracked. */
+  costBasis: z.number().nullable().default(null),
+  /** Buy date (YYYY-MM-DD): user's recorded date, or the AI's first-seen snapshot date. */
+  acquiredAt: z.string().nullable().default(null),
 });
 export type PricedPosition = z.infer<typeof PricedPosition>;
 

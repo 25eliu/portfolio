@@ -1,0 +1,125 @@
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createApp, type App } from "../app.ts";
+import { openMemoryDb } from "../db/index.ts";
+import { createFakeGateway } from "../market/index.ts";
+import { createServer } from "./app.ts";
+import { curateFacts } from "../knowledge/curate.ts";
+
+const DATE = "2026-06-02";
+let app: App;
+let server: ReturnType<typeof createServer>;
+beforeEach(() => {
+  app = createApp({ db: openMemoryDb(), gateway: createFakeGateway({ now: () => DATE, startingCash: 100_000 }), now: () => DATE });
+  server = createServer(app);
+  curateFacts(app, {
+    ticker: "NVDA",
+    facts: [{ fact: "NVDA CUDA lock-in", citationUrl: "https://x.com/a", scope: "ticker", significance: 0.9, category: "moat" }],
+    runId: "r1", reportId: "rep1", journalEntryId: "j1", now: `${DATE}T10:00:00.000Z`,
+  });
+});
+const req = (path: string, init?: RequestInit) => server.fetch(new Request(`http://test/api${path}`, init));
+
+describe("AI Library routes", () => {
+  test("GET /ai-library/days returns day buckets with counts", async () => {
+    const body = (await (await req("/ai-library/days")).json()) as { days: { date: string; factCount: number; thesisCount: number }[] };
+    expect(body.days).toContainEqual({ date: DATE, factCount: 1, thesisCount: 0 });
+  });
+
+  test("GET /ai-library/day/:date returns serialized insights", async () => {
+    const body = (await (await req(`/ai-library/day/${DATE}`)).json()) as { facts: { headline: string }[] };
+    expect(body.facts[0]!.headline).toBe("NVDA CUDA lock-in");
+  });
+
+  test("GET /ai-library/search filters by text and tag", async () => {
+    const byText = (await (await req("/ai-library/search?q=cuda")).json()) as { insights: unknown[] };
+    expect(byText.insights.length).toBe(1);
+    const byTag = (await (await req("/ai-library/search?dimension=ticker&value=NVDA")).json()) as { insights: unknown[] };
+    expect(byTag.insights.length).toBe(1);
+    const miss = (await (await req("/ai-library/search?q=zzzznope")).json()) as { insights: unknown[] };
+    expect(miss.insights.length).toBe(0);
+  });
+
+  test("GET /tags returns a taxonomy", async () => {
+    const body = (await (await req("/tags")).json()) as { tags: { dimension: string; value: string; count: number }[] };
+    expect(body.tags).toContainEqual({ dimension: "ticker", value: "NVDA", count: 1 });
+  });
+
+  test("PUT /ai-insights/fact/:id/tags adds a human tag", async () => {
+    const id = app.repos.knowledge.listCuratedFacts()[0]!.id;
+    const res = await req(`/ai-insights/fact/${id}/tags`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ add: [{ dimension: "theme", value: "ai-infra" }], remove: [] }),
+    });
+    expect(res.status).toBe(200);
+    const tags = (await res.json()) as { tags: { dimension: string; value: string; source: string }[] };
+    expect(tags.tags).toContainEqual({ dimension: "theme", value: "ai-infra", source: "human" });
+  });
+
+  test("DELETE /ai-insights/fact/:id archives it (gone from the library)", async () => {
+    const id = app.repos.knowledge.listCuratedFacts()[0]!.id;
+    expect((await req(`/ai-insights/fact/${id}`, { method: "DELETE" })).status).toBe(200);
+    expect(app.repos.knowledge.listCuratedFacts().length).toBe(0);
+  });
+
+  test("search tolerates a non-numeric limit (does not silently drop results)", async () => {
+    const body = (await (await req("/ai-library/search?q=cuda&limit=foo")).json()) as { insights: unknown[] };
+    expect(body.insights.length).toBe(1);
+  });
+
+  test("an unsupported insight kind is rejected with 400", async () => {
+    const id = app.repos.knowledge.listCuratedFacts()[0]!.id;
+    expect((await req(`/ai-insights/thesis/${id}`, { method: "DELETE" })).status).toBe(400);
+    const put = await req(`/ai-insights/thesis/${id}/tags`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ add: [], remove: [] }),
+    });
+    expect(put.status).toBe(400);
+  });
+
+  test("active thesis appears in GET /ai-library/day/:date and /ai-library/search by sector tag", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-1", runId: "r2", reportId: "rep2", date: DATE, createdAt: `${DATE}T09:00:00.000Z`,
+      level: "sector", subject: "Semiconductors", subjectKey: "sector:semiconductors",
+      stance: "bullish", conviction: 0.8, horizon: "3mo", summary: "Semis bullish",
+      thesis: "Data-center capex is durable.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: ["NVDA"], sources: [{ title: "x", url: "https://x.com", sourceId: "src_1" }],
+    });
+
+    // appears in /ai-library/day/:date
+    const dayBody = (await (await req(`/ai-library/day/${DATE}`)).json()) as { facts: { id: string; kind: string }[] };
+    expect(dayBody.facts.some((i) => i.id === "thesis-1" && i.kind === "thesis")).toBe(true);
+
+    // appears in /ai-library/search filtered by sector tag
+    const searchBody = (await (await req("/ai-library/search?dimension=sector&value=Semiconductors")).json()) as { insights: { id: string }[] };
+    expect(searchBody.insights.some((i) => i.id === "thesis-1")).toBe(true);
+  });
+
+  test("GET /ai-library/search matches thesis body when keyword absent from headline", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-body-search", runId: "r4", reportId: "rep4", date: DATE, createdAt: `${DATE}T07:00:00.000Z`,
+      level: "regime", subject: "market", subjectKey: "regime:market",
+      stance: "risk_on", conviction: 0.65, horizon: "1mo", summary: "Constructive macro",
+      thesis: "Breadth expansion underpins the rally xyzunique123.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: [], sources: [],
+    });
+    const body = (await (await req("/ai-library/search?q=xyzunique123")).json()) as { insights: { id: string }[] };
+    expect(body.insights.some((i) => i.id === "thesis-body-search")).toBe(true);
+  });
+
+  test("GET /ai-library/days includes thesisCount alongside factCount", async () => {
+    app.repos.aiTheses.insert({
+      id: "thesis-2", runId: "r3", reportId: "rep3", date: DATE, createdAt: `${DATE}T08:00:00.000Z`,
+      level: "theme", subject: "AI Infrastructure", subjectKey: "theme:ai-infrastructure",
+      stance: "bullish", conviction: 0.75, horizon: "6mo", summary: "AI infra theme",
+      thesis: "Demand for AI compute is structural.", status: "active", supersedesId: null,
+      freshnessDeadline: null, tickers: [], sources: [],
+    });
+    const body = (await (await req("/ai-library/days")).json()) as { days: { date: string; factCount: number; thesisCount: number }[] };
+    const day = body.days.find((d) => d.date === DATE);
+    expect(day).toBeDefined();
+    expect(day!.factCount).toBe(1);
+    expect(day!.thesisCount).toBe(1);
+  });
+});

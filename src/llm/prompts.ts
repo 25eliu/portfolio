@@ -1,4 +1,16 @@
-import type { Fundamentals, MarketContext, ScreenType, Technicals } from "../domain/index.ts";
+import type { Deliberation, Fundamentals, LibrarianNode, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
+import { renderEvidenceBlock } from "../knowledge/retrieve.ts";
+
+/** The AI's most recent prior call on a ticker, fed back for day-to-day continuity. */
+export type PriorThesis = {
+  date: string;
+  action: string;
+  conviction: number;
+  entry: number | null;
+  target: number | null;
+  stop: number | null;
+  thesis: string;
+};
 
 export type TickerInput = {
   symbol: string;
@@ -13,6 +25,15 @@ export type TickerInput = {
   availableCash: number;
   /** Whether the portfolio currently holds this ticker (drives the position-aware verb set). */
   held: boolean;
+  /** Retrieved knowledge-base excerpts injected into the research stage as untrusted evidence. */
+  evidence?: RetrievedExcerpt[];
+  /** Compiled performance-wiki briefing injected as trusted, computed context (Phase 4). */
+  wikiBriefing?: string;
+  /** Durable facts the system has already self-curated for this ticker — shown so the model only
+   *  proposes net-new facts (the key to keeping the self-curated library dense, not bloated). */
+  priorFacts?: string[];
+  /** The AI's own latest prior call on this ticker — trusted continuity, distinct from user evidence. */
+  priorThesis?: PriorThesis;
 };
 
 /**
@@ -24,6 +45,7 @@ export type TickerInput = {
  */
 
 export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): string {
+  const evidenceBlock = renderEvidenceBlock(t.evidence ?? []);
   return [
     `You are a senior equity analyst building a rigorous research brief on ${t.symbol}.`,
     `Use Google Search to gather and synthesize the most recent information across all factors below.`,
@@ -32,6 +54,7 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
     ``,
     `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
     `Candidate source: ${t.source}${t.screenReason ? ` (${t.screenReason})` : ""}.`,
+    ...(evidenceBlock ? [``, evidenceBlock] : []),
     ``,
     `Research the following in order and include each in your brief:`,
     `1. Business update & news catalysts — recent developments, product/regulatory news, M&A.`,
@@ -48,7 +71,52 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
   ].join("\n");
 }
 
-export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+/**
+ * Decision Engine v2 — the deliberation stage (between research and structure). Forces a structured
+ * bull/bear argument, disconfirmer-seeking, and a base-rate-aware provisional conviction BEFORE the
+ * model commits. Grounded in the research, the wiki's track record, and the prior thesis (reversal
+ * check). Persisted on the recommendation so the reasoning is auditable, not ephemeral.
+ */
+export function buildDeliberationPrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+  return [
+    `You are a buy-side analyst stress-testing a potential decision on ${t.symbol} BEFORE committing.`,
+    `Argue BOTH sides honestly from the evidence below — do NOT pick a verdict yet. The goal is to surface`,
+    `the strongest bear case and the specific facts that would prove the call wrong, so the final verdict is earned.`,
+    ``,
+    `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
+    ...(t.wikiBriefing
+      ? [``, `This system's own calibrated track record (trusted, computed) — let it temper your provisional conviction:`, t.wikiBriefing]
+      : []),
+    ...(t.priorThesis
+      ? [
+          ``,
+          `Your prior call on ${t.symbol} (${t.priorThesis.date}): ${t.priorThesis.action}, conviction ${t.priorThesis.conviction.toFixed(2)} — "${t.priorThesis.thesis}".`,
+          `If your stance now flips from that, you MUST justify the reversal explicitly in reversal_check — otherwise return reversal_check: null.`,
+        ]
+      : []),
+    ``,
+    `Research findings:`,
+    research || "(no external research available)",
+    ``,
+    `Call submit_deliberation with:`,
+    `  - bull_case: the strongest evidence-grounded case FOR acting.`,
+    `  - bear_case: the strongest, most credible case AGAINST — steelman the counter-thesis.`,
+    `  - key_uncertainties: the unknowns that most affect the outcome.`,
+    `  - disconfirmers: SPECIFIC, testable facts or events that would prove this call wrong (not vague "market risk").`,
+    `  - base_rate_note: the realistic base rate of success for this kind of setup, if you can ground one.`,
+    `  - reversal_check: see above (null if no prior call or no reversal).`,
+    `  - provisional_stance: bullish | bearish | neutral.`,
+    `  - provisional_conviction: a CALIBRATED probability 0..1 — reserve high values for genuinely strong, well-evidenced cases; a balanced/uncertain case is ~0.5.`,
+  ].join("\n");
+}
+
+export function buildTickerStructurePrompt(
+  t: TickerInput,
+  ctx: MarketContext,
+  research: string,
+  sources: { title: string; url: string }[] = [],
+  deliberation?: Deliberation | null,
+): string {
   const macroLine = ctx.macro
     ? [
         ctx.macro.vix != null ? `VIX ${ctx.macro.vix.toFixed(1)}` : null,
@@ -72,9 +140,40 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     ``,
     `Market context (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}${macroLine ? ` | Macro: ${macroLine}` : ""}`,
     `Risk profile: ${t.riskPreset}.`,
+    ...(t.wikiBriefing
+      ? [
+          ``,
+          `Performance wiki — this system's own calibrated track record (trusted, computed statistics).`,
+          `Use it to calibrate THIS call's conviction and position size — e.g. trim conviction in cohorts`,
+          `where stated conviction has run ahead of realized hit-rate, or that show negative expectancy.`,
+          `It informs how strongly to act, not whether to commit; still pick the verdict the evidence demands.`,
+          t.wikiBriefing,
+        ]
+      : []),
+    ...(t.priorThesis
+      ? [
+          ``,
+          `Your prior call on ${t.symbol} (${t.priorThesis.date}): ${t.priorThesis.action}, conviction ${t.priorThesis.conviction.toFixed(2)}` +
+            `${t.priorThesis.target != null ? `, target ${t.priorThesis.target}` : ""}${t.priorThesis.stop != null ? ` / stop ${t.priorThesis.stop}` : ""} — "${t.priorThesis.thesis}".`,
+          t.priorThesis.entry != null && t.priorThesis.entry !== 0
+            ? `Since that call (entry ~$${t.priorThesis.entry}), price is now $${t.price} (${(((t.price - t.priorThesis.entry) / t.priorThesis.entry) * 100).toFixed(1)}%). Revise your target/stop/stance to reflect how price has moved vs your plan — do not restate a stale thesis.`
+            : `This is your own earlier reasoning (trusted continuity). Build on it or revise it as the evidence now warrants — do not ignore it.`,
+        ]
+      : []),
     ``,
     `Research findings (sources already captured separately):`,
     research || "(no external research available)",
+    ...(deliberation
+      ? [
+          ``,
+          `Your prior deliberation on ${t.symbol} — weigh it; do NOT ignore the bear case:`,
+          `  Bull: ${deliberation.bullCase}`,
+          `  Bear: ${deliberation.bearCase}`,
+          deliberation.disconfirmers.length ? `  Would be wrong if: ${deliberation.disconfirmers.join("; ")}` : "",
+          `  Provisional: ${deliberation.provisionalStance} @ ${deliberation.provisionalConviction.toFixed(2)}.`,
+          `Commit to the verdict the balance of evidence supports. If you act against the bear case, your thesis must say why it loses.`,
+        ].filter(Boolean)
+      : []),
     ``,
     `Technicals: ${JSON.stringify(t.technicals)}`,
     `Fundamentals: ${JSON.stringify(t.fundamentals)}`,
@@ -88,6 +187,7 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
           ``,
           `You HOLD ${t.symbol}. Decide exactly one — and do not default to HOLD to avoid committing:`,
           `  ADD (high-quality dip / thesis strengthening), TRIM (overextended / risk management), HOLD (thesis intact & fairly valued), SELL (thesis broken or better uses of capital).`,
+          `Your action is acted on directly: SELL exits the whole position and TRIM reduces it, independent of prediction.direction — a SELL does NOT need a bearish outlook to justify it. Set prediction.direction to your honest price outlook regardless.`,
         ]
       : [
           `When cash is scarce, prefer WATCH over BUY when there isn't cash to act.`,
@@ -104,6 +204,45 @@ export function buildTickerStructurePrompt(t: TickerInput, ctx: MarketContext, r
     ...(!t.held
       ? [`For WATCH: trigger = the specific, testable condition to act on; actionIfTriggered = what it becomes (e.g. "BUY"); also state the bearish branch in invalidation. Base every number ONLY on the provided technicals/fundamentals.`]
       : [`Base every number ONLY on the provided technicals/fundamentals.`]),
+    ``,
+    `Long-term memory — durable, structural facts this system already knows about ${t.symbol}:`,
+    (t.priorFacts ?? []).length ? (t.priorFacts ?? []).map((f) => `  • ${f}`).join("\n") : `  (none yet)`,
+    `Optionally return up to 3 NEW durable facts in memorableFacts. Each fact MUST include:`,
+    `  • significance (0..1): its lasting decision value — ONLY facts with significance ≥ 0.6 are kept.`,
+    `  • category: one of moat | secular | management | capital_structure | regulatory | unit_economics.`,
+    `A durable fact has lasting decision value: competitive moats, secular theses, management track`,
+    `record, capital structure, regulatory shifts, structural unit economics. Do NOT add ephemeral`,
+    `price moves, daily news, today's quote, or anything already listed above. Each fact ≤140 chars,`,
+    `self-contained (name the company/ticker), and MUST cite one of the research source URLs below —`,
+    `if you cannot cite it, or it lacks a category, omit it.`,
+    sources.length
+      ? [`Research source URLs (set citationUrl to one of these):`, ...sources.slice(0, 12).map((s, i) => `  [${i + 1}] ${s.url}${s.title ? ` — ${s.title}` : ""}`)].join("\n")
+      : `(No research source URLs were captured this run — return memorableFacts: [].)`,
+  ].join("\n");
+}
+
+/**
+ * Graph-librarian prompt (KB maintenance): given existing concept nodes, ask the model to propose
+ * associative edges BETWEEN THEM. Single structure call (no grounding) — pure reasoning over the given
+ * ids. Every proposal is gated downstream, so the prompt optimizes for high-signal, conservative links.
+ */
+export function buildLibrarianPrompt(nodes: LibrarianNode[]): string {
+  const lines = nodes.map(
+    (n) => `  ${n.id} (${n.type})${n.label && n.label !== n.id ? ` — ${n.label}` : ""}${n.summary ? `: ${n.summary.slice(0, 120)}` : ""}`,
+  );
+  return [
+    `You are a knowledge-graph librarian for a trading-research system. Below are concept nodes`,
+    `(themes, sectors, strategies, lessons, theses). Propose a SMALL set of high-signal relationships`,
+    `BETWEEN THESE EXISTING NODES that simple membership tags don't already capture:`,
+    `  - related_to: two concepts that share drivers, co-move, or one enables/explains the other.`,
+    `  - contradicts: two LESSONS or THESES that genuinely conflict.`,
+    `Rules: use ONLY the exact ids listed below; never link a node to itself; prefer a few strong links`,
+    `over many weak ones; at most ~10 edges. If nothing is clearly related, return an empty list.`,
+    ``,
+    `Nodes:`,
+    ...lines,
+    ``,
+    `Call submit_graph_edges with edges: [{ src_id, rel, dst_id, rationale }] using only ids above.`,
   ].join("\n");
 }
 
@@ -149,5 +288,25 @@ export function buildDiscoveryStructurePrompt(ctx: MarketContext, count: number,
     ``,
     `Research findings (sources already captured separately):`,
     research || "(no external research available)",
+  ].join("\n");
+}
+
+export function buildOutlookResearchPrompt(date: string, macroSummary: string, recLines: string[]): string {
+  return [
+    `Today is ${date}. Synthesize a cross-cutting US-equity OUTLOOK for a trader.`,
+    `Market context: ${macroSummary || "(none)"}.`,
+    recLines.length ? `This run's calls:\n${recLines.join("\n")}` : `(no individual calls this run)`,
+    `Use Google Search to ground a market-regime read, the most attractive/unattractive SECTORS, and 1-6 named cross-cutting THEMES. Cite sources.`,
+  ].join("\n");
+}
+
+export function buildOutlookStructurePrompt(date: string, research: string): string {
+  return [
+    `From the research below, return the structured outlook for ${date} via submit_outlook.`,
+    `regime.subject MUST be "market"; regime.stance one of risk_on|neutral|risk_off|defensive.`,
+    `sectors: up to 8 GICS sectors; themes: up to 6; each with stance bullish|bearish|neutral, conviction 0..1, horizon, a one-line summary, a 1-3 sentence thesis, and any tickers.`,
+    `Only include a sector/theme with a genuine lean — omit filler.`,
+    ``,
+    research,
   ].join("\n");
 }

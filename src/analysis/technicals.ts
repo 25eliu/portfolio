@@ -82,6 +82,35 @@ function stochastic(bars: Bar[], n = 14, d = 3): { k: number | null; dval: numbe
   return { k: round(k, 2), dval: dval == null ? null : round(dval, 2) };
 }
 
+/**
+ * Beta of a ticker vs a benchmark (SPY), from daily returns over their overlapping dates:
+ * cov(ticker, benchmark) / var(benchmark). Date-aligned so missing sessions don't desync the series.
+ * Returns null when there aren't enough common sessions for a meaningful estimate (Tier-0, no provider).
+ */
+export function computeBeta(tickerBars: Bar[], benchmarkBars: Bar[], minPairs = 60): number | null {
+  const benchByDate = new Map(benchmarkBars.map((b) => [b.date, b.close]));
+  const pairs: { t: number; b: number }[] = [];
+  for (const bar of tickerBars) {
+    const bc = benchByDate.get(bar.date);
+    if (bc != null && bc > 0 && bar.close > 0) pairs.push({ t: bar.close, b: bc });
+  }
+  if (pairs.length < minPairs + 1) return null;
+  const tr: number[] = [], br: number[] = [];
+  for (let i = 1; i < pairs.length; i++) {
+    tr.push(pairs[i]!.t / pairs[i - 1]!.t - 1);
+    br.push(pairs[i]!.b / pairs[i - 1]!.b - 1);
+  }
+  const meanT = tr.reduce((a, x) => a + x, 0) / tr.length;
+  const meanB = br.reduce((a, x) => a + x, 0) / br.length;
+  let cov = 0, varB = 0;
+  for (let i = 0; i < br.length; i++) {
+    cov += (tr[i]! - meanT) * (br[i]! - meanB);
+    varB += (br[i]! - meanB) ** 2;
+  }
+  if (varB === 0) return null;
+  return round(cov / varB, 2);
+}
+
 export function computeTechnicals(bars: Bar[], beta: number | null): TechnicalsT {
   if (bars.length === 0) return emptyTechnicals();
   const closes = bars.map((b) => b.close);

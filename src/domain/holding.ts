@@ -15,6 +15,8 @@ export const Holding = z.object({
   symbol: Symbol,
   shares: z.number().positive(),
   costBasis: z.number().positive().nullable().default(null),
+  /** Buy date (YYYY-MM-DD) recorded when the holding was added. Null for legacy untracked rows. */
+  acquiredAt: z.string().nullable().default(null),
 });
 export type Holding = z.infer<typeof Holding>;
 
@@ -23,5 +25,7 @@ export const HoldingInput = z.object({
   symbol: Symbol,
   shares: z.number().positive(),
   costBasis: z.number().positive().nullable().optional(),
+  /** Server-set buy date; the UI omits it. */
+  acquiredAt: z.string().nullable().optional(),
 });
 export type HoldingInput = z.infer<typeof HoldingInput>;

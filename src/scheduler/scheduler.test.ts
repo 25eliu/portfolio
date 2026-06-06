@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dueToRun, localDate, localHHMM, startScheduler } from "./index.ts";
+import { localDate, localHHMM, ranToday, shouldRun, startScheduler } from "./index.ts";
 import type { Schedule } from "../domain/index.ts";
 import { createApp } from "../app.ts";
 import { openMemoryDb } from "../db/index.ts";
@@ -20,24 +20,34 @@ describe("local helpers", () => {
   });
 });
 
-describe("dueToRun", () => {
-  test("fires when enabled, time reached, and not yet run today", () => {
-    expect(dueToRun(enabled("09:30"), at("09:30"), null)).toBe(true);
-    expect(dueToRun(enabled("09:30"), at("09:31"), "2026-05-31")).toBe(true);
-    expect(dueToRun(enabled("09:30"), at("17:00"), null)).toBe(true);
+describe("shouldRun", () => {
+  test("fires at or after the set time when it hasn't run today", () => {
+    expect(shouldRun(enabled("09:30"), at("09:30"), false)).toBe(true);
+    expect(shouldRun(enabled("09:30"), at("17:00"), false)).toBe(true); // catch-up after the time
   });
 
-  test("does not fire before the target time", () => {
-    expect(dueToRun(enabled("09:30"), at("09:29"), null)).toBe(false);
-    expect(dueToRun(enabled("09:30"), at("00:00"), null)).toBe(false);
+  test("does not fire before the set time", () => {
+    expect(shouldRun(enabled("09:30"), at("09:29"), false)).toBe(false);
   });
 
-  test("does not fire when disabled", () => {
-    expect(dueToRun({ enabled: false, time: "09:30" }, at("10:00"), null)).toBe(false);
+  test("does not fire on a brief overnight wake before the set time (the midnight-run bug)", () => {
+    expect(shouldRun(enabled("09:30"), at("00:10"), false)).toBe(false);
+    expect(shouldRun(enabled("09:30"), at("00:00"), false)).toBe(false);
   });
 
-  test("fires at most once per local day", () => {
-    expect(dueToRun(enabled("09:30"), at("10:00"), "2026-06-01")).toBe(false);
+  test("never fires twice in a day (already ran today)", () => {
+    expect(shouldRun(enabled("09:30"), at("09:30"), true)).toBe(false);
+    expect(shouldRun(enabled("09:30"), at("17:00"), true)).toBe(false);
+  });
+
+  test("never fires when disabled", () => {
+    expect(shouldRun({ enabled: false, time: "09:30" }, at("10:00"), false)).toBe(false);
+  });
+
+  test("compares times numerically, not lexically", () => {
+    // "9:00" < "10:00" numerically; a naive string compare would get edge cases like this wrong.
+    expect(shouldRun(enabled("09:00"), at("10:00"), false)).toBe(true);
+    expect(shouldRun(enabled("21:00"), at("09:00"), false)).toBe(false);
   });
 });
 
@@ -49,22 +59,19 @@ describe("startScheduler (integration)", () => {
       now: () => "2026-06-01",
     });
 
-  test("fires a run when due, then guards against re-firing the same day", async () => {
+  test("catches up on boot when past the set time, then never re-fires the same day", async () => {
     const app = makeApp();
-    app.repos.schedule.set({ enabled: true, time: "00:00" }); // due any time today
+    app.repos.schedule.set({ enabled: true, time: "00:00" }); // any wall-clock time is ≥ 00:00
     expect(app.repos.runs.latest()).toBeNull();
 
     const sched = startScheduler(app, 10);
     try {
-      await new Promise((r) => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 40));
       const first = app.repos.runs.latest();
-      expect(first).not.toBeNull(); // the tick started a run
-      // The scheduler fires on the real wall clock (not the app's mocked `now`), so the guard
-      // records today's real local date.
-      expect(app.repos.schedule.lastRunDate()).toBe(localDate(new Date()));
+      expect(first).not.toBeNull(); // boot started a run immediately
 
       await new Promise((r) => setTimeout(r, 40));
-      expect(app.repos.runs.latest()?.id).toBe(first!.id); // no second run that day
+      expect(app.repos.runs.latest()?.id).toBe(first!.id); // guard: no second run today
     } finally {
       sched.stop();
     }
@@ -75,10 +82,55 @@ describe("startScheduler (integration)", () => {
     app.repos.schedule.set({ enabled: false, time: "00:00" });
     const sched = startScheduler(app, 10);
     try {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 40));
       expect(app.repos.runs.latest()).toBeNull();
     } finally {
       sched.stop();
     }
+  });
+
+  test("a run already today suppresses the scheduled catch-up", async () => {
+    const app = makeApp();
+    app.repos.schedule.set({ enabled: true, time: "00:00" });
+    app.repos.runs.start(); // a run earlier today (manual or otherwise)
+    const before = app.repos.runs.latest()!.id;
+
+    const sched = startScheduler(app, 10);
+    try {
+      await new Promise((r) => setTimeout(r, 40));
+      expect(app.repos.runs.latest()!.id).toBe(before); // no extra auto-run today
+    } finally {
+      sched.stop();
+    }
+  });
+});
+
+describe("ranToday", () => {
+  const makeApp = () =>
+    createApp({
+      db: openMemoryDb(),
+      gateway: createFakeGateway({ now: () => "2026-06-01", startingCash: 100_000 }),
+      now: () => "2026-06-01",
+    });
+  // Pinned mid-day so the relative offsets below stay on the intended calendar day regardless of the
+  // wall clock (a real `new Date()` here flaked for ~20 min around the UTC midnight boundary).
+  const NOW = new Date("2026-06-01T12:00:00.000Z");
+
+  test("no prior run → false", () => {
+    const app = makeApp();
+    expect(ranToday(app, NOW)).toBe(false);
+  });
+
+  test("a run earlier today → true", () => {
+    const app = makeApp();
+    app.repos.runs.start(new Date(NOW.getTime() - 20 * 60_000).toISOString());
+    expect(ranToday(app, NOW)).toBe(true);
+  });
+
+  test("a run on a previous day → false (a new day's run is allowed)", () => {
+    const app = makeApp();
+    const yesterday = new Date(NOW.getTime() - 26 * 3_600_000).toISOString();
+    app.repos.runs.start(yesterday);
+    expect(ranToday(app, NOW)).toBe(false);
   });
 });

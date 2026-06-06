@@ -12,25 +12,38 @@ import { AnalysisStream } from "./components/AnalysisStream.tsx";
 import { Atmosphere } from "./components/Atmosphere.tsx";
 import { EquityCurve } from "./components/EquityCurve.tsx";
 import { Header } from "./components/Header.tsx";
-import { JournalPlaceholder } from "./components/JournalPlaceholder.tsx";
+import { AiTrades } from "./components/AiTrades.tsx";
+import { Journal } from "./components/Journal.tsx";
+import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
+import { KnowledgeGraph } from "./components/KnowledgeGraph.tsx";
+import { AiLibrary } from "./components/AiLibrary.tsx";
+import { MarketView } from "./components/MarketView.tsx";
+import { Wiki } from "./components/Wiki.tsx";
+import { PortfolioQuery } from "./components/PortfolioQuery.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
 import { PortfolioPanel } from "./components/PortfolioPanel.tsx";
 import { Recommendations } from "./components/Recommendations.tsx";
+import { RiskMetrics } from "./components/RiskMetrics.tsx";
 import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { SummaryBand } from "./components/SummaryBand.tsx";
 import { TickerManager } from "./components/TickerManager.tsx";
 import { Card, CardHeader } from "./components/ui/Card.tsx";
+import { SegmentedControl } from "./components/ui/SegmentedControl.tsx";
 import { Skeleton } from "./components/ui/Skeleton.tsx";
+import { ViewInGraphProvider } from "./lib/graphFocus.tsx";
 import type { HorizonKey } from "./lib/horizon.ts";
+import type { PnlMode } from "./lib/format.ts";
 
 function Section({
   title,
   index,
   children,
+  action,
 }: {
   title: string;
   index: number;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <motion.section
@@ -38,7 +51,10 @@ function Section({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.06, ease: [0.22, 1, 0.36, 1] }}
     >
-      <h2 className="eyebrow mb-3">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="eyebrow">{title}</h2>
+        {action}
+      </div>
       {children}
     </motion.section>
   );
@@ -49,6 +65,29 @@ export default function App() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [horizon, setHorizon] = useState<HorizonKey>("3M");
+  const [pnlMode, setPnlMode] = useState<PnlMode>("usd");
+  const [journalTicker, setJournalTicker] = useState<string | undefined>(undefined);
+  const [graphFocus, setGraphFocus] = useState<string | undefined>(undefined);
+
+  // Deep link into the knowledge graph: set the focal node id and scroll the section into view.
+  const viewInGraph = (id: string) => {
+    setGraphFocus(id);
+    document.getElementById("graph")?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // One global $/% control for all P&L figures (overview band + both portfolio panels).
+  const pnlToggle = (
+    <SegmentedControl<PnlMode>
+      value={pnlMode}
+      onChange={setPnlMode}
+      size="sm"
+      className="self-start"
+      options={[
+        { value: "usd", label: "$" },
+        { value: "pct", label: "%" },
+      ]}
+    />
+  );
 
   const portfolios = usePortfolios();
   const recommendations = useRecommendations();
@@ -68,11 +107,20 @@ export default function App() {
   const handleStreamFinished = (status: "done" | "error", message?: string) => {
     setActiveRunId(null);
     void refresh();
-    if (status === "error") toast.error("Run failed", { description: message });
-    else toast.success("Analysis complete", { description: "Report and snapshots updated." });
+    if (status === "error") {
+      const interrupted = /abandon|restart/i.test(message ?? "");
+      if (interrupted) {
+        toast("Run interrupted by a server restart", { description: "Nothing was saved — just re-run." });
+      } else {
+        toast.error("Run failed", { description: message });
+      }
+    } else {
+      toast.success("Analysis complete", { description: "Report and snapshots updated." });
+    }
   };
 
   return (
+    <ViewInGraphProvider value={viewInGraph}>
     <div className="min-h-screen">
       <Atmosphere />
       <Toaster
@@ -95,7 +143,7 @@ export default function App() {
       />
 
       <main className="mx-auto max-w-[1400px] space-y-10 px-6 py-8">
-        <Section title="Overview" index={0}>
+        <Section title="Overview" index={0} action={portfolios.data ? pnlToggle : null}>
           {portfolios.data ? (
             <SummaryBand
               user={portfolios.data.user}
@@ -103,6 +151,7 @@ export default function App() {
               snapshots={snapshots.data}
               horizon={horizon}
               onHorizonChange={setHorizon}
+              pnlMode={pnlMode}
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -117,25 +166,28 @@ export default function App() {
               className="mb-5"
             />
             {snapshots.data ? (
-              <EquityCurve
-                user={snapshots.data.user}
-                ai={snapshots.data.ai}
-                spy={snapshots.data.spy}
-                horizon={horizon}
-                onHorizonChange={setHorizon}
-              />
+              <>
+                <EquityCurve
+                  user={snapshots.data.user}
+                  ai={snapshots.data.ai}
+                  spy={snapshots.data.spy}
+                  horizon={horizon}
+                  onHorizonChange={setHorizon}
+                />
+                <RiskMetrics snapshots={snapshots.data} />
+              </>
             ) : (
               <Skeleton className="h-72 w-full" />
             )}
           </Card>
         </Section>
 
-        <Section title="Portfolios" index={2}>
+        <Section title="Portfolios" index={2} action={portfolios.data ? pnlToggle : null}>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {portfolios.data ? (
               <>
-                <PortfolioPanel p={portfolios.data.user} badge="advisory" tone="accent" />
-                <PortfolioPanel p={portfolios.data.ai} badge="paper · auto" tone="pos" />
+                <PortfolioPanel p={portfolios.data.user} badge="advisory" tone="accent" pnlMode={pnlMode} />
+                <PortfolioPanel p={portfolios.data.ai} badge="paper · auto" tone="pos" pnlMode={pnlMode} />
               </>
             ) : portfolios.isError ? (
               <div className="card col-span-full p-10 text-center text-sm text-text-muted">
@@ -156,18 +208,57 @@ export default function App() {
           ) : (
             <>
               <MarketContextBanner report={recommendations.data?.report ?? null} />
-              <Recommendations report={recommendations.data?.report ?? null} />
+              <Recommendations
+                report={recommendations.data?.report ?? null}
+                onViewJournal={(ticker) => {
+                  setJournalTicker(ticker);
+                  document.getElementById("journal")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
             </>
           )}
         </Section>
 
-        <Section title="Journal &amp; query" index={4}>
-          <JournalPlaceholder />
+        <Section title="Market view" index={4}>
+          <MarketView />
+        </Section>
+
+        <Section title="AI trading" index={5}>
+          <AiTrades />
+        </Section>
+
+        <Section title="Journal &amp; query" index={6}>
+          <div id="journal">
+            <Journal ticker={journalTicker} onClearFilter={() => setJournalTicker(undefined)} />
+          </div>
+        </Section>
+
+        <Section title="Knowledge graph" index={7}>
+          <div id="graph">
+            <KnowledgeGraph focusId={graphFocus} />
+          </div>
+        </Section>
+
+        <Section title="Knowledge library" index={8}>
+          <KnowledgeLibrary />
+        </Section>
+
+        <Section title="AI knowledge library" index={9}>
+          <AiLibrary />
+        </Section>
+
+        <Section title="Performance wiki" index={10}>
+          <Wiki />
+        </Section>
+
+        <Section title="Ask your portfolio" index={11}>
+          <PortfolioQuery />
         </Section>
       </main>
 
       {showManager && <TickerManager onClose={() => setShowManager(false)} />}
       {showSchedule && <ScheduleDialog onClose={() => setShowSchedule(false)} />}
     </div>
+    </ViewInGraphProvider>
   );
 }

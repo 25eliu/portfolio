@@ -25,6 +25,11 @@ describe("fake gateway market data", () => {
     const q = await gw.getQuote("AAPL");
     expect(q.price).toBe(fakePrice("AAPL", FIXED));
   });
+  test("getQuote exposes the previous calendar day's close as the day-P&L baseline", async () => {
+    const gw = createFakeGateway({ now: clock });
+    const q = await gw.getQuote("AAPL");
+    expect(q.previousClose).toBe(fakePrice("AAPL", "2026-05-31"));
+  });
   test("getBars returns the requested number of days ending today", async () => {
     const gw = createFakeGateway({ now: clock });
     const bars = await gw.getBars("MSFT", 5);
@@ -60,6 +65,7 @@ describe("fake gateway brokerage", () => {
     const positions = await gw.getPositions();
     expect(positions).toHaveLength(1);
     expect(positions[0]!.shares).toBe(10);
+    expect(positions[0]!.previousClose).toBe(fakePrice("AAPL", "2026-05-31"));
     const account = await gw.getAccount();
     const price = fakePrice("AAPL", FIXED);
     expect(account.cash).toBeCloseTo(100_000 - 10 * price, 2);

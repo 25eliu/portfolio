@@ -9,6 +9,17 @@ import { riskProfilesRepo } from "./repositories/riskProfiles.ts";
 import { scheduleRepo } from "./repositories/schedule.ts";
 import { fundamentalsCacheRepo } from "./repositories/fundamentalsCache.ts";
 import { watchlistRepo } from "./repositories/watchlist.ts";
+import { journalEntriesRepo } from "./repositories/journalEntries.ts";
+import { scoredForecastsRepo } from "./repositories/scoredForecasts.ts";
+import { forecastOutcomesRepo } from "./repositories/forecastOutcomes.ts";
+import { forecastDailyMarksRepo } from "./repositories/forecastDailyMarks.ts";
+import { graphRepo } from "./repositories/graph.ts";
+import { knowledgeRepo } from "./repositories/knowledge.ts";
+import { insightTagsRepo } from "./repositories/insightTags.ts";
+import { wikiRepo } from "./repositories/wiki.ts";
+import { tradeDecisionsRepo } from "./repositories/tradeDecisions.ts";
+import { queryLogRepo } from "./repositories/queryLog.ts";
+import { aiThesesRepo } from "./repositories/aiTheses.ts";
 
 export { openDb, openMemoryDb, migrate, type DB } from "./connection.ts";
 
@@ -25,6 +36,17 @@ export function repositories(db: DB) {
     schedule: scheduleRepo(db),
     fundamentalsCache: fundamentalsCacheRepo(db),
     watchlist: watchlistRepo(db),
+    journalEntries: journalEntriesRepo(db),
+    scoredForecasts: scoredForecastsRepo(db),
+    forecastOutcomes: forecastOutcomesRepo(db),
+    forecastDailyMarks: forecastDailyMarksRepo(db),
+    graph: graphRepo(db),
+    knowledge: knowledgeRepo(db),
+    insightTags: insightTagsRepo(db),
+    wiki: wikiRepo(db),
+    tradeDecisions: tradeDecisionsRepo(db),
+    queryLog: queryLogRepo(db),
+    aiTheses: aiThesesRepo(db),
   };
 }
 export type Repositories = ReturnType<typeof repositories>;

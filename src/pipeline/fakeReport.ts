@@ -54,6 +54,20 @@ function makeRecommendation(symbol: string, date: string, symbols: string[]): Re
       invalidation: `close below ${Math.round(price * 0.95 * 100) / 100}`,
       rationale: `[demo] ${symbol} ${held ? "position review" : "opportunity"}`,
     },
+    // Decision Engine v2 fields, seeded deterministically so the offline/e2e path exercises the bull/bear
+    // deliberation + calibration plumbing. Offline has no track record, so calibration is a no-op (factor 1).
+    deliberation: {
+      bullCase: `[demo] bull case for ${symbol}: ${family.replace(/_/g, " ")} setup intact.`,
+      bearCase: `[demo] bear case for ${symbol}: setup fails if momentum stalls.`,
+      keyUncertainties: ["[demo] follow-through on volume"],
+      disconfirmers: [`[demo] would be wrong if ${symbol} closes below support`],
+      baseRateNote: null,
+      reversalCheck: null,
+      provisionalStance: held ? "neutral" : "bullish",
+      provisionalConviction: conviction,
+    },
+    calibratedConviction: conviction,
+    calibration: { factor: 1, regimeFactor: 1, reason: "[demo] no track record yet", adjustments: [] },
     technicals: {
       ...emptyTechnicals(),
       rsi14: 30 + (s % 40),
@@ -67,6 +81,17 @@ function makeRecommendation(symbol: string, date: string, symbols: string[]): Re
     priceTargetUpside: null,
     sources: [],
     screen: null,
+    // Symbol-only (NOT date- or family-seeded) so a later run re-emits the identical fact and the
+    // dedup guard holds the library steady — exercises the self-curated memory path offline.
+    memorableFacts: [
+      {
+        fact: `[demo] ${symbol}: durable competitive characteristic noted for future runs`,
+        citationUrl: `https://example.com/${symbol.toLowerCase()}`,
+        scope: "ticker" as const,
+        significance: 0.9,
+        category: "moat",
+      },
+    ],
   };
 }
 
@@ -79,5 +104,6 @@ export function generateFakeReport(symbols: string[], date: string): DailyReport
     source: "fake",
     recommendations: universe.map((sym) => makeRecommendation(sym, date, symbols)),
     marketContext: null,
+    outlook: null,
   };
 }

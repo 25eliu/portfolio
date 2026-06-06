@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -12,8 +13,9 @@ import {
 import type { MarketSnapshot, Snapshot } from "../api/types.ts";
 import { cn } from "../lib/cn.ts";
 import { chart, tooltipStyle } from "../lib/chartTheme.ts";
-import { compactUsd, pct, usd } from "../lib/format.ts";
+import { pct } from "../lib/format.ts";
 import { type HorizonKey, horizonDays, latestDate, withinHorizon } from "../lib/horizon.ts";
+import { cumulativeReturnSeries } from "../lib/performance.ts";
 import { TimeHorizon } from "./ui/TimeHorizon.tsx";
 
 type SeriesData = { user: Snapshot[]; ai: Snapshot[]; spy: MarketSnapshot[] };
@@ -29,30 +31,34 @@ const SERIES: { key: SeriesKey; name: string; color: string; dashed?: boolean }[
   { key: "spy", name: "SPY", color: chart.muted, dashed: true },
 ];
 
-/** Stock value of a snapshot (cash excluded), so cash deposits don't distort the curve. */
-const stockValue = (s: Snapshot) => s.totalValue - s.cash;
+/**
+ * Build a merged, date-aligned series of cumulative % return for You / AI / SPY, rebased to the
+ * selected window. Each series is windowed FIRST, then normalized to start at 0% on the window's
+ * opening date — so the chart re-bases whenever the horizon changes and every line sits on one
+ * comparable percent axis. You/AI use time-weighted return (contribution-neutral, so deposits and
+ * added positions never read as performance); SPY is a plain price move off its first windowed close.
+ */
+function buildSeries({ user, ai, spy }: SeriesData, horizon: HorizonKey) {
+  const days = horizonDays(horizon);
+  const ref = latestDate(user, ai, spy);
+  const userWin = withinHorizon(user, days, ref);
+  const aiWin = withinHorizon(ai, days, ref);
+  const spyWin = withinHorizon(spy, days, ref);
 
-/** Build a merged, date-aligned series of You / AI / SPY (SPY normalized to your start stock value). */
-function buildSeries({ user, ai, spy }: SeriesData) {
-  const dates = [...new Set([...user, ...ai, ...spy].map((s) => s.date))].sort();
-  const byDate = <T extends { date: string }>(rows: T[]) => new Map(rows.map((r) => [r.date, r]));
-  const u = byDate(user);
-  const a = byDate(ai);
-  const s = byDate(spy);
+  const u = new Map(cumulativeReturnSeries(userWin).map((p) => [p.date, p.value]));
+  const a = new Map(cumulativeReturnSeries(aiWin).map((p) => [p.date, p.value]));
+  const firstSpy = spyWin[0]?.spyClose;
+  const s = new Map(
+    firstSpy ? spyWin.map((r) => [r.date, (r.spyClose / firstSpy - 1) * 100]) : [],
+  );
 
-  const base = (user[0] ? stockValue(user[0]) : ai[0] ? stockValue(ai[0]) : 0) || 10_000;
-  const firstSpy = spy[0]?.spyClose;
-
-  return dates.map((date) => {
-    const uRow = u.get(date);
-    const aRow = a.get(date);
-    return {
-      date,
-      you: uRow ? stockValue(uRow) : null,
-      ai: aRow ? stockValue(aRow) : null,
-      spy: firstSpy && s.get(date) ? (base * s.get(date)!.spyClose) / firstSpy : null,
-    };
-  });
+  const dates = [...new Set([...userWin, ...aiWin, ...spyWin].map((r) => r.date))].sort();
+  return dates.map((date) => ({
+    date,
+    you: u.get(date) ?? null,
+    ai: a.get(date) ?? null,
+    spy: s.get(date) ?? null,
+  }));
 }
 
 function CurveTooltip({ active, payload, label }: any) {
@@ -60,7 +66,8 @@ function CurveTooltip({ active, payload, label }: any) {
   const get = (k: SeriesKey) => payload.find((p: any) => p.dataKey === k)?.value as number | null;
   const you = get("you");
   const spy = get("spy");
-  const delta = you != null && spy != null ? ((you - spy) / spy) * 100 : null;
+  // Both are already cumulative % returns, so the gap is a percentage-point spread, not a ratio.
+  const delta = you != null && spy != null ? you - spy : null;
 
   return (
     <div style={tooltipStyle} className="min-w-[180px]">
@@ -77,7 +84,7 @@ function CurveTooltip({ active, payload, label }: any) {
                 <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
                 {s.name}
               </span>
-              <span className="tnum font-medium text-text">{usd(v)}</span>
+              <span className="tnum font-medium text-text">{pct(v)}</span>
             </div>
           );
         })}
@@ -96,12 +103,7 @@ function CurveTooltip({ active, payload, label }: any) {
 
 export function EquityCurve({ horizon, onHorizonChange, ...props }: Props) {
   const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set());
-  const full = useMemo(() => buildSeries(props), [props]);
-
-  const data = useMemo(() => {
-    const ref = latestDate(full);
-    return withinHorizon(full, horizonDays(horizon), ref);
-  }, [full, horizon]);
+  const data = useMemo(() => buildSeries(props, horizon), [props, horizon]);
 
   const toggle = (key: SeriesKey) =>
     setHidden((prev) => {
@@ -110,7 +112,7 @@ export function EquityCurve({ horizon, onHorizonChange, ...props }: Props) {
       return next;
     });
 
-  if (full.length < 1) {
+  if (data.length < 1) {
     return (
       <div className="flex h-72 flex-col items-center justify-center gap-2 text-center">
         <p className="text-sm text-text-secondary">No equity history yet</p>
@@ -172,9 +174,10 @@ export function EquityCurve({ horizon, onHorizonChange, ...props }: Props) {
             width={56}
             tickLine={false}
             axisLine={false}
-            tickFormatter={compactUsd}
+            tickFormatter={(v) => pct(v)}
             domain={["auto", "auto"]}
           />
+          <ReferenceLine y={0} stroke={chart.grid} strokeWidth={1} />
           <Tooltip
             content={<CurveTooltip />}
             cursor={{ stroke: chart.hairline, strokeWidth: 1, strokeDasharray: "4 4" }}

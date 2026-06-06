@@ -1,80 +1,91 @@
 import type { App } from "../app.ts";
-import type { PricedPosition } from "../domain/index.ts";
+import type { PortfolioKind, PricedPosition } from "../domain/index.ts";
 import type { PricedPortfolio } from "./types.ts";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * Day P&L on stock value only (cash-neutral): compares the current positions value against the
- * previous snapshot's stock value (`totalValue - cash`). Adding/withdrawing cash never shows as a gain.
+ * Contribution-neutral portfolio day P&L: the sum of each position's day move. Because each term is a
+ * price move — never a position's full value — adding a holding or depositing cash never reads as a
+ * gain. Null when no position has a baseline to compare to.
  */
-function dayPnL(app: App, portfolioId: string, positionsValue: number): number | null {
-  const prev = app.repos.snapshots.latestBefore(portfolioId, app.now());
-  return prev ? round2(positionsValue - (prev.totalValue - prev.cash)) : null;
+function sumDayPnL(positions: PricedPosition[]): number | null {
+  const withBaseline = positions.filter((p) => p.dayPnL != null);
+  if (withBaseline.length === 0) return null;
+  return round2(withBaseline.reduce((acc, p) => acc + (p.dayPnL ?? 0), 0));
 }
 
-/** Price My Portfolio from user-entered holdings plus user-entered sitting cash (advisory-only). */
-export async function priceUserPortfolio(app: App): Promise<PricedPortfolio> {
-  const holdings = app.repos.holdings.listByPortfolio(app.user.id);
-  const cash = app.repos.portfolios.get(app.user.id)?.cash ?? 0;
+/**
+ * Industry-standard "Today's Gain" baseline for one position. A position held from a prior session is
+ * marked from the previous market close; a position opened *today* is marked from its own entry price
+ * (cost basis) — it never owned the overnight move, so charging it that move would make Day P&L diverge
+ * wildly from Total P&L on the day a position is opened. Null when neither baseline is available.
+ */
+function dayBaseline(acquiredAt: string | null, costBasis: number | null, prevClose: number | null, today: string): number | null {
+  if (acquiredAt != null && acquiredAt.slice(0, 10) === today && costBasis != null) return costBasis;
+  return prevClose;
+}
+
+/**
+ * Price a DB-backed book from its `holdings` rows + `portfolios.cash`, marked to fresh quotes. Both
+ * portfolios use this: My Portfolio (advisory, user-entered) and the AI's isolated paper book (filled
+ * by the execution engine). The market gateway is only a quote source — never the book's balances.
+ */
+async function priceFromHoldings(app: App, portfolioId: string, kind: PortfolioKind, name: string): Promise<PricedPortfolio> {
+  const holdings = app.repos.holdings.listByPortfolio(portfolioId);
+  const cash = app.repos.portfolios.get(portfolioId)?.cash ?? 0;
   const quotes = await app.gateway.getQuotes(holdings.map((h) => h.symbol));
-  const priceOf = new Map(quotes.map((q) => [q.symbol, q.price]));
+  const quoteOf = new Map(quotes.map((q) => [q.symbol, q]));
+  const today = app.now().slice(0, 10);
 
   let positionsValue = 0;
   let costValue = 0;
   let totalPnL = 0;
   const positions: PricedPosition[] = holdings.map((h) => {
-    const price = priceOf.get(h.symbol) ?? 0;
+    const quote = quoteOf.get(h.symbol);
+    const price = quote?.price ?? 0;
     const marketValue = round2(h.shares * price);
     positionsValue += marketValue;
+    const positionPnL = h.costBasis != null ? round2((price - h.costBasis) * h.shares) : null;
     if (h.costBasis != null) {
       costValue += h.costBasis * h.shares;
       totalPnL += (price - h.costBasis) * h.shares;
     }
-    return { symbol: h.symbol, shares: h.shares, price, marketValue };
+    const prevClose = quote?.previousClose ?? null;
+    const baseline = dayBaseline(h.acquiredAt, h.costBasis, prevClose, today);
+    const dayPnL = baseline != null ? round2(h.shares * (price - baseline)) : null;
+    return {
+      symbol: h.symbol,
+      shares: h.shares,
+      price,
+      marketValue,
+      dayPnL,
+      totalPnL: positionPnL,
+      costBasis: h.costBasis,
+      acquiredAt: h.acquiredAt,
+    };
   });
 
   const equity = round2(positionsValue + cash);
   return {
-    portfolioId: app.user.id,
-    kind: "user",
-    name: app.user.name,
+    portfolioId,
+    kind,
+    name,
     positions,
     cash: round2(cash),
     equity,
     costValue: round2(costValue),
     totalPnL: round2(totalPnL),
-    dayPnL: dayPnL(app, app.user.id, positionsValue),
+    dayPnL: sumDayPnL(positions),
   };
 }
 
-/** Price the AI Portfolio from the live Alpaca paper account (positions + cash). */
+/** Price My Portfolio from user-entered holdings plus user-entered sitting cash (advisory-only). */
+export async function priceUserPortfolio(app: App): Promise<PricedPortfolio> {
+  return priceFromHoldings(app, app.user.id, "user", app.user.name);
+}
+
+/** Price the AI's isolated paper book from its DB-backed holdings + cash (no live broker account). */
 export async function priceAiPortfolio(app: App): Promise<PricedPortfolio> {
-  const [account, brokerPositions] = await Promise.all([
-    app.gateway.getAccount(),
-    app.gateway.getPositions(),
-  ]);
-
-  let costValue = 0;
-  let totalPnL = 0;
-  let positionsValue = 0;
-  const positions: PricedPosition[] = brokerPositions.map((p) => {
-    costValue += p.avgEntry * p.shares;
-    totalPnL += (p.currentPrice - p.avgEntry) * p.shares;
-    positionsValue += p.marketValue;
-    return { symbol: p.symbol, shares: p.shares, price: p.currentPrice, marketValue: p.marketValue };
-  });
-
-  const equity = round2(account.cash + positionsValue);
-  return {
-    portfolioId: app.ai.id,
-    kind: "ai_shadow",
-    name: app.ai.name,
-    positions,
-    cash: round2(account.cash),
-    equity,
-    costValue: round2(costValue),
-    totalPnL: round2(totalPnL),
-    dayPnL: dayPnL(app, app.ai.id, positionsValue),
-  };
+  return priceFromHoldings(app, app.ai.id, "ai_shadow", app.ai.name);
 }
