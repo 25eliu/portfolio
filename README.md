@@ -5,6 +5,23 @@ pipeline, benchmarked A/B against a self-contained **AI paper portfolio** and SP
 own $100k paper book; your manually entered holdings stay **advisory-only and can never place
 orders**. **Paper trading only — model outputs are not investment advice.**
 
+### What makes it different
+
+Most "AI stock" tools emit a fresh opinion every day and forget it. This one **remembers, grades, and
+calibrates itself**:
+
+- It **journals every call**, resolves it against real price history, and compiles a deterministic
+  track record — the model never grades its own homework.
+- Before each trade it runs a structured **bull/bear deliberation** and names what would prove the
+  thesis wrong. Then a **graph-propagated calibration** dampens its conviction toward what that *kind*
+  of call has actually achieved — borrowing from the sector and strategy track record when a ticker
+  has little history of its own.
+- All of it lives on a **knowledge graph you can walk** — tickers, sectors, theses, lessons, and
+  sources connected by typed edges, visualized right in the dashboard.
+
+The result is an AI trader whose confidence is *earned* from its own measured record, and whose every
+decision is auditable end to end.
+
 Two tracked documents define the system:
 
 - [`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md) — the canonical architecture,
@@ -45,8 +62,18 @@ grounded questions about its own record:
 - **Mature risk controls (5)** — per-preset reward:risk floors, allowed horizons, and
   strategy-family eligibility govern the AI planner. The advisory book and the AI book carry
   **independent** risk presets.
-- **Knowledge-graph substrate** — `kg_nodes` / `kg_edges` connect tickers, themes, sources, lessons,
-  and strategies; powers graph-aware retrieval and lesson provenance.
+- **Decision Engine v2** — per-ticker analysis is a three-stage loop (research → **deliberate** →
+  structure): a forced bull/bear deliberation with disconfirmers and a base-rate check precedes the
+  verdict. Then deterministic **graph-propagated calibration** (empirical-Bayes shrinkage over the
+  ticker's sector / strategy / overall cohorts) sets a separate `calibratedConviction` the planner
+  sizes on — **dampen-only**, so the wiki's stated-vs-realized metric is never corrupted. Sizing is
+  **regime-aware** (a risk-off tape shrinks new entries). The bull/bear cases and the per-cohort
+  calibration chain are persisted and surfaced in the UI.
+- **Knowledge-graph substrate (+ interactive viz)** — `kg_nodes` / `kg_edges` connect tickers, sectors,
+  themes, sources, lessons, theses, and strategies; powers graph-aware retrieval, lesson provenance,
+  and the conviction calibration above. The dashboard renders it as a navigable **ego graph**: start
+  from any entity and walk the connections (focal node + neighbors, click to re-center), with deep
+  links from recommendations and lessons.
 
 Next: **Phase 6** (validation & polish) and the **data integrations** in
 [`docs/integrations-roadmap.md`](docs/integrations-roadmap.md).
@@ -104,31 +131,39 @@ scheduler:
 4. Gather market context (SPY trend + FRED macro + searched narrative)
 5. Build held + watchlist + scan + AI-thesis universe
 6. Retrieve scoped research-library evidence (graph-aware)
-7. Analyze tickers (two-stage Gemini: research → structure)
-8. Persist report + journal + scored forecasts
-9. Propose and execute guarded AI paper trades (deterministic planner)
-10. Persist trade decisions + snapshots → stream completion to the UI
+7. Analyze tickers (three-stage Gemini: research → deliberate → structure)
+8. Calibrate conviction from the wiki track record (graph-propagated, dampen-only)
+9. Persist report + journal + scored forecasts (incl. deliberation + calibration chain)
+10. Propose and execute guarded AI paper trades (deterministic, regime-aware planner)
+11. Persist trade decisions + snapshots → stream completion to the UI
 ```
 
 ## Dashboard
 
 1. **Header** — risk selector, schedule, manual run, last-run status.
 2. **Overview, equity curve, portfolios** — user, AI paper, and SPY (contribution-neutral returns).
-3. **Daily recommendations** — position-aware cards; live analysis stream during a run.
-4. **AI trading** — the AI's $100k paper book: auto-trading status and the trade log.
-5. **Journal** — day-grouped calls → thesis, forecast contract, outcome, linked trades.
-6. **Knowledge library + curated memory** — uploads, URLs, notes; scope, version, trust, quarantine.
-7. **Performance wiki** — active briefing, evidence-gated lessons, calibration.
-8. **Ask your portfolio** — grounded NL query with the answer drawn only from your own data.
+3. **Daily recommendations** — position-aware cards showing the bull/bear deliberation and the
+   stated → calibrated conviction chain; live analysis stream during a run.
+4. **Market view** — the AI's regime call + sector/theme leans for the day.
+5. **AI trading** — the AI's $100k paper book: auto-trading status and the trade log.
+6. **Journal** — day-grouped calls → thesis, deliberation, calibration, forecast contract, outcome,
+   linked trades.
+7. **Knowledge graph** — the navigable ego graph; walk from any node to its connections.
+8. **Knowledge library + AI knowledge library** — your uploads/URLs/notes, and the AI's self-curated
+   facts; scope, version, trust, quarantine.
+9. **Performance wiki** — active briefing, evidence-gated lessons, calibration metrics (with
+   plain-English tooltips for R, Brier, expectancy, MFE/MAE).
+10. **Ask your portfolio** — grounded NL query with the answer drawn only from your own data.
 
 **Transparency.** The live analysis stream and "Ask your portfolio" both surface the LLM's **tool
-calls and cited sources** — every grounded answer shows what it used.
+calls and cited sources**; recommendation cards expose the **reasoning chain** (deliberation +
+per-cohort calibration) — every decision is auditable.
 
 ## Project layout
 
 ```text
 src/
-├── analysis/      technicals, market context, universe, opportunity scan
+├── analysis/      technicals, market context, universe, scan, regime + conviction calibration
 ├── config/        env loading and paper-only validation
 ├── db/            SQLite connection, migrations, repositories
 ├── domain/        Zod schemas and shared API types
@@ -176,6 +211,9 @@ a typed port with a deterministic fake and a real adapter, injected through a si
   delimited block — never into sizing, gating, or execution.
 - **Compile, don't re-derive.** The LLM reads the deterministic linted briefing and delimited
   evidence, never the raw journal or graph. The wiki never turns model prose into "learned" facts.
+- **Calibration never rewrites the record.** Conviction is dampened into a *separate*
+  `calibratedConviction` the planner sizes on; the model's stated conviction is preserved untouched, so
+  the wiki keeps measuring stated-vs-realized honestly and the feedback loop can't self-eat.
 - **Resolve without lookahead.** Outcomes use only data available after the forecast timestamp;
   resolution logic is versioned and never silently rewritten.
 
