@@ -42,7 +42,7 @@ describe("loadEnv", () => {
 
   test("defaults the Phase 2 analysis knobs", () => {
     const e = loadEnv({});
-    expect(e.GEMINI_MODEL).toBe("gemini-3.1-pro-preview");
+    expect(e.GEMINI_MODEL).toBe("gemini-3.5-flash");
     expect(e.GEMINI_THINKING_LEVEL).toBe("medium");
     expect(e.LLM_CONCURRENCY).toBe(4);
     expect(e.MAX_SCAN_CANDIDATES).toBe(12);

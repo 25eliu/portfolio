@@ -20,7 +20,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8787),
   DATABASE_PATH: z.string().default("./data/portfolio.sqlite"),
   GEMINI_API_KEY: z.string().default(""),
-  GEMINI_MODEL: z.string().default("gemini-3.1-pro-preview"),
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
   GEMINI_THINKING_LEVEL: z.enum(["low", "medium", "high"]).default("medium"),
   FMP_API_KEY: z.string().default(""),
   FRED_API_KEY: z.string().default(""),
