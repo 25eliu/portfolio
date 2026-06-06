@@ -112,24 +112,25 @@ describe("ranToday", () => {
       gateway: createFakeGateway({ now: () => "2026-06-01", startingCash: 100_000 }),
       now: () => "2026-06-01",
     });
+  // Pinned mid-day so the relative offsets below stay on the intended calendar day regardless of the
+  // wall clock (a real `new Date()` here flaked for ~20 min around the UTC midnight boundary).
+  const NOW = new Date("2026-06-01T12:00:00.000Z");
 
   test("no prior run → false", () => {
     const app = makeApp();
-    expect(ranToday(app, new Date())).toBe(false);
+    expect(ranToday(app, NOW)).toBe(false);
   });
 
   test("a run earlier today → true", () => {
     const app = makeApp();
-    const now = new Date();
-    app.repos.runs.start(new Date(now.getTime() - 20 * 60_000).toISOString());
-    expect(ranToday(app, now)).toBe(true);
+    app.repos.runs.start(new Date(NOW.getTime() - 20 * 60_000).toISOString());
+    expect(ranToday(app, NOW)).toBe(true);
   });
 
   test("a run on a previous day → false (a new day's run is allowed)", () => {
     const app = makeApp();
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - 26 * 3_600_000).toISOString();
+    const yesterday = new Date(NOW.getTime() - 26 * 3_600_000).toISOString();
     app.repos.runs.start(yesterday);
-    expect(ranToday(app, now)).toBe(false);
+    expect(ranToday(app, NOW)).toBe(false);
   });
 });
