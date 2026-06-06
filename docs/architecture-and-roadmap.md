@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-05 (Decision Engine v2: bull/bear deliberation stage, graph-propagated conviction calibration over sector/strategy/overall cohorts, regime-aware sizing)._
+> _Last updated: 2026-06-05 (Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; knowledge-graph visualization)._
 
 ## 1. Product direction
 
@@ -182,8 +182,9 @@ place orders.
 
 ### Not implemented yet
 
-- QuantConnect strategy-family validation gate, richer performance analytics, and run-failure alerts
-  (Phase 6).
+- QuantConnect strategy-family validation gate and run-failure alerts (Phase 6). Risk/performance
+  analytics (max drawdown, Sharpe, volatility, excess return + beta vs SPY) are **done** —
+  `src/analysis/performance.ts`, a pure module the dashboard computes client-side from snapshots.
 - Embeddings / semantic retrieval (deferred until lexical + graph-aware FTS proves insufficient) and
   company-name alias expansion (e.g. "Apple" ↔ AAPL) for retrieval.
 - A deterministic directive/action-cue layer over wiki lessons (kept descriptive-only for now).
@@ -765,8 +766,10 @@ research uploads, and wire it into the query bot and dashboard.
 
 - Add SEC EDGAR public-filing ingestion.
 - Add a QuantConnect gate for genuinely new systematic strategy families.
-- Add drawdown, Sharpe-like, alpha, and trade-expectancy analytics.
-- Add run-failure alerts, richer retries/timeouts, and frontend code-splitting.
+- ~~Add drawdown, Sharpe-like, alpha analytics~~ ✅ done (`src/analysis/performance.ts` + `RiskMetrics`
+  dashboard strip: max drawdown, Sharpe, volatility, excess return + beta vs SPY). Trade-expectancy
+  already lives in the wiki. ~~frontend code-splitting~~ ✅ done (vendor `manualChunks`).
+- Add run-failure alerts and richer retries/timeouts.
 
 ## 13. Acceptance criteria for the next implementation handoff
 

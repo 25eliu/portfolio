@@ -23,6 +23,7 @@ import { PortfolioQuery } from "./components/PortfolioQuery.tsx";
 import { MarketContextBanner } from "./components/MarketContextBanner.tsx";
 import { PortfolioPanel } from "./components/PortfolioPanel.tsx";
 import { Recommendations } from "./components/Recommendations.tsx";
+import { RiskMetrics } from "./components/RiskMetrics.tsx";
 import { ScheduleDialog } from "./components/ScheduleDialog.tsx";
 import { SummaryBand } from "./components/SummaryBand.tsx";
 import { TickerManager } from "./components/TickerManager.tsx";
@@ -165,13 +166,16 @@ export default function App() {
               className="mb-5"
             />
             {snapshots.data ? (
-              <EquityCurve
-                user={snapshots.data.user}
-                ai={snapshots.data.ai}
-                spy={snapshots.data.spy}
-                horizon={horizon}
-                onHorizonChange={setHorizon}
-              />
+              <>
+                <EquityCurve
+                  user={snapshots.data.user}
+                  ai={snapshots.data.ai}
+                  spy={snapshots.data.spy}
+                  horizon={horizon}
+                  onHorizonChange={setHorizon}
+                />
+                <RiskMetrics snapshots={snapshots.data} />
+              </>
             ) : (
               <Skeleton className="h-72 w-full" />
             )}

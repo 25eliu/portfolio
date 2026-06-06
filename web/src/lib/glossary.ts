@@ -51,4 +51,11 @@ export const GLOSSARY: Record<string, string> = {
   supersedes: "A newer thesis or lesson replaces an older one.",
   in_cohort: "A forecast belongs to this calibration cohort.",
   related_to: "A generic association between two concepts.",
+
+  // Risk / performance metrics
+  sharpe: "Sharpe ratio: return per unit of volatility (annualized, risk-free = 0). Higher is better; >1 is strong.",
+  maxDrawdown: "The worst peak-to-trough decline over the period — how much you'd have been down at the lowest point.",
+  annualizedVolatility: "How much the equity swings, annualized — a standard measure of risk.",
+  excessReturn: "Return above the benchmark (SPY) over the same window — the edge over just holding the index (alpha).",
+  beta: "Sensitivity to the market: 1.0 moves with SPY, >1 amplifies it, <1 dampens it, negative moves opposite.",
 };
