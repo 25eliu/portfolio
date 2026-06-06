@@ -21,4 +21,34 @@ export const GLOSSARY: Record<string, string> = {
   evEbitda: "Enterprise value / EBITDA — capital-structure-neutral valuation.",
   roe: "Return on equity — profit generated on shareholders' capital.",
   freeCashFlowPerShare: "Free cash flow per share — cash the business throws off.",
+
+  // Performance-wiki & outcome metrics
+  R: "R-multiple: profit or loss measured in units of the risk taken (entry-to-stop distance). +2R = made twice what you risked; −1R = the stop was hit.",
+  hitRate: "Share of resolved calls in this cohort that reached their target before their stop.",
+  statedConviction: "The average conviction the model stated on these calls — compare to hit rate to see if it's been over- or under-confident.",
+  expectancy: "Average R-multiple per call (expectancy). Positive = the cohort made money per unit of risk on average; negative = it lost.",
+  brier: "Brier score: how well-calibrated the stated convictions were vs. what actually happened (0 = perfect, lower is better).",
+  vsSpy: "Average return of these calls minus SPY over the same window — the edge over just holding the index.",
+  mfe: "Maximum Favorable Excursion: the best unrealized gain the call reached before resolving (how much was on the table).",
+  mae: "Maximum Adverse Excursion: the worst unrealized drawdown the call suffered before resolving (how much heat it took).",
+
+  // Decision Engine v2 — deliberation & calibration
+  calibratedConviction: "The conviction the AI actually sizes trades on, after dampening the model's stated conviction by its measured track record on this sector/strategy. Never higher than stated.",
+  calibration: "A deterministic, dampen-only adjustment that pulls conviction toward what this kind of call has actually achieved — borrowing from the sector and strategy track record when the ticker itself has little history.",
+  overconfidence: "How much stated conviction has historically run ahead of the realized hit rate for this cohort. Higher = the system has been too sure here.",
+  deliberation: "A structured bull-vs-bear argument the AI runs before committing — the strongest case for and against, plus what would prove the call wrong.",
+  disconfirmers: "Specific, testable facts or events that would prove this thesis wrong — named up front so the call can be checked, not rationalized.",
+  regime: "The market backdrop (risk-on / neutral / risk-off) read from SPY trend, VIX, and the AI's outlook. A risk-off tape shrinks new position sizes.",
+
+  // Knowledge-graph relationships (edge types)
+  belongs_to: "Membership: a ticker belongs to a sector or theme.",
+  tagged_with: "A fact or thesis was tagged with this entity (sector / theme / direction).",
+  mentions: "A source or chunk references this ticker or entity.",
+  cites: "A recommendation cited this piece of evidence.",
+  derived_from: "A lesson or metric was computed from these resolved forecasts.",
+  supports: "A lesson informs this strategy / sector / ticker.",
+  contradicts: "This lesson conflicts with another.",
+  supersedes: "A newer thesis or lesson replaces an older one.",
+  in_cohort: "A forecast belongs to this calibration cohort.",
+  related_to: "A generic association between two concepts.",
 };

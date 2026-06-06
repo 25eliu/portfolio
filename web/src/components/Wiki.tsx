@@ -4,8 +4,11 @@ import type { InFlightAssessment, InFlightCall } from "../api/client.ts";
 import type { LessonState, WikiLesson, WikiMetric } from "../api/types.ts";
 import { useWikiBriefing, useWikiInFlight, useWikiLessons, useWikiMetrics } from "../api/hooks.ts";
 import { cn } from "../lib/cn.ts";
+import type { ReactNode } from "react";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
+import { Term } from "./ui/Term.tsx";
+import { nodeId } from "./graph/nodeStyle.ts";
 
 const STATE_TONE: Record<LessonState, "pos" | "accent" | "neutral" | "warn"> = {
   active: "pos",
@@ -19,7 +22,7 @@ const STATE_TONE: Record<LessonState, "pos" | "accent" | "neutral" | "warn"> = {
 const pct = (x: number | null) => (x == null ? "—" : `${(x * 100).toFixed(0)}%`);
 
 /** Region 6 — the performance wiki: compiled briefing, evidence-gated lessons, calibration metrics. */
-export function Wiki() {
+export function Wiki({ onViewInGraph }: { onViewInGraph?: (nodeId: string) => void }) {
   const briefing = useWikiBriefing();
   const lessons = useWikiLessons();
   const metrics = useWikiMetrics("all_time");
@@ -63,7 +66,7 @@ export function Wiki() {
 
           <div className="space-y-2">
             {(lessons.data?.lessons ?? []).map((l) => (
-              <LessonRow key={l.id} lesson={l} />
+              <LessonRow key={l.id} lesson={l} onViewInGraph={onViewInGraph} />
             ))}
           </div>
         </div>
@@ -76,16 +79,16 @@ function CalibrationStrip({ m }: { m: WikiMetric }) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
       <Stat label="Resolved" value={String(m.n)} />
-      <Stat label="Hit rate" value={pct(m.hitRate)} icon />
-      <Stat label="Stated conv" value={pct(m.avgConviction)} />
-      <Stat label="Expectancy" value={m.expectancyR != null ? `${m.expectancyR.toFixed(2)}R` : "—"} />
-      <Stat label="vs SPY" value={pct(m.avgSpyExcess)} />
-      <Stat label="Brier" value={m.brier != null ? m.brier.toFixed(3) : "—"} />
+      <Stat label={<Term k="hitRate">Hit rate</Term>} value={pct(m.hitRate)} icon />
+      <Stat label={<Term k="statedConviction">Stated conv</Term>} value={pct(m.avgConviction)} />
+      <Stat label={<Term k="expectancy">Expectancy</Term>} value={m.expectancyR != null ? `${m.expectancyR.toFixed(2)}R` : "—"} />
+      <Stat label={<Term k="vsSpy">vs SPY</Term>} value={pct(m.avgSpyExcess)} />
+      <Stat label={<Term k="brier">Brier</Term>} value={m.brier != null ? m.brier.toFixed(3) : "—"} />
     </div>
   );
 }
 
-function Stat({ label, value, icon }: { label: string; value: string; icon?: boolean }) {
+function Stat({ label, value, icon }: { label: ReactNode; value: string; icon?: boolean }) {
   return (
     <div className="rounded-lg border border-hairline bg-surface-2/50 p-2.5">
       <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-text-muted">
@@ -96,7 +99,7 @@ function Stat({ label, value, icon }: { label: string; value: string; icon?: boo
   );
 }
 
-function LessonRow({ lesson }: { lesson: WikiLesson }) {
+function LessonRow({ lesson, onViewInGraph }: { lesson: WikiLesson; onViewInGraph?: (nodeId: string) => void }) {
   return (
     <div className="rounded-lg border border-hairline bg-surface-2/30 p-3">
       <div className="mb-1 flex items-center gap-2">
@@ -105,6 +108,14 @@ function LessonRow({ lesson }: { lesson: WikiLesson }) {
           {lesson.state}
         </Badge>
         <span className="tnum ml-auto text-[10px] text-text-muted">n={lesson.n}</span>
+        {onViewInGraph && (
+          <button
+            onClick={() => onViewInGraph(nodeId("lesson", lesson.id))}
+            className="text-[10px] text-text-muted transition-colors hover:text-accent"
+          >
+            graph ↗
+          </button>
+        )}
       </div>
       <p className="text-[11px] leading-relaxed text-text-muted">{lesson.body}</p>
     </div>

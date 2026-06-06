@@ -15,6 +15,7 @@ import { Header } from "./components/Header.tsx";
 import { AiTrades } from "./components/AiTrades.tsx";
 import { Journal } from "./components/Journal.tsx";
 import { KnowledgeLibrary } from "./components/KnowledgeLibrary.tsx";
+import { KnowledgeGraph } from "./components/KnowledgeGraph.tsx";
 import { AiLibrary } from "./components/AiLibrary.tsx";
 import { MarketView } from "./components/MarketView.tsx";
 import { Wiki } from "./components/Wiki.tsx";
@@ -64,6 +65,13 @@ export default function App() {
   const [horizon, setHorizon] = useState<HorizonKey>("3M");
   const [pnlMode, setPnlMode] = useState<PnlMode>("usd");
   const [journalTicker, setJournalTicker] = useState<string | undefined>(undefined);
+  const [graphFocus, setGraphFocus] = useState<string | undefined>(undefined);
+
+  // Deep link into the knowledge graph: set the focal node id and scroll the section into view.
+  const viewInGraph = (id: string) => {
+    setGraphFocus(id);
+    document.getElementById("graph")?.scrollIntoView({ behavior: "smooth" });
+  };
 
   // One global $/% control for all P&L figures (overview band + both portfolio panels).
   const pnlToggle = (
@@ -200,6 +208,7 @@ export default function App() {
                   setJournalTicker(ticker);
                   document.getElementById("journal")?.scrollIntoView({ behavior: "smooth" });
                 }}
+                onViewInGraph={viewInGraph}
               />
             </>
           )}
@@ -219,19 +228,25 @@ export default function App() {
           </div>
         </Section>
 
-        <Section title="Knowledge library" index={7}>
+        <Section title="Knowledge graph" index={7}>
+          <div id="graph">
+            <KnowledgeGraph focusId={graphFocus} />
+          </div>
+        </Section>
+
+        <Section title="Knowledge library" index={8}>
           <KnowledgeLibrary />
         </Section>
 
-        <Section title="AI knowledge library" index={8}>
+        <Section title="AI knowledge library" index={9}>
           <AiLibrary />
         </Section>
 
-        <Section title="Performance wiki" index={9}>
-          <Wiki />
+        <Section title="Performance wiki" index={10}>
+          <Wiki onViewInGraph={viewInGraph} />
         </Section>
 
-        <Section title="Ask your portfolio" index={10}>
+        <Section title="Ask your portfolio" index={11}>
           <PortfolioQuery />
         </Section>
       </main>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown, X } from "lucide-react";
 import type { AiInsight } from "../api/client.ts";
 import type { Action, ForecastOutcome, JournalEntry, OutcomeKind } from "../api/types.ts";
@@ -8,6 +9,8 @@ import { usd } from "../lib/format.ts";
 import { stanceTone } from "../lib/stance.ts";
 import { Badge } from "./ui/Badge.tsx";
 import { Skeleton } from "./ui/Skeleton.tsx";
+import { Term } from "./ui/Term.tsx";
+import { DeliberationPanel, CalibrationChain } from "./Reasoning.tsx";
 
 /** Format an ISO calendar date (YYYY-MM-DD) as a readable day header, e.g. "Mon, Jun 2 2026". */
 function dayLabel(date: string): string {
@@ -250,6 +253,10 @@ function JournalDetail({ entry }: { entry: JournalEntry }) {
     <div className="space-y-3 pb-4 pl-1 pr-1 text-[12px]">
       <p className="leading-relaxed text-text-secondary">{rec.thesis}</p>
 
+      {/* Decision Engine v2 — the reasoning chain behind this call */}
+      {rec.calibration && <CalibrationChain stated={rec.conviction} calibration={rec.calibration} />}
+      {rec.deliberation && <DeliberationPanel deliberation={rec.deliberation} />}
+
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <span className="capitalize font-medium text-text-secondary">{pred.direction}</span>
         <span className="text-text-muted">·</span>
@@ -338,14 +345,14 @@ function Outcome({ outcome }: { outcome: ForecastOutcome }) {
         <Field label="Return" value={pct(outcome.terminalReturn)} tone={outcome.terminalReturn >= 0 ? "text-pos" : "text-neg"} />
         {outcome.spyExcessReturn != null && (
           <Field
-            label="vs SPY"
+            label={<Term k="vsSpy">vs SPY</Term>}
             value={pct(outcome.spyExcessReturn)}
             tone={outcome.spyExcessReturn >= 0 ? "text-pos" : "text-neg"}
           />
         )}
-        {outcome.forecastR != null && <Field label="R" value={`${outcome.forecastR.toFixed(2)}×`} />}
-        <Field label="MFE" value={pct(outcome.maxFavorableExcursion)} tone="text-pos" />
-        <Field label="MAE" value={pct(outcome.maxAdverseExcursion)} tone="text-neg" />
+        {outcome.forecastR != null && <Field label={<Term k="R">R</Term>} value={`${outcome.forecastR.toFixed(2)}×`} />}
+        <Field label={<Term k="mfe">MFE</Term>} value={pct(outcome.maxFavorableExcursion)} tone="text-pos" />
+        <Field label={<Term k="mae">MAE</Term>} value={pct(outcome.maxAdverseExcursion)} tone="text-neg" />
       </div>
       {outcome.warnings.length > 0 && (
         <p className="mt-1.5 text-[10px] leading-snug text-text-muted">{outcome.warnings.join("; ")}</p>
@@ -354,7 +361,7 @@ function Outcome({ outcome }: { outcome: ForecastOutcome }) {
   );
 }
 
-function Field({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Field({ label, value, tone }: { label: ReactNode; value: string; tone?: string }) {
   return (
     <span className="flex items-center gap-1">
       <span className="text-[9px] uppercase tracking-wide text-text-muted">{label}</span>

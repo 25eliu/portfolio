@@ -12,6 +12,7 @@ const keys = {
   schedule: ["schedule"],
   watchlist: ["watchlist"],
   journal: ["journal"],
+  graph: ["graph"],
   knowledge: ["knowledge"],
   wiki: ["wiki"],
   trades: ["trades"],
@@ -45,6 +46,13 @@ export const useJournalDay = (date: string | null) =>
   useQuery({ queryKey: [...keys.journal, "day", date], queryFn: () => client.journal({ date: date! }), enabled: date != null });
 export const useJournalEntry = (id: string | null) =>
   useQuery({ queryKey: [...keys.journal, "entry", id], queryFn: () => client.journalEntry(id!), enabled: id != null });
+
+// Knowledge-graph traversal: a focal node + its neighbors (the graph viz re-fetches per focal node), and
+// the node picker's per-type listing.
+export const useGraphNode = (id: string | null) =>
+  useQuery({ queryKey: [...keys.graph, "node", id], queryFn: () => client.graphNode(id!), enabled: id != null });
+export const useGraphNodes = (type?: string) =>
+  useQuery({ queryKey: [...keys.graph, "nodes", type ?? null], queryFn: () => client.graphNodes(type) });
 
 /** Invalidate everything that a portfolio mutation / run can affect. */
 export function useInvalidateAll() {

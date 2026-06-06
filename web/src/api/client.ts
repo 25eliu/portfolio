@@ -171,6 +171,8 @@ export const client = {
   archiveInsight: (kind: string, id: string) =>
     api<{ ok: boolean }>(`/ai-insights/${kind}/${id}`, { method: "DELETE" }),
   graphNode: (id: string) => api<{ node: KgNode; neighbors: KgNeighbor[] }>(`/graph/node/${id}`),
+  graphNodes: (type?: string) =>
+    api<{ nodes: KgNode[] }>(`/graph/nodes${type ? `?type=${encodeURIComponent(type)}` : ""}`),
   wikiBriefing: () => api<{ briefing: Briefing | null }>("/wiki/briefing"),
   wikiLessons: () => api<{ lessons: WikiLesson[] }>("/wiki/lessons"),
   wikiLesson: (id: string) => api<{ lesson: WikiLesson }>(`/wiki/lessons/${id}`),
