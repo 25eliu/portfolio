@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import type { KgNeighbor, KgNode } from "../../api/types.ts";
-import { layoutNeighbors, nodeStyle, parseNodeId, REL_LABEL, relStyle } from "./nodeStyle.ts";
+import { fallbackLabel, layoutNeighbors, nodeStyle, parseNodeId, REL_LABEL, relStyle } from "./nodeStyle.ts";
 
 const W = 880;
 const H = 560;
@@ -61,7 +61,7 @@ export function EgoGraphSvg({
   const chips: ChipDatum[] = positions.map((p, i) => {
     const nb = filtered[i]!;
     const id = farId(nb);
-    const meta = nb.node ?? { type: parseNodeId(id).type, label: parseNodeId(id).key, summary: "" };
+    const meta = nb.node ?? { type: parseNodeId(id).type, label: fallbackLabel(id), summary: "" };
     return {
       key: nb.edge.id,
       id,

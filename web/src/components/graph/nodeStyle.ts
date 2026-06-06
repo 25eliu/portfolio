@@ -83,6 +83,15 @@ export function nodeId(type: string, key: string): string {
   return `${type}:${slug}`;
 }
 
+/** Readable label for an edge target that has no canonical node (e.g. `source:<uuid>`): show the type
+ *  plus a short id stub instead of a raw uuid. */
+export function fallbackLabel(id: string): string {
+  const { type, key } = parseNodeId(id);
+  const looksLikeId = key.length > 16 || /^[0-9a-f]{8}-?[0-9a-f]{4}/i.test(key);
+  const short = looksLikeId ? `${key.replace(/-/g, "").slice(0, 6)}…` : key;
+  return `${nodeStyle(type).label} ${short}`;
+}
+
 export type NodePosition = { x: number; y: number; angle: number };
 
 export type LayoutResult = { positions: NodePosition[]; hiddenCount: number };

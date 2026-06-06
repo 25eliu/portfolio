@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { layoutNeighbors, parseNodeId, nodeStyle, relStyle } from "./nodeStyle.ts";
+import { fallbackLabel, layoutNeighbors, parseNodeId, nodeStyle, relStyle } from "./nodeStyle.ts";
 
 const OPTS = { cx: 440, cy: 280, r1: 200, r2: 130, cap: 16 };
 
@@ -56,5 +56,11 @@ describe("style maps", () => {
     expect(relStyle("derived_from").family).toBe("provenance");
     expect(relStyle("supersedes").dash).toBeDefined(); // conflict edges are dashed
     expect(relStyle("belongs_to").family).toBe("structural");
+  });
+
+  test("fallbackLabel renders uuid-ish null nodes as type + short stub, keeps short keys", () => {
+    expect(fallbackLabel("source:4b7afc82-44e9-4c2a-9f1a-aaaaaaaaaaaa")).toBe("source 4b7afc…");
+    expect(fallbackLabel("forecast:0123456789abcdef0123")).toContain("forecast ");
+    expect(fallbackLabel("sector:energy")).toBe("sector energy"); // short, human key kept whole
   });
 });
