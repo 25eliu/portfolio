@@ -10,6 +10,8 @@ build/
 data/*.sqlite
 data/*.sqlite-*
 data/*.db
+/data.db
+/data.db-*
 # Raw uploaded/snapshotted knowledge-base files (metadata + extracted text live in SQLite).
 data/knowledge/
 data/*.db-*
@@ -38,10 +40,11 @@ docs/local/
 docs/conversations/
 docs/plans/
 
-# Personal notes, wiki, stock-data dumps — NOT part of the template
-wiki/
-notes/
-scratch/
+# Personal notes, wiki, stock-data dumps — NOT part of the template.
+# Root-anchored so these never shadow source dirs (e.g. src/wiki/ is tracked code).
+/wiki/
+/notes/
+/scratch/
 
 # Editor / IDE
 .vscode/
