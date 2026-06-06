@@ -4,16 +4,20 @@ import type { ResolvedRow } from "../../wiki/metrics.ts";
 
 export function wikiRepo(db: DB) {
   return {
-    /** Resolved forecasts flattened for cohort math (forecast joined with its outcome). */
-    resolvedRows(): ResolvedRow[] {
+    /**
+     * Resolved forecasts flattened for cohort math (forecast joined with its outcome). The optional
+     * `sectorOf` resolver maps a ticker to its GICS sector (from the knowledge graph) so the sector
+     * cohort can power graph-propagated calibration; omitted ⇒ sector is null (no sector cohort).
+     */
+    resolvedRows(sectorOf?: (ticker: string) => string | null): ResolvedRow[] {
       type Row = {
-        forecast_id: string; side: string; strategy_family: string; horizon_trading_sessions: number;
+        forecast_id: string; ticker: string; side: string; strategy_family: string; horizon_trading_sessions: number;
         conviction: number; created_at: string; outcome: string; terminal_return: number;
         spy_excess_return: number | null; forecast_r: number | null;
       };
       return db
         .query<Row, []>(
-          `SELECT f.id AS forecast_id, f.side, f.strategy_family, f.horizon_trading_sessions,
+          `SELECT f.id AS forecast_id, f.ticker, f.side, f.strategy_family, f.horizon_trading_sessions,
                   f.conviction, f.created_at, o.outcome, o.terminal_return, o.spy_excess_return, o.forecast_r
              FROM scored_forecasts f
              JOIN forecast_outcomes o ON o.forecast_id = f.id`,
@@ -23,6 +27,7 @@ export function wikiRepo(db: DB) {
           forecastId: r.forecast_id,
           side: r.side as ResolvedRow["side"],
           strategyFamily: r.strategy_family,
+          sector: sectorOf ? sectorOf(r.ticker) : null,
           horizonSessions: r.horizon_trading_sessions,
           conviction: r.conviction,
           createdAt: r.created_at,

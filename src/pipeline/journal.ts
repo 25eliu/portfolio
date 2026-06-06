@@ -217,6 +217,28 @@ export function persistJournal(
         evidenceCount++;
       });
     }
+
+    // Materialize ticker —belongs_to→ sector from fundamentals. Sector is ground truth (from the data
+    // provider), not a model judgment, so it's wired deterministically. This is the edge the sector
+    // calibration cohort and the graph's sector clusters traverse — without it the sector layer is inert.
+    for (const entry of entries) {
+      const sector = entry.recommendation.fundamentals?.sector;
+      if (!sector) continue;
+      const tkr = nodeId("ticker", entry.ticker);
+      const sec = nodeId("sector", sector);
+      app.repos.graph.upsertNode({
+        id: tkr, type: "ticker", label: entry.ticker, summary: "",
+        data: {}, status: "active", createdAt: report.generatedAt, updatedAt: report.generatedAt,
+      });
+      app.repos.graph.upsertNode({
+        id: sec, type: "sector", label: sector, summary: "",
+        data: {}, status: "active", createdAt: report.generatedAt, updatedAt: report.generatedAt,
+      });
+      app.repos.graph.upsertEdge({
+        id: edgeId(tkr, "belongs_to", sec),
+        srcId: tkr, dstId: sec, rel: "belongs_to", weight: 1, data: {}, createdAt: report.generatedAt,
+      });
+    }
   })();
 
   const forecastByEntry = new Map(forecasts.map((f) => [f.journalEntryId, f.id]));

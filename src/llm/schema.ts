@@ -60,6 +60,27 @@ export const recommendationFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
+/** The function declaration Gemini calls to return its bull/bear deliberation (Decision Engine v2,
+ *  the structured stage between research and the final recommendation). Re-validated with Zod after. */
+export const deliberationFunctionDeclaration: FunctionDeclaration = {
+  name: "submit_deliberation",
+  description: "Return the bull/bear deliberation for one ticker BEFORE committing to a verdict.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      bull_case: { type: Type.STRING, description: "the strongest evidence-grounded case FOR acting" },
+      bear_case: { type: Type.STRING, description: "the strongest credible counter-thesis AGAINST acting" },
+      key_uncertainties: { type: Type.ARRAY, items: { type: Type.STRING }, description: "unknowns that most affect the outcome" },
+      disconfirmers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "specific, testable facts/events that would prove this call WRONG" },
+      base_rate_note: { type: Type.STRING, nullable: true, description: "realistic base rate of success for this kind of setup" },
+      reversal_check: { type: Type.STRING, nullable: true, description: "if this contradicts a prior call, why the change is warranted; else null" },
+      provisional_stance: { type: Type.STRING, enum: ["bullish", "bearish", "neutral"] },
+      provisional_conviction: { type: Type.NUMBER, description: "calibrated probability 0..1; uncertain ≈ 0.5" },
+    },
+    required: ["bull_case", "bear_case", "provisional_stance", "provisional_conviction"],
+  },
+};
+
 const thesisItemSchema = {
   type: Type.OBJECT,
   properties: {

@@ -1,5 +1,5 @@
 /**
- * Gemini analyzer — TWO-STAGE design, now STREAMING (confirmed against gemini-3.1-pro-preview).
+ * Gemini analyzer — TWO-STAGE design, now STREAMING (confirmed against Gemini 3.x; default gemini-3.5-flash).
  *
  * Stage A — RESEARCH: Search-only call → research text + real `groundingMetadata.groundingChunks`.
  * Stage B — STRUCTURE: function-tool-only call (mode ANY) over the research → schema-valid args.
@@ -8,11 +8,12 @@
  */
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Env } from "../config/env.ts";
-import { Outlook, Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
+import { Deliberation, Outlook, Prediction, Recommendation, ScanCandidate } from "../domain/index.ts";
 import type { MarketContext } from "../domain/marketContext.ts";
 import type { Analyzer, StreamSink } from "./analyze.ts";
 import { normalizeAction } from "./normalize.ts";
 import {
+  buildDeliberationPrompt,
   buildDiscoveryResearchPrompt,
   buildDiscoveryStructurePrompt,
   buildMarketContextPrompt,
@@ -22,7 +23,24 @@ import {
   buildTickerStructurePrompt,
   type TickerInput,
 } from "./prompts.ts";
-import { candidatesFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+import { candidatesFunctionDeclaration, deliberationFunctionDeclaration, outlookFunctionDeclaration, recommendationFunctionDeclaration } from "./schema.ts";
+
+/** Parse a submit_deliberation function-call payload (snake_case) into the Deliberation schema. */
+function parseDeliberation(args: Record<string, unknown> | undefined): Deliberation | null {
+  if (!args) return null;
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const result = Deliberation.safeParse({
+    bullCase: typeof args.bull_case === "string" ? args.bull_case : "",
+    bearCase: typeof args.bear_case === "string" ? args.bear_case : "",
+    keyUncertainties: strings(args.key_uncertainties),
+    disconfirmers: strings(args.disconfirmers),
+    baseRateNote: typeof args.base_rate_note === "string" ? args.base_rate_note : null,
+    reversalCheck: typeof args.reversal_check === "string" ? args.reversal_check : null,
+    provisionalStance: args.provisional_stance,
+    provisionalConviction: args.provisional_conviction,
+  });
+  return result.success ? result.data : null;
+}
 
 const THINKING: Record<Env["GEMINI_THINKING_LEVEL"], ThinkingLevel> = {
   low: ThinkingLevel.LOW,
@@ -127,9 +145,24 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
     async analyzeTicker(input: TickerInput, ctx: MarketContext, sink?: StreamSink): Promise<Recommendation> {
       sink?.({ kind: "stage", stage: "research" });
       const { text, sources } = await research(buildTickerResearchPrompt(input, ctx), sink);
+      // Stage A.5 — bull/bear deliberation (Decision Engine v2). Non-fatal: on failure the recommendation
+      // still proceeds without it, so a flaky extra call never blocks the verdict.
+      sink?.({ kind: "stage", stage: "deliberate" });
+      let deliberation: Deliberation | null = null;
+      try {
+        const dargs = await structure(
+          buildDeliberationPrompt(input, ctx, text),
+          { name: "submit_deliberation" },
+          deliberationFunctionDeclaration,
+          sink,
+        );
+        deliberation = parseDeliberation(dargs);
+      } catch (err) {
+        console.warn(`[deliberate] ${input.symbol} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
       sink?.({ kind: "stage", stage: "structure" });
       const args = await structure(
-        buildTickerStructurePrompt(input, ctx, text, sources),
+        buildTickerStructurePrompt(input, ctx, text, sources, deliberation),
         { name: "submit_recommendation" },
         recommendationFunctionDeclaration,
         sink,
@@ -168,6 +201,7 @@ export function createGeminiAnalyzer(env: Env): Analyzer {
         held: input.held,
         action: normalizeAction(String(args.action ?? (input.held ? "HOLD" : "PASS")), input.held),
         prediction,
+        deliberation,
         technicals: input.technicals,
         fundamentals: input.fundamentals,
         priceTargetUpside: upside,

@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-04 (planner exits honor explicit SELL/TRIM verdicts, not just price direction)._
+> _Last updated: 2026-06-05 (Decision Engine v2: bull/bear deliberation stage, graph-propagated conviction calibration over sector/strategy/overall cohorts, regime-aware sizing)._
 
 ## 1. Product direction
 
@@ -167,6 +167,10 @@ computed facts; it does not replace the database or grade the model from memory.
     the AI's curated knowledge grounded and cited, alongside journal/wiki/research tools.
   - **`AiLibrary.tsx` frontend** (day-sectioned, collapsible, search + tag chip filter, archive-hidden)
     in its own dashboard section, replacing `CuratedMemory.tsx`.
+- **Decision Engine v2:** three-stage per-ticker analysis (`research → deliberate → structure`) with a
+  persisted bull/bear deliberation; deterministic **graph-propagated conviction calibration** (shrinkage
+  over sector/strategy/overall cohorts, dampen-only) that sets a separate `calibratedConviction` without
+  touching stated conviction; and **regime-aware sizing** in the planner. Adds a `sector` wiki cohort. See §5b.
 
 ### Execution posture
 
@@ -278,6 +282,41 @@ ScoredForecast {
 - Keep advisory forecast R separate from actual AI-paper trade P&L.
 - Version resolution logic. Never silently rewrite historical outcomes when a provider or policy
   changes.
+
+## 5b. Decision engine v2 — deliberation, calibration, regime sizing (implemented)
+
+Three research-grounded upgrades make the per-ticker decision deeper, self-calibrating, and regime-aware,
+while persisting the reasoning so it is auditable (and renderable by a future explainability UI).
+
+- **Bull/bear deliberation stage.** Per-ticker analysis is now three stages: `research → deliberate →
+  structure`. The middle stage (one extra forced `submit_deliberation` call) argues the strongest bull
+  AND bear case, names specific **disconfirmers** (testable facts that would falsify the thesis), a
+  base-rate note, and — when a prior thesis exists and the stance flips — an explicit **reversal check**.
+  The structuring call must weigh that bear case before committing. The deliberation is stored on the
+  recommendation (`Recommendation.deliberation`), not discarded. Non-fatal: if it fails the verdict still
+  proceeds. The offline fake/mock analyzers seed a deterministic deliberation so the path is always exercised.
+- **Graph-propagated conviction calibration.** Stated conviction is never mutated (the wiki's calibration
+  metric *is* stated-vs-realized, so overwriting it would make the loop self-eat). Instead a deterministic
+  empirical-Bayes **shrinkage** blend over the ticker's knowledge-graph cohorts — its **sector**, its
+  **strategy family**, and the **overall** prior — produces a separate `calibratedConviction` plus an
+  auditable per-cohort chain (`Recommendation.calibration`). A cohort's weight is `n/(n+K)` × graph
+  proximity, so overconfidence measured on one cohort (e.g. a sector) propagates to a ticker in it that has
+  little history of its own, while thin/noisy cohorts contribute almost nothing. It is **dampen-only**
+  (factor ∈ [0.75, 1]) and a near no-op until a real track record accrues. Implemented in
+  `src/analysis/calibration.ts`, applied in `generateLlmReport`.
+- **Regime-aware sizing.** The planner sizes off the **effective** conviction (`calibratedConviction ??
+  conviction`) for both the confidence gate and position sizing, and applies a regime brake to every new
+  entry's target value: a risk-off tape (SPY trend + VIX + the synthesized outlook, see
+  `src/analysis/regime.ts`) shrinks entries; exits are never gated by it.
+
+To feed the calibration blend, the performance wiki now also computes a **sector cohort** (`CohortKind`
+gains `sector`); each resolved forecast's sector is resolved from the `ticker → belongs_to → sector` graph
+edge at compile time. That edge is **materialized deterministically** during journaling
+(`persistJournal`) from `fundamentals.sector` — sector membership is ground truth from the data provider,
+not a model judgment, so it is wired by code, not the LLM. Sector lessons link back to their sector node
+in the graph. (Division of labor: the LLM decides *what to remember* — facts, theses — and tags them;
+deterministic code owns the graph topology for ground-truth memberships and the entire computed
+metrics/calibration layer, so the system never authors its own track record.)
 
 ## 5a. Knowledge-graph substrate (implemented)
 
@@ -703,6 +742,23 @@ research uploads, and wire it into the query bot and dashboard.
   facts in "ask your portfolio" answers.
 - **Dashboard:** `AiLibrary.tsx` — day-sectioned, collapsible, search + tag chip filter, archive-hidden;
   replaces `CuratedMemory.tsx`.
+
+### Decision Engine v2 — research-grounded, self-calibrating trading ✅ done
+
+- **Bull/bear deliberation stage** between research and structure: forced `submit_deliberation` call
+  (bull case, bear case, disconfirmers, base-rate note, reversal check, provisional stance/conviction),
+  persisted on the recommendation; the structuring call must weigh the bear case. Non-fatal; seeded in
+  the fake/mock analyzers (`src/llm/{schema,prompts,gemini,analyze}.ts`).
+- **Graph-propagated conviction calibration** (`src/analysis/calibration.ts`): empirical-Bayes shrinkage
+  over the ticker's sector + strategy-family + overall cohorts (`weight = n/(n+K) × proximity`),
+  dampen-only (factor ∈ [0.75, 1]), writing a separate `calibratedConviction` + auditable per-cohort
+  chain. Stated conviction is never mutated, preserving the wiki's stated-vs-realized metric.
+- **Sector wiki cohort** (`CohortKind += "sector"`, `src/wiki/metrics.ts`): sector resolved per resolved
+  forecast from the `ticker → belongs_to → sector` graph edge; sector lessons link back to sector nodes.
+- **Regime-aware sizing** (`src/analysis/regime.ts`, `src/execution/plan.ts`): planner sizes/gates off
+  `calibratedConviction ?? conviction` and applies a risk-off brake to new-entry target value.
+- Next (follow-on plans, not done): an explainability UI rendering the deliberation + calibration chain
+  and the knowledge graph; README/showcase polish.
 
 ### Phase 6 — validation and polish
 

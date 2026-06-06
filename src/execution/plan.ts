@@ -19,6 +19,11 @@ export type PlanInput = {
   baselineCapital: number;
   /** The active risk preset — governs sizing, count, confidence, reward:risk, horizons, strategies. */
   preset: RiskPresetConfig;
+  /**
+   * Regime-aware sizing brake (0..1, default 1). Computed from the day's market context — risk-off tapes
+   * shrink every new position's target value. Applies only to entry sizing, never to exits.
+   */
+  regimeMultiplier?: number;
   /** Current/reference price per ticker (held positions fall back to their live price). */
   priceOf: (ticker: string) => number | null;
   /** Duplicate-order guard: already submitted/filled for this ticker today. */
@@ -48,6 +53,23 @@ export function sizeFraction(conviction: number, rr: number, preset: RiskPresetC
   const convScore = clamp01((conviction - preset.minConfidence) / (1 - preset.minConfidence));
   const rrScore = clamp01((rr - preset.rewardRiskFloor) / RR_SPAN);
   return SIZE_FLOOR + (1 - SIZE_FLOOR) * convScore * rrScore;
+}
+
+/**
+ * Conviction the planner acts on: the deterministic graph-calibrated value when present, else the
+ * model's stated conviction. Stated conviction is preserved on the recommendation for the wiki's
+ * calibration metric; only sizing and the confidence gate use this dampened value.
+ */
+export function effectiveConviction(rec: Recommendation): number {
+  return rec.calibratedConviction ?? rec.conviction;
+}
+
+/** Reason-string conviction label — shows the calibrated value and what it was dampened from. */
+function convLabel(rec: Recommendation): string {
+  const eff = effectiveConviction(rec);
+  return rec.calibratedConviction != null && Math.abs(rec.calibratedConviction - rec.conviction) >= 0.01
+    ? `conv ${eff.toFixed(2)} (cal from ${rec.conviction.toFixed(2)})`
+    : `conv ${eff.toFixed(2)}`;
 }
 
 /** Reward:risk for a long entry from the plan's target/stop; null when not computable. */
@@ -94,10 +116,13 @@ export function planTrades(input: PlanInput): TradeDecision[] {
   const isExitVerdict = (r: Recommendation) =>
     held(r.ticker) &&
     (r.action === "SELL" || r.action === "TRIM" || r.prediction.direction === "bearish" || r.prediction.direction === "neutral");
+  const regimeMultiplier = clamp01(input.regimeMultiplier ?? 1);
   const exits = input.recommendations.filter(isExitVerdict);
+  // Entries gate and rank on the EFFECTIVE (graph-calibrated) conviction — a name the calibration damped
+  // below the confidence floor drops out, and sizing/ordering reflect the dampened value.
   const entries = input.recommendations
-    .filter((r) => !isExitVerdict(r) && r.prediction.direction === "bullish" && r.conviction >= preset.minConfidence)
-    .sort((a, b) => b.conviction - a.conviction);
+    .filter((r) => !isExitVerdict(r) && r.prediction.direction === "bullish" && effectiveConviction(r) >= preset.minConfidence)
+    .sort((a, b) => effectiveConviction(b) - effectiveConviction(a));
 
   // ---- Pass 1: exits & trims on held positions (always permitted; not cash-gated) ----
   for (const rec of exits) {
@@ -164,10 +189,11 @@ export function planTrades(input: PlanInput): TradeDecision[] {
     }
 
     const exposureRoom = Math.max(0, baseline - deployedValue);
-    // Thesis-driven target weight: stronger conviction × reward:risk → a bigger slice of the cap.
-    const frac = sizeFraction(rec.conviction, rr, preset);
-    const targetValue = frac * maxPosValue;
-    const pctOfCap = Math.round(frac * 100);
+    // Thesis-driven target weight: stronger (calibrated) conviction × reward:risk → a bigger slice of the
+    // cap; the regime brake shrinks every entry in a risk-off tape.
+    const frac = sizeFraction(effectiveConviction(rec), rr, preset);
+    const targetValue = frac * maxPosValue * regimeMultiplier;
+    const pctOfCap = Math.round(frac * regimeMultiplier * 100);
     const pos = bySymbol.get(rec.ticker);
     if (pos) {
       // ADD — top a held name up to its thesis-sized target (only the shortfall, never past the cap).
@@ -175,7 +201,7 @@ export function planTrades(input: PlanInput): TradeDecision[] {
       const budget = Math.min(cash, exposureRoom, addValue);
       const shares = budget > 0 ? Math.floor(budget / price) : 0;
       if (shares >= 1) {
-        decisions.push(decide(rec, "buy", "ADD", shares, price, "proposed", `add (conv ${rec.conviction.toFixed(2)}, RR ${rr.toFixed(2)} → ${pctOfCap}% of cap)`));
+        decisions.push(decide(rec, "buy", "ADD", shares, price, "proposed", `add (${convLabel(rec)}, RR ${rr.toFixed(2)} → ${pctOfCap}% of cap)`));
         deployedValue += shares * price;
         cash -= shares * price;
       }
@@ -189,7 +215,7 @@ export function planTrades(input: PlanInput): TradeDecision[] {
       const budget = Math.min(cash, exposureRoom, targetValue);
       const shares = budget > 0 ? Math.floor(budget / price) : 0;
       if (shares >= 1) {
-        decisions.push(decide(rec, "buy", "BUY", shares, price, "proposed", `buy (conv ${rec.conviction.toFixed(2)}, RR ${rr.toFixed(2)} → ${pctOfCap}% of cap)`));
+        decisions.push(decide(rec, "buy", "BUY", shares, price, "proposed", `buy (${convLabel(rec)}, RR ${rr.toFixed(2)} → ${pctOfCap}% of cap)`));
         deployedValue += shares * price;
         cash -= shares * price;
         positionsCount += 1;

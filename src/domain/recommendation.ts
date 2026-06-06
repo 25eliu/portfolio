@@ -59,6 +59,54 @@ export const MemorableFact = z.object({
 });
 export type MemorableFact = z.infer<typeof MemorableFact>;
 
+/**
+ * The bull/bear deliberation the analyzer runs BEFORE committing to a verdict (Decision Engine v2,
+ * the +1 structured stage between research and structure). Persisted on the recommendation so the
+ * reasoning is auditable and the explainability UI can render the argued cases — not ephemeral.
+ */
+export const Deliberation = z.object({
+  bullCase: z.string().default(""),
+  bearCase: z.string().default(""),
+  keyUncertainties: z.array(z.string()).default([]),
+  /** Specific, testable evidence that would falsify the thesis (disconfirmer-seeking, not narrative). */
+  disconfirmers: z.array(z.string()).default([]),
+  baseRateNote: z.string().nullable().default(null),
+  /** When a prior thesis existed and the stance flipped, the justification for the reversal. */
+  reversalCheck: z.string().nullable().default(null),
+  provisionalStance: Direction.catch("neutral"),
+  provisionalConviction: z.number().min(0).max(1).catch(0.5),
+});
+export type Deliberation = z.infer<typeof Deliberation>;
+
+/** One cohort's contribution to the calibration blend — the traceable chain the next plan visualizes. */
+export const CalibrationAdjustment = z.object({
+  cohortKind: z.string(),
+  cohortKey: z.string(),
+  /** Resolved, non-ambiguous sample size in this cohort (drives the shrinkage weight). */
+  n: z.number().nonnegative(),
+  /** o_c = avgConviction − hitRate (+ small negative-expectancy term); positive ⇒ historically overconfident. */
+  overconfidence: z.number(),
+  /** Normalized share of the blend this cohort earned (shrinkage × graph proximity), 0..1. */
+  weight: z.number(),
+});
+export type CalibrationAdjustment = z.infer<typeof CalibrationAdjustment>;
+
+/**
+ * Deterministic, graph-propagated conviction calibration (empirical-Bayes shrinkage along the ticker's
+ * sector/strategy/overall cohorts). DAMPEN-ONLY: factor ≤ 1, clamped to a gentle floor so it nudges
+ * sizing rather than dominating. Never mutates stated `conviction` — the planner sizes off
+ * `calibratedConviction` while the wiki keeps measuring stated-vs-realized (the loop must not self-eat).
+ */
+export const Calibration = z.object({
+  /** Combined dampening multiplier applied to stated conviction (overconfidence blend × regime). */
+  factor: z.number(),
+  /** Regime component of the factor (≤1 in risk_off), broken out for transparency. */
+  regimeFactor: z.number().default(1),
+  reason: z.string().default(""),
+  adjustments: z.array(CalibrationAdjustment).default([]),
+});
+export type Calibration = z.infer<typeof Calibration>;
+
 /** One model-authored outlook item (regime/sector/theme). Stance is validated per-level at persist time. */
 export const ThesisItem = z.object({
   subject: z.string().min(1),
@@ -95,6 +143,18 @@ export const Recommendation = z.object({
   signals: z.array(z.string()),
   /** Forward-looking, structured prediction backing the recommendation. */
   prediction: Prediction,
+  /**
+   * The bull/bear deliberation that preceded this verdict (Decision Engine v2). Null on legacy entries
+   * and whenever the analyzer skips it; default-safe so older journal JSON still parses.
+   */
+  deliberation: Deliberation.nullable().default(null).catch(null),
+  /**
+   * Planner-facing conviction after deterministic graph-shrinkage calibration. Null ⇒ uncalibrated, fall
+   * back to stated `conviction`. The stated value above is NEVER overwritten (calibration is additive memory).
+   */
+  calibratedConviction: z.number().min(0).max(1).nullable().default(null),
+  /** Auditable record of what the calibration blend did (per-cohort chain + final factor). */
+  calibration: Calibration.nullable().default(null).catch(null),
   technicals: Technicals,
   /** Fundamental snapshot used in the analysis (null until the LLM/FMP step populates it). */
   fundamentals: Fundamentals.nullable().default(null),

@@ -6,7 +6,7 @@ import { z } from "zod";
  * analysis. The calibration event is binary and explicit: target reached before stop within horizon.
  */
 
-export const CohortKind = z.enum(["overall", "strategy_family", "side", "horizon", "confidence_bucket"]);
+export const CohortKind = z.enum(["overall", "strategy_family", "side", "sector", "horizon", "confidence_bucket"]);
 export type CohortKind = z.infer<typeof CohortKind>;
 
 export const MetricWindow = z.enum(["all_time", "rolling_90d"]);

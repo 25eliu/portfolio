@@ -8,7 +8,7 @@ import type { TickerInput } from "./prompts.ts";
  */
 export type StreamSink = (
   e:
-    | { kind: "stage"; stage: "research" | "structure" }
+    | { kind: "stage"; stage: "research" | "deliberate" | "structure" }
     | { kind: "thinking"; text: string }
     | { kind: "text"; text: string }
     | { kind: "tool"; query?: string; sources?: Source[] },
@@ -48,6 +48,7 @@ export function createMockAnalyzer(): Analyzer {
         query: `${input.symbol} latest news`,
         sources: [{ title: "example.com", url: "https://example.com" }],
       });
+      sink?.({ kind: "stage", stage: "deliberate" });
       sink?.({ kind: "stage", stage: "structure" });
       return {
         ticker: input.symbol,
@@ -57,6 +58,18 @@ export function createMockAnalyzer(): Analyzer {
         strategyFamily: "trend",
         thesis: `mock thesis for ${input.symbol}`,
         signals: ["mock"],
+        deliberation: {
+          bullCase: `mock bull case for ${input.symbol}`,
+          bearCase: `mock bear case for ${input.symbol}`,
+          keyUncertainties: ["mock uncertainty"],
+          disconfirmers: ["mock disconfirmer"],
+          baseRateNote: null,
+          reversalCheck: null,
+          provisionalStance: "neutral",
+          provisionalConviction: 0.5,
+        },
+        calibratedConviction: null,
+        calibration: null,
         prediction: {
           direction: "neutral",
           horizon: "1mo",

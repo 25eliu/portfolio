@@ -9,10 +9,16 @@ import {
   HORIZON_SESSIONS,
   buildJournal,
   deriveScoredForecast,
+  persistJournal,
   priceFeedFor,
   resolveAtDate,
   type ForecastContext,
 } from "./journal.ts";
+import { createApp } from "../app.ts";
+import { openMemoryDb } from "../db/index.ts";
+import { createFakeGateway } from "../market/index.ts";
+import { createFakeFundamentals } from "../fundamentals/index.ts";
+import { nodeId } from "../domain/index.ts";
 
 const baseCtx: ForecastContext = {
   journalEntryId: "je-1",
@@ -157,5 +163,51 @@ describe("buildJournal", () => {
     expect(entries[0]!.reportId).toBe("report-1");
     expect(entries[0]!.runId).toBe("run-1");
     expect(entries[0]!.recommendation.thesis).toBe("test thesis");
+  });
+});
+
+describe("persistJournal — graph wiring", () => {
+  function recWithSector(sector: string | null) {
+    return Recommendation.parse({
+      ticker: "AAPL", held: false, action: "BUY", conviction: 0.6, strategyFamily: "momentum",
+      thesis: "t", signals: [], technicals: {}, fundamentals: sector ? { symbol: "AAPL", sector } : null,
+      prediction: { direction: "bullish", horizon: "1mo", invalidation: "x", rationale: "y", target: 120, stop: 95 },
+    });
+  }
+
+  test("materializes ticker —belongs_to→ sector from fundamentals (activates the sector cohort)", () => {
+    const app = createApp({
+      db: openMemoryDb(),
+      gateway: createFakeGateway({ now: () => "2026-06-01" }),
+      fundamentals: createFakeFundamentals(),
+      now: () => "2026-06-01",
+    });
+    const rpt: DailyReport = {
+      id: "r1", date: "2026-06-01", generatedAt: "2026-06-01T14:30:00.000Z", source: "llm",
+      marketContext: null, outlook: null, recommendations: [recWithSector("Information Technology")],
+    };
+    app.repos.reports.insert(rpt);
+    persistJournal(app, rpt, null, 500, new Map([["AAPL", 100]]));
+
+    const sectors = app.repos.graph
+      .neighbors(nodeId("ticker", "AAPL"), { rel: "belongs_to", direction: "out" })
+      .map((n) => n.node?.label);
+    expect(sectors).toContain("Information Technology");
+  });
+
+  test("a recommendation without a sector creates no belongs_to edge", () => {
+    const app = createApp({
+      db: openMemoryDb(),
+      gateway: createFakeGateway({ now: () => "2026-06-01" }),
+      fundamentals: createFakeFundamentals(),
+      now: () => "2026-06-01",
+    });
+    const rpt: DailyReport = {
+      id: "r1", date: "2026-06-01", generatedAt: "2026-06-01T14:30:00.000Z", source: "llm",
+      marketContext: null, outlook: null, recommendations: [recWithSector(null)],
+    };
+    app.repos.reports.insert(rpt);
+    persistJournal(app, rpt, null, 500, new Map([["AAPL", 100]]));
+    expect(app.repos.graph.neighbors(nodeId("ticker", "AAPL"), { rel: "belongs_to", direction: "out" })).toHaveLength(0);
   });
 });

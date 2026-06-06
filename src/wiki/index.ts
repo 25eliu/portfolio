@@ -28,11 +28,13 @@ function linkLessonGraph(app: App, lesson: WikiLesson, now: string): void {
     const f = `forecast:${fid}`;
     app.repos.graph.upsertEdge({ id: edgeId(lessonNode, "derived_from", f), srcId: lessonNode, dstId: f, rel: "derived_from", weight: 1, data: {}, createdAt: now });
   }
-  // Connect the lesson to the concept it informs (strategy family / side), creating that node.
-  if (lesson.cohortKind === "strategy_family" || lesson.cohortKind === "side") {
-    const conceptType = lesson.cohortKind === "strategy_family" ? "strategy_family" : "concept";
-    const concept = nodeId(conceptType, lesson.cohortKey.split(":").slice(1).join(":"));
-    app.repos.graph.upsertNode({ id: concept, type: conceptType, label: lesson.cohortKey.split(":").slice(1).join(":"), summary: "", data: {}, status: "active", createdAt: now, updatedAt: now });
+  // Connect the lesson to the concept it informs (strategy family / side / sector), creating that node so
+  // a sector's calibration lesson is reachable from the same sector node its tickers belong to.
+  if (lesson.cohortKind === "strategy_family" || lesson.cohortKind === "side" || lesson.cohortKind === "sector") {
+    const conceptType = lesson.cohortKind === "strategy_family" ? "strategy_family" : lesson.cohortKind === "sector" ? "sector" : "concept";
+    const label = lesson.cohortKey.split(":").slice(1).join(":");
+    const concept = nodeId(conceptType, label);
+    app.repos.graph.upsertNode({ id: concept, type: conceptType, label, summary: "", data: {}, status: "active", createdAt: now, updatedAt: now });
     app.repos.graph.upsertEdge({ id: edgeId(lessonNode, "supports", concept), srcId: lessonNode, dstId: concept, rel: "supports", weight: 1, data: {}, createdAt: now });
   }
 }
@@ -46,7 +48,20 @@ function linkLessonGraph(app: App, lesson: WikiLesson, now: string): void {
 export async function compileWiki(app: App): Promise<{ metrics: number; lessons: number; briefing: string }> {
   const now = new Date().toISOString();
   const date = app.now();
-  const rows = app.repos.wiki.resolvedRows();
+  // Resolve each ticker's sector once (memoized) from the knowledge graph so resolved forecasts carry a
+  // sector for the sector cohort — the substrate graph-propagated calibration reads.
+  const sectorCache = new Map<string, string | null>();
+  const sectorOf = (ticker: string): string | null => {
+    const hit = sectorCache.get(ticker);
+    if (hit !== undefined) return hit;
+    const sector = app.repos.graph
+      .neighbors(nodeId("ticker", ticker), { rel: "belongs_to", direction: "out" })
+      .map((n) => n.node)
+      .find((n) => n?.type === "sector")?.label ?? null;
+    sectorCache.set(ticker, sector);
+    return sector;
+  };
+  const rows = app.repos.wiki.resolvedRows(sectorOf);
 
   const metrics = computeMetrics(rows, { nowMs: new Date(`${date}T00:00:00.000Z`).getTime(), resolutionPolicyVersion: RESOLUTION_POLICY_VERSION, computedAt: now });
   // True coverage (resolved / scored) belongs to the overall cohort.

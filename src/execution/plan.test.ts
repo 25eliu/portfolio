@@ -14,12 +14,14 @@ function rec(over: {
   entry?: number | null;
   horizon?: "1d" | "1w" | "1mo" | "3mo" | "6mo" | "1y";
   strategy?: string;
+  calibrated?: number | null;
 }): Recommendation {
   return Recommendation.parse({
     ticker: over.ticker ?? "AAPL",
     held: false,
     action: over.action ?? (over.direction === "bullish" ? "BUY" : over.direction === "bearish" ? "SELL" : "HOLD"),
     conviction: over.conviction ?? 0.7,
+    calibratedConviction: over.calibrated,
     strategyFamily: over.strategy ?? "momentum",
     thesis: "t",
     signals: [],
@@ -44,6 +46,7 @@ function plan(over: Partial<PlanInput> & { recommendations: Recommendation[] }):
     account: over.account ?? { cash: 100_000, positionsValue: 0, positions: [] },
     baselineCapital: over.baselineCapital ?? 100_000,
     preset: over.preset ?? BALANCED,
+    regimeMultiplier: over.regimeMultiplier,
     priceOf: over.priceOf ?? ((t) => priceMap.get(t) ?? 100),
     submittedToday: over.submittedToday ?? (() => false),
     journalLink: over.journalLink ?? (() => ({ journalEntryId: null, forecastId: null })),
@@ -230,6 +233,34 @@ describe("planTrades — exits", () => {
     expect(d!.side).toBe("sell");
     expect(d!.qty).toBe(20); // trim ⅓ of $6,000 = $2,000 / $100
     expect(d!.reason).toContain("explicit TRIM");
+  });
+});
+
+describe("planTrades — calibrated conviction + regime sizing (Decision Engine v2)", () => {
+  test("sizes off calibratedConviction when present, not the stated value", () => {
+    // Stated 0.9 alone would size frac 0.8214 → 82 shares; calibration dampened it to 0.62 → frac 0.3214.
+    const [d] = plan({ recommendations: [rec({ direction: "bullish", conviction: 0.9, calibrated: 0.62 })] });
+    expect(d!.action).toBe("BUY");
+    expect(d!.qty).toBe(32); // matches the lo-conviction sizing, proving the dampened value drives sizing
+    expect(d!.reason).toContain("cal from 0.90");
+  });
+
+  test("a name calibrated below the confidence floor drops out of entries", () => {
+    // Stated 0.7 passes the 0.58 floor, but calibration pulled it to 0.5 → gated out.
+    expect(plan({ recommendations: [rec({ direction: "bullish", conviction: 0.7, calibrated: 0.5 })] })).toHaveLength(0);
+  });
+
+  test("regimeMultiplier shrinks every new entry's notional", () => {
+    // A max-strength idea normally fills the full 10k cap; a 0.8 risk-off brake shrinks it to 8k.
+    const [d] = plan({ recommendations: [strong({ direction: "bullish" })], regimeMultiplier: 0.8 });
+    expect(d!.qty).toBe(80);
+    expect(d!.notional).toBe(8_000);
+    expect(d!.reason).toContain("80% of cap");
+  });
+
+  test("regimeMultiplier defaults to 1 (no brake) when omitted", () => {
+    const [d] = plan({ recommendations: [strong({ direction: "bullish" })] });
+    expect(d!.qty).toBe(100);
   });
 });
 

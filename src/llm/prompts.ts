@@ -1,4 +1,4 @@
-import type { Fundamentals, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
+import type { Deliberation, Fundamentals, MarketContext, RetrievedExcerpt, ScreenType, Technicals } from "../domain/index.ts";
 import { renderEvidenceBlock } from "../knowledge/retrieve.ts";
 
 /** The AI's most recent prior call on a ticker, fed back for day-to-day continuity. */
@@ -71,11 +71,51 @@ export function buildTickerResearchPrompt(t: TickerInput, ctx: MarketContext): s
   ].join("\n");
 }
 
+/**
+ * Decision Engine v2 — the deliberation stage (between research and structure). Forces a structured
+ * bull/bear argument, disconfirmer-seeking, and a base-rate-aware provisional conviction BEFORE the
+ * model commits. Grounded in the research, the wiki's track record, and the prior thesis (reversal
+ * check). Persisted on the recommendation so the reasoning is auditable, not ephemeral.
+ */
+export function buildDeliberationPrompt(t: TickerInput, ctx: MarketContext, research: string): string {
+  return [
+    `You are a buy-side analyst stress-testing a potential decision on ${t.symbol} BEFORE committing.`,
+    `Argue BOTH sides honestly from the evidence below — do NOT pick a verdict yet. The goal is to surface`,
+    `the strongest bear case and the specific facts that would prove the call wrong, so the final verdict is earned.`,
+    ``,
+    `Market regime (${ctx.date}): SPY trend ${ctx.spyTrend ?? "unknown"}; ${ctx.macroSummary}`,
+    ...(t.wikiBriefing
+      ? [``, `This system's own calibrated track record (trusted, computed) — let it temper your provisional conviction:`, t.wikiBriefing]
+      : []),
+    ...(t.priorThesis
+      ? [
+          ``,
+          `Your prior call on ${t.symbol} (${t.priorThesis.date}): ${t.priorThesis.action}, conviction ${t.priorThesis.conviction.toFixed(2)} — "${t.priorThesis.thesis}".`,
+          `If your stance now flips from that, you MUST justify the reversal explicitly in reversal_check — otherwise return reversal_check: null.`,
+        ]
+      : []),
+    ``,
+    `Research findings:`,
+    research || "(no external research available)",
+    ``,
+    `Call submit_deliberation with:`,
+    `  - bull_case: the strongest evidence-grounded case FOR acting.`,
+    `  - bear_case: the strongest, most credible case AGAINST — steelman the counter-thesis.`,
+    `  - key_uncertainties: the unknowns that most affect the outcome.`,
+    `  - disconfirmers: SPECIFIC, testable facts or events that would prove this call wrong (not vague "market risk").`,
+    `  - base_rate_note: the realistic base rate of success for this kind of setup, if you can ground one.`,
+    `  - reversal_check: see above (null if no prior call or no reversal).`,
+    `  - provisional_stance: bullish | bearish | neutral.`,
+    `  - provisional_conviction: a CALIBRATED probability 0..1 — reserve high values for genuinely strong, well-evidenced cases; a balanced/uncertain case is ~0.5.`,
+  ].join("\n");
+}
+
 export function buildTickerStructurePrompt(
   t: TickerInput,
   ctx: MarketContext,
   research: string,
   sources: { title: string; url: string }[] = [],
+  deliberation?: Deliberation | null,
 ): string {
   const macroLine = ctx.macro
     ? [
@@ -123,6 +163,17 @@ export function buildTickerStructurePrompt(
     ``,
     `Research findings (sources already captured separately):`,
     research || "(no external research available)",
+    ...(deliberation
+      ? [
+          ``,
+          `Your prior deliberation on ${t.symbol} — weigh it; do NOT ignore the bear case:`,
+          `  Bull: ${deliberation.bullCase}`,
+          `  Bear: ${deliberation.bearCase}`,
+          deliberation.disconfirmers.length ? `  Would be wrong if: ${deliberation.disconfirmers.join("; ")}` : "",
+          `  Provisional: ${deliberation.provisionalStance} @ ${deliberation.provisionalConviction.toFixed(2)}.`,
+          `Commit to the verdict the balance of evidence supports. If you act against the bear case, your thesis must say why it loses.`,
+        ].filter(Boolean)
+      : []),
     ``,
     `Technicals: ${JSON.stringify(t.technicals)}`,
     `Fundamentals: ${JSON.stringify(t.fundamentals)}`,

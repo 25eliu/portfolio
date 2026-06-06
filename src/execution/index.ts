@@ -1,6 +1,7 @@
 import type { App } from "../app.ts";
 import { RISK_PRESETS, type DailyReport, type RiskPreset } from "../domain/index.ts";
 import type { PricedPortfolio } from "../pipeline/types.ts";
+import { regimeFromContext, regimeSizingMultiplier } from "../analysis/regime.ts";
 import { planTrades, type JournalLink } from "./plan.ts";
 import { applyFills } from "./ledger.ts";
 
@@ -39,6 +40,11 @@ export async function executeAiTrades(
   const presetName: RiskPreset = app.repos.risk.get(app.ai.id)?.preset ?? "balanced";
   const preset = RISK_PRESETS[presetName];
 
+  // Regime-aware sizing: a risk-off tape (from SPY trend + VIX + the synthesized outlook) shrinks every
+  // new entry. Exits are never gated by it.
+  const regime = regimeFromContext(report.marketContext, report.outlook?.regime?.stance ?? null);
+  const regimeMultiplier = regimeSizingMultiplier(regime);
+
   const priceOf = (ticker: string): number | null => {
     const ref = ctx.referencePrices.get(ticker);
     if (ref != null) return ref;
@@ -55,6 +61,7 @@ export async function executeAiTrades(
     },
     baselineCapital,
     preset,
+    regimeMultiplier,
     priceOf,
     submittedToday: (t) => app.repos.tradeDecisions.submittedOn(t, date),
     journalLink: (t) => ctx.journalLink.get(t) ?? { journalEntryId: null, forecastId: null },

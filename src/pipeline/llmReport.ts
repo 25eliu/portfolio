@@ -1,7 +1,9 @@
 import type { App } from "../app.ts";
-import { newId, type DailyReport, type Recommendation, type ScanCandidate } from "../domain/index.ts";
+import { newId, nodeId, type DailyReport, type Recommendation, type ScanCandidate } from "../domain/index.ts";
 import type { StreamSink } from "../llm/analyze.ts";
 import { computeTechnicals } from "../analysis/technicals.ts";
+import { calibrateConviction } from "../analysis/calibration.ts";
+import { regimeFromContext } from "../analysis/regime.ts";
 import { buildMarketContext } from "../analysis/marketContext.ts";
 import { runOpportunityScan } from "../analysis/opportunityScan.ts";
 import { buildUniverse, type UniverseEntry } from "../analysis/universe.ts";
@@ -97,6 +99,20 @@ export async function generateLlmReport(
   const evidenceByTicker = new Map<string, RetrievedExcerpt[]>();
   // Trusted, computed context: the latest performance-wiki briefing (compiled earlier this run).
   const wikiBriefing = app.repos.wiki.latestBriefing()?.body ?? "";
+  // Graph-propagated calibration inputs (Decision Engine v2): the wiki's cohort metrics (compiled this
+  // run) and a memoized ticker→sector resolver, blended per ticker after each analysis.
+  const wikiMetrics = app.repos.wiki.listMetrics({ window: "all_time" });
+  const sectorCache = new Map<string, string | null>();
+  const sectorOf = (ticker: string): string | null => {
+    const hit = sectorCache.get(ticker);
+    if (hit !== undefined) return hit;
+    const sector = app.repos.graph
+      .neighbors(nodeId("ticker", ticker), { rel: "belongs_to", direction: "out" })
+      .map((n) => n.node)
+      .find((n) => n?.type === "sector")?.label ?? null;
+    sectorCache.set(ticker, sector);
+    return sector;
+  };
   const date = app.now();
   const riskPreset = app.repos.risk.get(app.user.id)?.preset ?? "balanced";
   const availableCash = app.repos.portfolios.get(app.user.id)?.cash ?? 0;
@@ -110,6 +126,9 @@ export async function generateLlmReport(
   emit({ type: "phase", phase: "context", label: "Reading the market" });
   const ctx = await buildMarketContext(app.gateway, analyzer, date, app.macro, contextSink);
   emit({ type: "context:done", summary: ctx.macroSummary });
+  // Regime for calibration's risk-off brake — the outlook isn't synthesized until after analysis, so this
+  // reads SPY trend + VIX only.
+  const analysisRegime = regimeFromContext(ctx);
 
   emit({ type: "phase", phase: "scan", label: "Scanning for opportunities" });
   const held = app.repos.holdings.listByPortfolio(app.user.id).map((h) => h.symbol);
@@ -195,7 +214,15 @@ export async function generateLlmReport(
         tickerSink,
       );
       emit({ type: "ticker:done", symbol, action: rec.action, conviction: rec.conviction });
-      return rec;
+      // Graph-propagated calibration: dampen the planner-facing conviction from the wiki's track record on
+      // this ticker's sector + strategy + overall cohorts. Stated `conviction` is preserved untouched.
+      const cal = calibrateConviction({ stated: rec.conviction, strategyFamily: rec.strategyFamily, sector: sectorOf(symbol), metrics: wikiMetrics, regime: analysisRegime });
+      const calibrated: Recommendation = {
+        ...rec,
+        calibratedConviction: cal.calibrated,
+        calibration: { factor: cal.factor, regimeFactor: cal.regimeFactor, reason: cal.reason, adjustments: cal.adjustments },
+      };
+      return calibrated;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`analyze ${symbol} failed:`, message);
