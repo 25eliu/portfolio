@@ -1,0 +1,11 @@
+{
+  "config_version": "2",
+  "repo_id": "repo_019e9f3b-eaae-7055-9adc-6bfc2fc5f068",
+  "repo_remote_hashes": [
+    "sha256:92bf462d32c3de7efa89f60aff66dd00e0e8cdf181d658347c653a0533dc81f2"
+  ],
+  "team_id": "team_vfvtiziyzd",
+  "team_name": "Eric's Team",
+  "endpoint": "https://sageox.ai",
+  "update_frequency_hours": 24
+}
