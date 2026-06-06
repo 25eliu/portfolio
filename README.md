@@ -1,180 +1,159 @@
-# Portfolio Intelligence Platform
+# Portfolio Intelligence — a self‑improving AI trader
 
-A locally run research dashboard that mirrors your stock holdings and runs a daily analysis
-pipeline, benchmarked A/B against a self-contained **AI paper portfolio** and SPY. The AI manages its
-own $100k paper book; your manually entered holdings stay **advisory-only and can never place
-orders**. **Paper trading only — model outputs are not investment advice.**
+> An AI that researches stocks, trades its own paper book, **grades every call against real outcomes**,
+> and compiles what it learns into an evolving **wiki + knowledge graph** — so its decisions get sharper
+> over time. Runs locally, works with zero API keys, and is auditable end to end.
+>
+> **Paper‑trading only. For research and education. Not investment advice.**
 
-### What makes it different
+Built with **Bun · TypeScript · SQLite · React · Tailwind**. Your real holdings are mirrored
+**advisory‑only and can never place orders**; a separate self‑contained **$100k AI paper book** trades
+on its own and is benchmarked A/B against you and SPY.
 
-Most "AI stock" tools emit a fresh opinion every day and forget it. This one **remembers, grades, and
-calibrates itself**:
+---
 
-- It **journals every call**, resolves it against real price history, and compiles a deterministic
-  track record — the model never grades its own homework.
-- Before each trade it runs a structured **bull/bear deliberation** and names what would prove the
-  thesis wrong. Then a **graph-propagated calibration** dampens its conviction toward what that *kind*
-  of call has actually achieved — borrowing from the sector and strategy track record when a ticker
-  has little history of its own.
+## The idea
+
+Most "AI stock picker" tools generate a fresh opinion every day and forget it. This is the opposite — a
+**closed learning loop** where the system accumulates and *compiles* its own knowledge:
+
+- It **journals every recommendation** immutably, turns actionable calls into **scored forecasts**, and
+  later **resolves them against real historical prices** (no lookahead).
+- It compiles those outcomes into a deterministic **performance wiki** — hit‑rate, expectancy, Brier
+  calibration, stated‑vs‑realized conviction — and distills **evidence‑gated lessons** that get injected
+  back into the next run as trusted context.
+- Before each trade it runs a structured **bull/bear deliberation**, then **calibrates its conviction**
+  against what that *kind* of call has actually achieved — borrowing from the sector/strategy track
+  record (a knowledge‑graph blend) when a ticker has little history of its own.
 - All of it lives on a **knowledge graph you can walk** — tickers, sectors, theses, lessons, and
-  sources connected by typed edges, visualized right in the dashboard.
+  sources connected by typed edges, with an LLM **graph‑librarian** that maintains the connections.
 
-The result is an AI trader whose confidence is *earned* from its own measured record, and whose every
-decision is auditable end to end.
+The result is a trader whose confidence is *earned from its own measured record*, not asserted.
 
-Two tracked documents define the system:
+> **Inspiration.** The knowledge layer is inspired by Andrej Karpathy's idea of an LLM that maintains its
+> own evolving **wiki** of distilled knowledge — rather than re‑deriving everything each run, the system
+> *compiles* what it has learned into a compact, trusted briefing and a knowledge graph it reads back.
+> The guiding principle throughout is **"compile, don't re‑derive."**
 
-- [`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md) — the canonical architecture,
-  data policies, and ordered build roadmap.
-- [`docs/integrations-roadmap.md`](docs/integrations-roadmap.md) — the free-first plan for new external
-  data sources that would sharpen the prediction LLM.
+## The self‑improvement loop
 
-## Current status
+```mermaid
+flowchart LR
+  R["🔎 Research<br/>grounded + your KB"] --> D["⚖️ Deliberate<br/>bull vs bear + disconfirmers"]
+  D --> C["🎯 Calibrate<br/>vs its own track record"]
+  C --> T["💸 Trade<br/>guarded $100k paper book"]
+  T --> X["📉 Resolve<br/>vs real price history"]
+  X --> L["📚 Learn<br/>wiki + lessons + graph"]
+  L -. compiled briefing feeds the next run .-> R
+```
 
-Phases **0–5** are implemented. The platform is well past the original market-analysis app — it now
-persists, resolves, and learns from its own forecasts, trades a guarded paper book, and answers
-grounded questions about its own record:
-
-- **Daily pipeline** — price portfolios → resolve due forecasts → compile wiki briefing → gather
-  market context → build the universe → retrieve research evidence → analyze → persist journal +
-  forecasts → propose & execute guarded paper trades → persist snapshots. One failing ticker or
-  source never discards the report.
-- **Typed journal (3A)** — every recommendation is persisted immutably with its full context and
-  citations; complete actionable `BUY/ADD/TRIM/SELL` plans also become scored forecasts. The
-  dashboard journal is day-grouped (click a day → that day's calls → thesis, forecast contract,
-  resolved outcome, linked trades).
-- **Guarded AI paper trading (3B)** — the AI autonomously manages a self-contained DB-backed $100k
-  ledger. A **deterministic planner** turns the holder-neutral thesis (direction/conviction/
-  target/stop) into orders — the LLM never sizes or gates. Every proposed/skipped/submitted/
-  filled/failed decision is logged with a reason. Auto-execution defaults **ON** (paper-gated,
-  toggleable).
-- **Research knowledge base (3C)** — upload PDFs/Markdown/text, snapshot URLs, and write private
-  notes; approved, scoped excerpts are retrieved (graph-aware) into the research stage as delimited
-  **untrusted** evidence, with SSRF guards, sanitization, and quarantine.
-- **Forecast resolution (3D)** — due forecasts are graded deterministically against historical
-  daily high/low bars, with lookahead protection, ambiguous-touch handling, and versioned outcomes.
-- **Performance wiki + calibration (4)** — deterministic cohort metrics (hit-rate, expectancy,
-  stated-vs-realized conviction, Brier, vs-SPY) and evidence-gated prose lessons, compiled into a
-  compact briefing injected into future analysis as trusted computed context.
-- **Grounded NL query (5)** — "ask your portfolio anything": a Gemini tool-use loop over read-only
-  data tools answers only from your own journal/forecasts/outcomes/wiki/trades/graph/research, and
-  streams the answer plus the tools it used.
-- **Mature risk controls (5)** — per-preset reward:risk floors, allowed horizons, and
-  strategy-family eligibility govern the AI planner. The advisory book and the AI book carry
-  **independent** risk presets.
-- **Decision Engine v2** — per-ticker analysis is a three-stage loop (research → **deliberate** →
-  structure): a forced bull/bear deliberation with disconfirmers and a base-rate check precedes the
-  verdict. Then deterministic **graph-propagated calibration** (empirical-Bayes shrinkage over the
-  ticker's sector / strategy / overall cohorts) sets a separate `calibratedConviction` the planner
-  sizes on — **dampen-only**, so the wiki's stated-vs-realized metric is never corrupted. Sizing is
-  **regime-aware** (a risk-off tape shrinks new entries). The bull/bear cases and the per-cohort
-  calibration chain are persisted and surfaced in the UI.
-- **Knowledge-graph substrate (+ interactive viz)** — `kg_nodes` / `kg_edges` connect tickers, sectors,
-  themes, sources, lessons, theses, and strategies; powers graph-aware retrieval, lesson provenance,
-  and the conviction calibration above. The dashboard renders it as a navigable **ego graph**: start
-  from any entity and walk the connections (focal node + neighbors, click to re-center), with deep
-  links from recommendations and lessons.
-- **LLM graph-librarian** — each run, an LLM pass proposes associative edges (`related_to` /
-  `contradicts`) between existing concept nodes that membership wiring can't infer. Every proposal is
-  **gated** (real endpoints, type-checked, capped) and tagged `source: librarian` so it's auditable and
-  reversible. The LLM enriches the *web of concepts*; deterministic code keeps owning the scoreboard.
-
-Next: **Phase 6** (validation & polish) and the **data integrations** in
-[`docs/integrations-roadmap.md`](docs/integrations-roadmap.md).
+Each loop the AI knows a little more about **what works** — and the dashboard lets you see exactly why it
+decided what it did.
 
 ## Quickstart
 
-The app runs fully offline against deterministic fake adapters — **no API keys required**:
+**Prerequisites:** [Bun](https://bun.sh) (the only runtime — no separate Node/npm needed).
 
 ```bash
+git clone <this-repo> && cd portfolio
 bun install
-cp .env.example .env          # defaults to MARKET_ADAPTER=fake
+cp .env.example .env      # defaults to MARKET_ADAPTER=fake — no keys required
 bun run db:migrate
-bun run dev                   # backend :8787 + Vite :5173
+bun run dev               # API on :8787 + dashboard on :5173
 ```
 
-Open <http://localhost:5173>, use **Manage** to add holdings or watchlist tickers, then select
-**Run analysis**. Every external key is optional; absence degrades to a deterministic fake.
+Open **<http://localhost:5173>**, hit **Manage** to add a few holdings or watchlist tickers, then click
+**Run analysis**. With no API keys the whole pipeline runs against **deterministic fake adapters**, so you
+can explore every feature offline. Add real keys (below) whenever you want live data and real LLM analysis.
 
-## External services
+## What's inside
 
-All keys are optional and live in `.env` only. Missing keys degrade gracefully to fakes.
-
-| Service | Env key(s) | Purpose | Verify |
-|---|---|---|---|
-| Alpaca (paper) | `MARKET_ADAPTER=alpaca`, `ALPACA_KEY_ID`, `ALPACA_SECRET`, `ALPACA_PAPER=true` | Market data + the AI book's **paper** brokerage | `bun run alpaca:smoke` |
-| Gemini | `GEMINI_API_KEY` (+ `GEMINI_MODEL`, `GEMINI_THINKING_LEVEL`) | LLM analysis + grounded query; falls back to deterministic reports | `bun run gemini:smoke` |
-| FMP | `FMP_API_KEY` | Fundamentals and screener candidates | `bun run fmp:smoke` |
-| FRED | `FRED_API_KEY` | Rates, curve, CPI, unemployment, VIX macro context | `bun run fred:smoke` |
-| Finnhub | `FINNHUB_API_KEY` | Analyst consensus and upcoming earnings | `bun run finnhub:smoke` |
-
-```text
-MARKET_ADAPTER=alpaca
-ALPACA_KEY_ID=your_key_id
-ALPACA_SECRET=your_secret
-ALPACA_PAPER=true
-GEMINI_API_KEY=your_gemini_key
-FMP_API_KEY=your_fmp_key
-FRED_API_KEY=your_fred_key
-FINNHUB_API_KEY=your_finnhub_key
-```
-
-> **Paper-only guard.** The app refuses to start with `MARKET_ADAPTER=alpaca` unless
-> `ALPACA_PAPER=true`. There is no live-money adapter or real-portfolio execution path. The
-> manually entered user portfolio is advisory-only and can never place orders.
+- **Three‑stage analysis (Decision Engine v2)** — `research → deliberate → structure`. A forced bull/bear
+  deliberation with disconfirmers and a base‑rate check precedes every verdict, persisted and shown in the UI.
+- **Graph‑propagated calibration** — empirical‑Bayes shrinkage over the ticker's sector / strategy /
+  overall cohorts dampens conviction toward its realized record. **Dampen‑only**, and it writes a
+  *separate* `calibratedConviction` so the wiki's honesty metric is never corrupted.
+- **Guarded AI paper trading** — a **deterministic planner** turns the holder‑neutral thesis
+  (direction / conviction / target / stop) into sized, **regime‑aware** orders filled against an isolated
+  DB ledger. The LLM never sizes or gates; every decision is logged with a reason.
+- **Typed journal + forecast resolution** — immutable record of every call; deterministic grading against
+  historical high/low bars with lookahead protection and ambiguous‑touch handling.
+- **Performance wiki + calibration** — deterministic cohort metrics and evidence‑gated lessons compiled
+  into the briefing injected into future analysis.
+- **Research knowledge base** — upload PDFs / Markdown / text, snapshot URLs, write notes; scoped excerpts
+  are retrieved (graph‑aware) as **delimited, untrusted** evidence with SSRF guards and sanitization.
+- **Knowledge graph (+ interactive viz)** — `kg_nodes` / `kg_edges` tie everything together; the dashboard
+  renders a navigable **ego graph** (click any node to re‑center), and an **LLM graph‑librarian** proposes
+  gated `related_to` / `contradicts` edges each run.
+- **Grounded "ask your portfolio"** — a Gemini tool‑use loop answers only from *your own* journal /
+  forecasts / wiki / trades / graph, streaming the answer plus the tools and sources it used.
+- **Risk analytics** — max drawdown, Sharpe, volatility, and excess return + beta vs SPY for both books.
 
 ## How the daily run works
 
-`dailyRun` is the single composable operation behind both the manual trigger and the local
-scheduler:
+`dailyRun` is the single composable operation behind both the manual trigger and the local scheduler:
 
 ```text
-1. Sync and price portfolios (user + AI paper)
-2. Resolve due forecasts against historical high/low bars
-3. Compile the active wiki briefing
-4. Gather market context (SPY trend + FRED macro + searched narrative)
-5. Build held + watchlist + scan + AI-thesis universe
-6. Retrieve scoped research-library evidence (graph-aware)
-7. Analyze tickers (three-stage Gemini: research → deliberate → structure)
-8. Calibrate conviction from the wiki track record (graph-propagated, dampen-only)
-9. Persist report + journal + scored forecasts + theses; **graph-librarian** enriches concept edges
+ 1. Sync and price portfolios (user + AI paper)
+ 2. Resolve due forecasts against historical high/low bars
+ 3. Compile the active wiki briefing (calibration + open book)
+ 4. Gather market context (SPY trend + FRED macro + searched narrative)
+ 5. Build held + watchlist + scan + AI-thesis universe
+ 6. Retrieve scoped research-library evidence (graph-aware)
+ 7. Analyze tickers (three-stage: research → deliberate → structure)
+ 8. Calibrate conviction from the wiki track record (graph-propagated, dampen-only)
+ 9. Persist report + journal + scored forecasts + theses; graph-librarian enriches concept edges
 10. Propose and execute guarded AI paper trades (deterministic, regime-aware planner)
-11. Persist trade decisions + snapshots → stream completion to the UI
+11. Re-price the AI book and persist snapshots → stream completion to the UI
 ```
+
+One failing ticker or source never discards the report — the run degrades gracefully.
 
 ## Dashboard
 
-1. **Header** — risk selector, schedule, manual run, last-run status.
-2. **Overview, equity curve, portfolios** — user, AI paper, and SPY (contribution-neutral returns).
-3. **Daily recommendations** — position-aware cards showing the bull/bear deliberation and the
-   stated → calibrated conviction chain; live analysis stream during a run.
-4. **Market view** — the AI's regime call + sector/theme leans for the day.
-5. **AI trading** — the AI's $100k paper book: auto-trading status and the trade log.
-6. **Journal** — day-grouped calls → thesis, deliberation, calibration, forecast contract, outcome,
-   linked trades.
-7. **Knowledge graph** — the navigable ego graph; walk from any node to its connections.
-8. **Knowledge library + AI knowledge library** — your uploads/URLs/notes, and the AI's self-curated
-   facts; scope, version, trust, quarantine.
-9. **Performance wiki** — active briefing, evidence-gated lessons, calibration metrics (with
-   plain-English tooltips for R, Brier, expectancy, MFE/MAE).
-10. **Ask your portfolio** — grounded NL query with the answer drawn only from your own data.
+| Section | What it shows |
+|---|---|
+| **Overview · equity curve · risk** | You vs AI paper vs SPY, plus drawdown / Sharpe / vol / alpha |
+| **Daily recommendations** | Position-aware cards with the bull/bear deliberation and the stated → calibrated conviction chain; live stream during a run |
+| **Market view** | The AI's regime call + sector / theme leans for the day |
+| **AI trading** | The $100k paper book: auto-trade status and trade log |
+| **Journal** | Day-grouped calls → thesis, deliberation, calibration, forecast contract, outcome, linked trades |
+| **Knowledge graph** | The navigable ego graph — walk from any node to its connections |
+| **Knowledge libraries** | Your uploads / URLs / notes, and the AI's self-curated facts |
+| **Performance wiki** | Active briefing, evidence-gated lessons, calibration metrics (with plain-English tooltips) |
+| **Ask your portfolio** | Grounded NL query, answered only from your own data |
 
-**Transparency.** The live analysis stream and "Ask your portfolio" both surface the LLM's **tool
-calls and cited sources**; recommendation cards expose the **reasoning chain** (deliberation +
-per-cohort calibration) — every decision is auditable.
+Every recommendation exposes its **reasoning chain** (deliberation + per-cohort calibration), and the
+live stream + query both surface the LLM's **tool calls and cited sources** — nothing is a black box.
 
-## Project layout
+## Configuration (optional keys)
+
+All keys are optional and live in `.env` only. Missing keys degrade gracefully to deterministic fakes.
+
+| Service | Env key(s) | Purpose | Verify |
+|---|---|---|---|
+| **Alpaca** (paper) | `MARKET_ADAPTER=alpaca`, `ALPACA_KEY_ID`, `ALPACA_SECRET`, `ALPACA_PAPER=true` | Market data + the AI book's **paper** brokerage | `bun run alpaca:smoke` |
+| **Gemini** | `GEMINI_API_KEY` (+ `GEMINI_MODEL`, default `gemini-3.5-flash`) | LLM analysis + grounded query; falls back to deterministic reports | `bun run gemini:smoke` |
+| **FMP** | `FMP_API_KEY` | Fundamentals and screener candidates | `bun run fmp:smoke` |
+| **FRED** | `FRED_API_KEY` | Rates, curve, CPI, unemployment, VIX macro | `bun run fred:smoke` |
+| **Finnhub** | `FINNHUB_API_KEY` | Analyst consensus and upcoming earnings | `bun run finnhub:smoke` |
+
+> **Paper‑only guard.** The app **refuses to start** with `MARKET_ADAPTER=alpaca` unless
+> `ALPACA_PAPER=true`. There is no live‑money adapter and no real‑portfolio execution path; the manually
+> entered user portfolio is advisory‑only and can never place orders.
+
+## Architecture
 
 ```text
 src/
-├── analysis/      technicals, market context, universe, scan, regime + conviction calibration
+├── analysis/      technicals, market context, universe, scan, regime + conviction calibration, performance
 ├── config/        env loading and paper-only validation
 ├── db/            SQLite connection, migrations, repositories
 ├── domain/        Zod schemas and shared API types
 ├── execution/     deterministic trade planner + self-contained AI ledger
 ├── fundamentals/  fake, FMP, and Finnhub-backed enrichment
-├── knowledge/     research-library ingestion, sanitization, graph-aware retrieval
-├── llm/           Gemini adapter, prompts, normalization, schemas, streaming
+├── knowledge/     research-library ingestion, retrieval, curation, and the LLM graph-librarian
+├── llm/           Gemini adapter, prompts, schemas, streaming
 ├── macro/         fake and FRED-backed macro snapshots
 ├── market/        fake and Alpaca MarketGateway adapters
 ├── pipeline/      dailyRun orchestration, journaling, live events
@@ -186,46 +165,41 @@ src/
 web/               React + Vite + Tailwind + Recharts + TanStack Query
 ```
 
-The frontend imports shared backend types through the `@shared` alias. Every external integration is
-a typed port with a deterministic fake and a real adapter, injected through a single `App` object
-(`src/app.ts`).
+The frontend shares the backend's contract **types** through the `@shared` alias (single source of truth).
+Every external integration is a typed port with a **deterministic fake** and a real adapter, injected
+through a single `App` object (`src/app.ts`) — which is why the whole thing runs offline.
+
+The canonical design lives in [`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md);
+the free‑first data‑source plan is in [`docs/integrations-roadmap.md`](docs/integrations-roadmap.md).
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Run backend and Vite together |
-| `bun run server` | Run backend API only on `:8787` |
+| `bun run dev` | Run backend + Vite together |
+| `bun run server` | Backend API only on `:8787` |
 | `bun run db:migrate` | Create or upgrade the SQLite schema |
-| `bun run alpaca:smoke` | Verify Alpaca paper credentials |
-| `bun run gemini:smoke` | Verify Gemini API key |
-| `bun run fmp:smoke` | Verify FMP API key |
-| `bun run fred:smoke` | Verify FRED API key |
-| `bun run finnhub:smoke` | Verify Finnhub API key |
-| `bun test` | Run unit and integration tests |
-| `bun run test:e2e` | Run Playwright browser tests |
+| `bun test` | Run unit + integration tests |
 | `bun run build:web` | Build the production frontend |
+| `bun run {alpaca,gemini,fmp,fred,finnhub}:smoke` | Verify a provider's credentials |
 
-## Guardrails
+## Principles & guardrails
 
-- **Paper only.** No implicit real-money path; AI execution is hard-gated to confirmed Alpaca paper
-  mode.
-- **The user portfolio can never trade.** It is advisory-only, permanently.
-- **Uploaded content is untrusted evidence.** It is injected only into the research stage inside a
-  delimited block — never into sizing, gating, or execution.
-- **Compile, don't re-derive.** The LLM reads the deterministic linted briefing and delimited
-  evidence, never the raw journal or graph. The wiki never turns model prose into "learned" facts.
+- **Paper only.** No real‑money path; AI execution is hard‑gated to confirmed Alpaca paper mode.
+- **The user portfolio can never trade.** Advisory‑only, permanently.
+- **Compile, don't re‑derive.** The LLM reads the deterministic, linted briefing and delimited evidence —
+  never the raw journal or graph. The wiki never turns model prose into "learned" facts.
 - **Calibration never rewrites the record.** Conviction is dampened into a *separate*
-  `calibratedConviction` the planner sizes on; the model's stated conviction is preserved untouched, so
-  the wiki keeps measuring stated-vs-realized honestly and the feedback loop can't self-eat.
-- **Resolve without lookahead.** Outcomes use only data available after the forecast timestamp;
-  resolution logic is versioned and never silently rewritten.
+  `calibratedConviction`; the model's stated conviction is preserved, so the feedback loop can't self‑eat.
+- **The LLM enriches the web of concepts; deterministic code owns the scoreboard.** The graph‑librarian
+  only adds gated, source‑tagged associative edges — never metrics, calibration, or forecasts.
+- **Uploaded content is untrusted.** It's injected only into the research stage inside a delimited block —
+  never into sizing, gating, or execution.
+- **Resolve without lookahead.** Outcomes use only data available after the forecast timestamp; resolution
+  logic is versioned and never silently rewritten.
 
-## Documentation policy
+## Disclaimer
 
-Keep tracked architecture in [`docs/architecture-and-roadmap.md`](docs/architecture-and-roadmap.md)
-and the integrations plan in [`docs/integrations-roadmap.md`](docs/integrations-roadmap.md). Every
-big change updates the README and the relevant doc in the same change so features never drift out of
-the docs. Keep private working notes, conversation exports, and temporary plans under `docs/local/`,
-`docs/conversations/`, or `docs/plans/` — those directories are intentionally gitignored. Secrets
-live in `.env` only.
+This project is for **research and education**. It executes **paper trades only** and has no live‑money
+path. Nothing it produces is financial advice, and past simulated performance does not predict future
+results. Use at your own risk.
