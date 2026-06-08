@@ -1,12 +1,23 @@
 {
   "repo_id": "repo_019e9f3b-eaae-7055-9adc-6bfc2fc5f068",
   "type": "git",
+<<<<<<< HEAD
   "init_at": "2026-06-06T23:24:37Z",
+=======
+  "init_at": "2026-06-06T23:19:25Z",
+>>>>>>> b7be7b0c43370221201eced08bd9957fdd7ec4dc
   "init_by_email": "ericliu25ggmm@gmail.com",
   "init_by_name": "Eric Liu",
   "repo_salt": "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6",
   "endpoint": "https://sageox.ai",
   "fingerprint": {
+<<<<<<< HEAD
+=======
+    "first_commit": "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6",
+    "monthly_checkpoints": {
+      "2026-06": "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6"
+    },
+>>>>>>> b7be7b0c43370221201eced08bd9957fdd7ec4dc
     "ancestry_samples": [
       "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6",
       "5b6c045a8d30d8b29527b1621c68432b1a605193",
@@ -17,10 +28,13 @@
       "5997b8c7e2b5249bd2fd253188889e5e778cc5b5",
       "817f42729a956e620745e196f93b172372bf6fe3"
     ],
+<<<<<<< HEAD
     "first_commit": "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6",
     "monthly_checkpoints": {
       "2026-06": "12e1400e8f3cf55f512ba19f7b6eb4a6b11ff4a6"
     },
+=======
+>>>>>>> b7be7b0c43370221201eced08bd9957fdd7ec4dc
     "remote_hashes": [
       "sha256:92bf462d32c3de7efa89f60aff66dd00e0e8cdf181d658347c653a0533dc81f2"
     ]
@@ -28,7 +42,13 @@
   "team_urls": {
     "Eric's Team": "https://git.sageox.ai/sageox-team_vfvtiziyzd/team-context.git"
   },
+<<<<<<< HEAD
   "urls_cached_at": "2026-06-06T23:24:40Z",
   "version": "0.9.0",
   "updated_at": "2026-06-06T23:24:40Z"
+=======
+  "urls_cached_at": "2026-06-06T23:19:28Z",
+  "version": "0.9.0",
+  "updated_at": "2026-06-06T23:19:28Z"
+>>>>>>> b7be7b0c43370221201eced08bd9957fdd7ec4dc
 }

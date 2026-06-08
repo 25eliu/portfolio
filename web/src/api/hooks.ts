@@ -53,6 +53,14 @@ export const useGraphNode = (id: string | null) =>
   useQuery({ queryKey: [...keys.graph, "node", id], queryFn: () => client.graphNode(id!), enabled: id != null });
 export const useGraphNodes = (type?: string) =>
   useQuery({ queryKey: [...keys.graph, "nodes", type ?? null], queryFn: () => client.graphNodes(type) });
+// Cross-type graph search (label/summary/id), ranked by match quality then connectedness. Disabled
+// until there's a query so the panel doesn't fire on an empty box.
+export const useGraphSearch = (q: string) =>
+  useQuery({
+    queryKey: [...keys.graph, "search", q],
+    queryFn: () => client.graphSearch(q),
+    enabled: q.trim().length > 0,
+  });
 
 /** Invalidate everything that a portfolio mutation / run can affect. */
 export function useInvalidateAll() {

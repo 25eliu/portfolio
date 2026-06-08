@@ -99,6 +99,41 @@ export function graphRepo(db: DB) {
       return rows.map(nodeToDomain);
     },
 
+    /**
+     * Cross-type search over the whole graph. Matches `label`/`summary`/`id` (case-insensitive),
+     * ranked by match quality (exact label > prefix > substring) then by **degree** — how many edges
+     * touch the node — so well-connected, central concepts surface first. This is what lets the UI
+     * "search different things and have them show up based on connections", and it sidesteps the
+     * `listNodes` per-type cap. `%`/`_`/`\` in the query are escaped so they search literally.
+     */
+    searchNodes(q: string, limit = 20): KgNode[] {
+      const term = q.trim().toLowerCase();
+      if (!term) return [];
+      const esc = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+      const like = `%${esc}%`;
+      const prefix = `${esc}%`;
+      const rows = db
+        .query<NodeRow, [string, string, string, string, string, string, number]>(
+          `SELECT n.* FROM kg_nodes n
+           WHERE n.status = 'active'
+             AND ( LOWER(n.label) LIKE ? ESCAPE '\\'
+                OR LOWER(n.summary) LIKE ? ESCAPE '\\'
+                OR LOWER(n.id) LIKE ? ESCAPE '\\' )
+           ORDER BY
+             CASE
+               WHEN LOWER(n.label) = ? THEN 0
+               WHEN LOWER(n.label) LIKE ? ESCAPE '\\' THEN 1
+               WHEN LOWER(n.label) LIKE ? ESCAPE '\\' THEN 2
+               ELSE 3
+             END,
+             (SELECT COUNT(*) FROM kg_edges e WHERE e.src_id = n.id OR e.dst_id = n.id) DESC,
+             n.updated_at DESC
+           LIMIT ?`,
+        )
+        .all(like, like, like, term, prefix, like, limit);
+      return rows.map(nodeToDomain);
+    },
+
     /** Edges touching `id`, with the node on the far end resolved (null if it has no canonical node). */
     neighbors(
       id: string,

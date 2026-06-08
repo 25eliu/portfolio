@@ -400,6 +400,21 @@ describe("knowledge library", () => {
     expect(node.label).toBe("AAPL");
     expect(neighbors.length).toBeGreaterThan(0);
   });
+
+  test("graph search finds nodes across types by label/summary/id", async () => {
+    await req("/api/knowledge/sources/note", {
+      method: "POST",
+      body: JSON.stringify(noteBody()),
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await req("/api/graph/search?q=aapl");
+    expect(res.status).toBe(200);
+    const { nodes } = (await res.json()) as { nodes: { id: string }[] };
+    expect(nodes.some((n) => n.id === "ticker:aapl")).toBe(true);
+    // An empty query returns nothing rather than the whole graph.
+    const empty = (await (await req("/api/graph/search?q=")).json()) as { nodes: unknown[] };
+    expect(empty.nodes).toEqual([]);
+  });
 });
 
 describe("execution", () => {

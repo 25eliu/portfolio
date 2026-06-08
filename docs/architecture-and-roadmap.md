@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-05 (Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; knowledge-graph visualization; LLM graph-librarian)._
+> _Last updated: 2026-06-07 (knowledge-graph visualization completed: working node click/re-center, hover tooltips, node-detail rail with grouped connections, and cross-type `/api/graph/search`; Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; LLM graph-librarian)._
 
 ## 1. Product direction
 
@@ -333,6 +333,14 @@ holds the canonical concepts and the relationships between everything, and is wh
 wiki briefing are compiled against. "Compile, don't re-derive" is preserved: the LLM never reads the
 graph or journal raw — it reads the deterministic, linted briefing and the delimited untrusted evidence.
 
+**Read API + navigable visualization (implemented).** The graph is exposed read-only via three
+endpoints — `GET /api/graph/nodes` (list by type), `GET /api/graph/node/:id` (a node + its bidirectional
+neighbors), and `GET /api/graph/search` (cross-type search over label/summary/id, ranked by match quality
+then **degree** so well-connected concepts surface first — a lexical+graph ranking, not embeddings). The
+dashboard renders these as a luminous **ego graph** (`web/src/components/graph/EgoGraphSvg.tsx`,
+`KnowledgeGraph.tsx`): search any concept, click a node to re-center, hover for a tooltip, read a node's
+summary + connections grouped by type in a side rail, and step back through the breadcrumb trail.
+
 **Graph librarian (LLM-maintained associations, implemented).** Each run, after theses/lessons are
 persisted, an LLM **graph-librarian** pass (`src/knowledge/librarian.ts`, pipeline Step 4d) proposes
 associative edges — `related_to` / `contradicts` — *between existing concept nodes* (themes, sectors,
@@ -576,6 +584,7 @@ GET    /api/wiki/in-flight               (current in-flight assessment across op
 GET    /api/wiki/forecasts/:id/marks     (full daily-mark history for one forecast)
 GET    /api/graph/nodes
 GET    /api/graph/node/:id
+GET    /api/graph/search                  (cross-type search; ranked by match quality then degree)
 ```
 
 ## 11. Dashboard direction
@@ -597,6 +606,9 @@ Current single-dashboard structure (as built):
     searchable, tag-chip-filtered; archive-hidden. Distinct from the user's upload library.
 7. **Performance wiki** — active briefing, evidence-gated lessons, and calibration (hit-rate vs stated
    conviction, expectancy, Brier).
+7a. **Knowledge graph** — a navigable ego view of the `kg_nodes`/`kg_edges` substrate (`KnowledgeGraph.tsx`):
+    cross-type search, click-to-re-center, hover tooltips, a node-detail rail with connections grouped by
+    type, breadcrumb navigation, and relationship filtering for dense hubs.
 8. **Ask your portfolio** — grounded NL query: ask a question, get a streamed answer drawn only from
    your own data, with the tools it used shown.
 

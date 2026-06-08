@@ -1,6 +1,19 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import type { KgNeighbor, KgNode } from "../../api/types.ts";
 import { fallbackLabel, layoutNeighbors, nodeStyle, parseNodeId, REL_LABEL, relStyle } from "./nodeStyle.ts";
+
+/** What a hovered/focused node hands up so the parent can float an HTML tooltip at the cursor. */
+export type GraphHover = {
+  id: string;
+  type: string;
+  label: string;
+  summary: string;
+  rel?: string;
+  clickable: boolean;
+  x: number; // clientX (viewport px) — tooltip is position: fixed
+  y: number; // clientY
+};
 
 const W = 880;
 const H = 560;
@@ -49,12 +62,20 @@ export function EgoGraphSvg({
   neighbors,
   relFilter,
   onSelect,
+  onHover,
 }: {
   node: KgNode;
   neighbors: KgNeighbor[];
   relFilter: ReadonlySet<string> | null;
   onSelect: (id: string) => void;
+  onHover?: (h: GraphHover | null) => void;
 }) {
+  // Which chip is hovered/focused — drives a local highlight ring (cheap re-render, no parent round-trip).
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const emitHover = (h: GraphHover | null) => {
+    setHoveredId(h ? h.id : null);
+    onHover?.(h);
+  };
   const filtered = relFilter ? neighbors.filter((n) => relFilter.has(n.edge.rel)) : neighbors;
   const { positions, hiddenCount } = layoutNeighbors(filtered.length, { cx: CX, cy: CY, r1: R1, r2: R2, cap: CAP });
 
@@ -79,7 +100,14 @@ export function EgoGraphSvg({
   const focalStyle = nodeStyle(node.type);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ maxHeight: 560 }} role="img" aria-label={`Knowledge graph centered on ${node.label}`}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full select-none"
+      style={{ maxHeight: 560 }}
+      role="img"
+      aria-label={`Knowledge graph centered on ${node.label}`}
+      onMouseLeave={() => emitHover(null)}
+    >
       <defs>
         <radialGradient id="focal-glow" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor={focalStyle.color} stopOpacity="0.32" />
@@ -150,11 +178,11 @@ export function EgoGraphSvg({
 
       {/* Neighbor chips — spring out from the center into their ring positions, staggered. */}
       {chips.map((c, i) => (
-        <Chip key={c.key} c={c} index={i} onSelect={onSelect} />
+        <Chip key={c.key} c={c} index={i} hovered={hoveredId === c.id} onSelect={onSelect} onHover={emitHover} />
       ))}
 
       {/* Focal node — larger, ringed, with a slow breathing glow. */}
-      <FocalChip node={node} color={focalStyle.color} glyph={focalStyle.glyph} />
+      <FocalChip node={node} color={focalStyle.color} glyph={focalStyle.glyph} onHover={emitHover} />
 
       {/* No silent truncation: surface what the cap dropped. */}
       {hiddenCount > 0 && (
@@ -166,12 +194,30 @@ export function EgoGraphSvg({
   );
 }
 
-function FocalChip({ node, color, glyph }: { node: KgNode; color: string; glyph: string }) {
+function FocalChip({
+  node,
+  color,
+  glyph,
+  onHover,
+}: {
+  node: KgNode;
+  color: string;
+  glyph: string;
+  onHover: (h: GraphHover | null) => void;
+}) {
   const label = truncate(node.label, 22);
   const w = chipWidth(label, true);
   const h = 44;
+  const hover = (e: { clientX: number; clientY: number }) =>
+    onHover({ id: node.id, type: node.type, label: node.label, summary: node.summary ?? "", clickable: true, x: e.clientX, y: e.clientY });
   return (
-    <g transform={`translate(${CX - w / 2}, ${CY - h / 2})`}>
+    <g
+      transform={`translate(${CX - w / 2}, ${CY - h / 2})`}
+      style={{ cursor: "default" }}
+      onMouseEnter={hover}
+      onMouseMove={hover}
+      onMouseLeave={() => onHover(null)}
+    >
       <title>{`${node.label}${node.summary ? ` — ${node.summary}` : ""} · ${node.type}`}</title>
       <motion.rect
         x={-5}
@@ -196,30 +242,73 @@ function FocalChip({ node, color, glyph }: { node: KgNode; color: string; glyph:
   );
 }
 
-function Chip({ c, index, onSelect }: { c: ChipDatum; index: number; onSelect: (id: string) => void }) {
+function Chip({
+  c,
+  index,
+  hovered,
+  onSelect,
+  onHover,
+}: {
+  c: ChipDatum;
+  index: number;
+  hovered: boolean;
+  onSelect: (id: string) => void;
+  onHover: (h: GraphHover | null) => void;
+}) {
   const style = nodeStyle(c.type);
   const label = truncate(c.label, 18);
   const w = chipWidth(label);
   const h = 30;
+  const select = () => c.clickable && onSelect(c.id);
+  const emit = (e: { clientX: number; clientY: number }) =>
+    onHover({ id: c.id, type: c.type, label: c.label, summary: c.summary, rel: c.rel, clickable: c.clickable, x: e.clientX, y: e.clientY });
   return (
+    // Entrance + hover scale pivot on the chip's OWN center (transformBox: fill-box). The position lives
+    // in the inner <g> transform; the motion group only scales/fades, so hover no longer flings the chip
+    // away from the cursor (the old pixel originX/originY were read as 0–1 fractions). Click lands now.
     <motion.g
-      initial={{ opacity: 0, x: CX - c.x, y: CY - c.y, scale: 0.5 }}
-      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "spring", stiffness: 220, damping: 24, delay: 0.1 + index * 0.03 }}
-      style={{ cursor: c.clickable ? "pointer" : "default", originX: c.x, originY: c.y }}
+      style={{ cursor: c.clickable ? "pointer" : "default", transformBox: "fill-box", transformOrigin: "center" }}
       whileHover={c.clickable ? { scale: 1.07 } : undefined}
-      onClick={c.clickable ? () => onSelect(c.id) : undefined}
+      role={c.clickable ? "button" : undefined}
+      tabIndex={c.clickable ? 0 : undefined}
+      aria-label={c.clickable ? `${c.label} — ${style.label}, open` : undefined}
+      onClick={c.clickable ? select : undefined}
+      onKeyDown={
+        c.clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                select();
+              }
+            }
+          : undefined
+      }
+      onMouseEnter={emit}
+      onMouseMove={emit}
+      onMouseLeave={() => onHover(null)}
+      onFocus={(e) => {
+        const r = (e.currentTarget as SVGGElement).getBoundingClientRect();
+        emit({ clientX: r.left + r.width / 2, clientY: r.top });
+      }}
+      onBlur={() => onHover(null)}
     >
       <g transform={`translate(${c.x - w / 2}, ${c.y - h / 2})`}>
         <title>{`${c.label}${c.summary ? ` — ${c.summary}` : ""} · ${style.label}${c.clickable ? "" : " (no detail)"}`}</title>
+        {/* Hover/focus ring — a soft outer halo so the active node reads clearly. */}
+        {hovered && c.clickable && (
+          <rect x={-4} y={-4} width={w + 8} height={h + 8} rx={11} fill="none" stroke={style.color} strokeWidth={1.5} strokeOpacity={0.5} />
+        )}
         <rect
           width={w}
           height={h}
           rx={8}
-          fill="#181C22"
+          fill={hovered && c.clickable ? "#1E232B" : "#181C22"}
           stroke={style.color}
-          strokeWidth={1.5}
-          strokeOpacity={c.clickable ? 0.9 : 0.4}
+          strokeWidth={hovered && c.clickable ? 2 : 1.5}
+          strokeOpacity={c.clickable ? (hovered ? 1 : 0.9) : 0.4}
           strokeDasharray={c.clickable ? undefined : "4 3"}
         />
         {/* A colored notch on the left edge keeps the type readable even when the glyph is subtle. */}

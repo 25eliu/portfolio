@@ -38,6 +38,8 @@ export type InFlightAssessment = {
 };
 export type InFlightCall = {
   forecastId: string; ticker: string; side: string | null; resolveBy: string | null;
+  // The journal entry this prediction came from — backs the "view in journal" drill-down link.
+  journalEntryId: string | null;
   movePct: number; unrealizedR: number | null; mfe: number; mae: number; status: string;
   // Drill-down feedback fields: original thesis + the price levels that frame the call's risk.
   entry: number | null; stop: number | null; target: number | null;
@@ -173,6 +175,8 @@ export const client = {
   graphNode: (id: string) => api<{ node: KgNode; neighbors: KgNeighbor[] }>(`/graph/node/${id}`),
   graphNodes: (type?: string) =>
     api<{ nodes: KgNode[] }>(`/graph/nodes${type ? `?type=${encodeURIComponent(type)}` : ""}`),
+  graphSearch: (q: string, limit?: number) =>
+    api<{ nodes: KgNode[] }>(`/graph/search?q=${encodeURIComponent(q)}${limit ? `&limit=${limit}` : ""}`),
   wikiBriefing: () => api<{ briefing: Briefing | null }>("/wiki/briefing"),
   wikiLessons: () => api<{ lessons: WikiLesson[] }>("/wiki/lessons"),
   wikiLesson: (id: string) => api<{ lesson: WikiLesson }>(`/wiki/lessons/${id}`),

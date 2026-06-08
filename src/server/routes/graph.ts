@@ -11,6 +11,14 @@ export function graphRoutes(app: App): Hono {
     return c.json({ nodes: app.repos.graph.listNodes({ type }) });
   });
 
+  // Cross-type search across the whole graph, ranked by match quality then connectedness (degree).
+  r.get("/search", (c) => {
+    const q = c.req.query("q") ?? "";
+    const n = Number(c.req.query("limit"));
+    const limit = Number.isFinite(n) && n > 0 ? Math.min(n, 50) : 20;
+    return c.json({ nodes: app.repos.graph.searchNodes(q, limit) });
+  });
+
   // The node id is a slug like "ticker:AAPL" — accept the rest of the path so the colon survives.
   r.get("/node/:id{.+}", (c) => {
     const id = c.req.param("id");

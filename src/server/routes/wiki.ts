@@ -38,6 +38,8 @@ export function wikiRoutes(app: App): Hono {
         const je = f ? app.repos.journalEntries.get(f.journalEntryId) : null;
         return {
           forecastId: m.forecastId, ticker: m.ticker, side: f?.side ?? null, resolveBy: f?.resolveAt ?? null,
+          // journalEntryId backs the "view in journal" drill-down link (null for unscored/legacy marks).
+          journalEntryId: f?.journalEntryId ?? null,
           movePct: m.moveFromEntry, unrealizedR: m.unrealizedR, mfe: m.mfe, mae: m.mae, status: m.status,
           // Drill-down feedback fields: original thesis + the price levels that define the call's risk frame.
           entry: f?.entry ?? null, stop: f?.stop ?? null, target: f?.target ?? null,

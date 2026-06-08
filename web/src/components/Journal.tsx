@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, X } from "lucide-react";
 import type { AiInsight } from "../api/client.ts";
@@ -50,9 +50,11 @@ function pct(x: number): string {
  */
 export function Journal({
   ticker,
+  focusEntryId,
   onClearFilter,
 }: {
   ticker?: string;
+  focusEntryId?: string;
   onClearFilter?: () => void;
 }) {
   return (
@@ -72,7 +74,7 @@ export function Journal({
         </span>
       </div>
 
-      {ticker ? <TickerJournal ticker={ticker} /> : <DayGroupedJournal />}
+      {ticker ? <TickerJournal ticker={ticker} focusEntryId={focusEntryId} /> : <DayGroupedJournal />}
     </div>
   );
 }
@@ -189,8 +191,9 @@ function OutlookLeanRow({ label, items }: { label: string; items: AiInsight[] })
   );
 }
 
-/** Filtered view (from a recommendation card's "View in journal"): all calls for one ticker, flat. */
-function TickerJournal({ ticker }: { ticker: string }) {
+/** Filtered view (from a recommendation card's "View in journal"): all calls for one ticker, flat.
+ *  `focusEntryId` (set by a wiki "view in journal" link) auto-opens and scrolls to one entry. */
+function TickerJournal({ ticker, focusEntryId }: { ticker: string; focusEntryId?: string }) {
   const journal = useJournal(ticker);
   const entries = journal.data?.entries ?? [];
   if (journal.isLoading) {
@@ -211,16 +214,24 @@ function TickerJournal({ ticker }: { ticker: string }) {
   return (
     <div className="divide-y divide-hairline">
       {entries.map((e) => (
-        <JournalRow key={e.id} entry={e} />
+        <JournalRow key={e.id} entry={e} focus={e.id === focusEntryId} />
       ))}
     </div>
   );
 }
 
-function JournalRow({ entry }: { entry: JournalEntry }) {
-  const [open, setOpen] = useState(false);
+function JournalRow({ entry, focus }: { entry: JournalEntry; focus?: boolean }) {
+  const [open, setOpen] = useState(!!focus);
+  const ref = useRef<HTMLDivElement>(null);
+  // When this row is the deep-link target, open it and scroll it into view.
+  useEffect(() => {
+    if (focus) {
+      setOpen(true);
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focus]);
   return (
-    <div>
+    <div ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}

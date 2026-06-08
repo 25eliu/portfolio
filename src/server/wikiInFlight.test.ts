@@ -43,7 +43,7 @@ describe("wiki in-flight API", () => {
     const body = (await (await req("/wiki/in-flight")).json()) as {
       assessment: { total: number; onTrack: number };
       calls: {
-        ticker: string; side: string | null; status: string;
+        ticker: string; side: string | null; status: string; journalEntryId: string | null;
         thesis: string | null; rationale: string | null;
         entry: number | null; stop: number | null; target: number | null; markPrice: number;
       }[];
@@ -51,6 +51,9 @@ describe("wiki in-flight API", () => {
     expect(body.assessment.total).toBe(1);
     expect(body.calls[0]!.ticker).toBe("NVDA");
     expect(body.calls[0]!.side).toBe("bullish");
+    // journalEntryId backs the "view in journal" drill-down link.
+    expect(typeof body.calls[0]!.journalEntryId).toBe("string");
+    expect(body.calls[0]!.journalEntryId).toBe(app.repos.scoredForecasts.get("f1")!.journalEntryId);
     // Drill-down feedback fields are serialized from the forecast + its journal entry.
     expect(body.calls[0]!.thesis).toBe("t");
     expect(body.calls[0]!.rationale).toBe("y");

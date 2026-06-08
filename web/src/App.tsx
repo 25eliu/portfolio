@@ -31,6 +31,7 @@ import { Card, CardHeader } from "./components/ui/Card.tsx";
 import { SegmentedControl } from "./components/ui/SegmentedControl.tsx";
 import { Skeleton } from "./components/ui/Skeleton.tsx";
 import { ViewInGraphProvider } from "./lib/graphFocus.tsx";
+import { ViewInJournalProvider } from "./lib/journalFocus.tsx";
 import type { HorizonKey } from "./lib/horizon.ts";
 import type { PnlMode } from "./lib/format.ts";
 
@@ -67,12 +68,20 @@ export default function App() {
   const [horizon, setHorizon] = useState<HorizonKey>("3M");
   const [pnlMode, setPnlMode] = useState<PnlMode>("usd");
   const [journalTicker, setJournalTicker] = useState<string | undefined>(undefined);
+  const [journalFocusEntry, setJournalFocusEntry] = useState<string | undefined>(undefined);
   const [graphFocus, setGraphFocus] = useState<string | undefined>(undefined);
 
   // Deep link into the knowledge graph: set the focal node id and scroll the section into view.
   const viewInGraph = (id: string) => {
     setGraphFocus(id);
     document.getElementById("graph")?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Deep link into the journal: filter to the ticker, focus one entry, scroll the section into view.
+  const viewInJournal = (entryId: string, ticker: string) => {
+    setJournalTicker(ticker);
+    setJournalFocusEntry(entryId);
+    document.getElementById("journal")?.scrollIntoView({ behavior: "smooth" });
   };
 
   // One global $/% control for all P&L figures (overview band + both portfolio panels).
@@ -121,6 +130,7 @@ export default function App() {
 
   return (
     <ViewInGraphProvider value={viewInGraph}>
+    <ViewInJournalProvider value={viewInJournal}>
     <div className="min-h-screen">
       <Atmosphere />
       <Toaster
@@ -229,7 +239,14 @@ export default function App() {
 
         <Section title="Journal &amp; query" index={6}>
           <div id="journal">
-            <Journal ticker={journalTicker} onClearFilter={() => setJournalTicker(undefined)} />
+            <Journal
+              ticker={journalTicker}
+              focusEntryId={journalFocusEntry}
+              onClearFilter={() => {
+                setJournalTicker(undefined);
+                setJournalFocusEntry(undefined);
+              }}
+            />
           </div>
         </Section>
 
@@ -259,6 +276,7 @@ export default function App() {
       {showManager && <TickerManager onClose={() => setShowManager(false)} />}
       {showSchedule && <ScheduleDialog onClose={() => setShowSchedule(false)} />}
     </div>
+    </ViewInJournalProvider>
     </ViewInGraphProvider>
   );
 }
