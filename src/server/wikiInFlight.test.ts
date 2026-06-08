@@ -75,4 +75,24 @@ describe("wiki in-flight API", () => {
     expect(body.marks.length).toBe(1);
     expect(body.marks[0]!.date).toBe(DATE);
   });
+
+  test("GET /wiki/tickers groups the open call into a per-ticker record with a live R", async () => {
+    const body = (await (await req("/wiki/tickers")).json()) as {
+      tickers: {
+        ticker: string; total: number; open: number; resolved: number;
+        trackR: number | null; avgUnrealizedR: number | null;
+        calls: { forecastId: string; journalEntryId: string; resolved: boolean; status: string | null }[];
+      }[];
+    };
+    expect(body.tickers).toHaveLength(1);
+    const t = body.tickers[0]!;
+    expect(t.ticker).toBe("NVDA");
+    expect(t.total).toBe(1);
+    expect(t.open).toBe(1);
+    expect(t.resolved).toBe(0);
+    expect(typeof t.trackR).toBe("number"); // falls back to live unrealized R while open
+    expect(t.calls[0]!.resolved).toBe(false);
+    expect(t.calls[0]!.forecastId).toBe("f1");
+    expect(t.calls[0]!.journalEntryId).toBe(app.repos.scoredForecasts.get("f1")!.journalEntryId);
+  });
 });

@@ -47,6 +47,24 @@ export type InFlightCall = {
   thesis: string | null; rationale: string | null;
 };
 
+// Per-ticker track record (GET /wiki/tickers): every call grouped by ticker, ordered best avg R first.
+export type TickerCall = {
+  forecastId: string; journalEntryId: string; side: "bullish" | "bearish";
+  createdAt: string; resolveAt: string; conviction: number;
+  entry: number | null; target: number; stop: number;
+  resolved: boolean;
+  outcome: "target_hit" | "stop_hit" | "expired" | "ambiguous_touch" | null;
+  resolutionDate: string | null; realizedR: number | null;
+  terminalReturn: number | null; spyExcess: number | null;
+  unrealizedR: number | null; status: string | null; markDate: string | null;
+};
+export type TickerHistory = {
+  ticker: string; total: number; open: number; resolved: number;
+  wins: number; losses: number;
+  hitRate: number | null; expectancyR: number | null; avgUnrealizedR: number | null; trackR: number | null;
+  bull: number; bear: number; lastActivity: string; calls: TickerCall[];
+};
+
 export type SourcePatch = {
   title?: string;
   scope?: "global" | "ticker";
@@ -183,6 +201,7 @@ export const client = {
   wikiMetrics: (window?: string) =>
     api<{ metrics: WikiMetric[] }>(`/wiki/metrics${window ? `?window=${window}` : ""}`),
   wikiInFlight: () => api<{ assessment: InFlightAssessment; calls: InFlightCall[] }>("/wiki/in-flight"),
+  wikiTickers: () => api<{ tickers: TickerHistory[] }>("/wiki/tickers"),
   marketViewCurrent: () => api<MarketView>("/market-view/current"),
   marketViewDays: () => api<{ days: MarketViewDay[] }>("/market-view/days"),
   marketViewDay: (date: string) => api<{ theses: AiInsight[] }>(`/market-view/day/${date}`),

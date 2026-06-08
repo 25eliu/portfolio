@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BookMarked, ChevronDown, TrendingUp } from "lucide-react";
 import type { ForecastDailyMark, InFlightAssessment, InFlightCall } from "../api/client.ts";
 import type { LessonState, WikiLesson, WikiMetric } from "../api/types.ts";
-import { useForecastMarks, useWikiBriefing, useWikiInFlight, useWikiLessons, useWikiMetrics } from "../api/hooks.ts";
+import { useForecastMarks, useWikiBriefing, useWikiInFlight, useWikiLessons, useWikiMetrics, useWikiTickers } from "../api/hooks.ts";
 import { cn } from "../lib/cn.ts";
 import type { ReactNode } from "react";
 import { Badge } from "./ui/Badge.tsx";
@@ -14,6 +14,7 @@ import { nodeId } from "./graph/nodeStyle.ts";
 import { useViewInGraph } from "../lib/graphFocus.tsx";
 import { useViewInJournal } from "../lib/journalFocus.tsx";
 import { CALL_TONE, STATUS_LABEL, groupCalls, type InFlightGroup, type StatusCount } from "./wiki/inFlight.ts";
+import { TickerHistoryPanel } from "./wiki/TickerHistory.tsx";
 
 const STATE_TONE: Record<LessonState, "pos" | "accent" | "neutral" | "warn"> = {
   active: "pos",
@@ -32,10 +33,17 @@ export function Wiki() {
   const lessons = useWikiLessons();
   const metrics = useWikiMetrics("all_time");
   const inFlight = useWikiInFlight();
+  const tickers = useWikiTickers();
 
   const overall = metrics.data?.metrics.find((m) => m.cohortKey === "overall");
   const loading = briefing.isLoading || lessons.isLoading;
-  const hasContent = (lessons.data?.lessons.length ?? 0) > 0 || !!briefing.data?.briefing;
+  // Show the rich panels (live book, per-ticker record) as soon as any forecasts exist — not only once
+  // cohort lessons compile (which needs ≥5 resolved calls). Empty-only state still shows the hint below.
+  const hasContent =
+    (lessons.data?.lessons.length ?? 0) > 0 ||
+    !!briefing.data?.briefing ||
+    (inFlight.data?.calls.length ?? 0) > 0 ||
+    (tickers.data?.tickers.length ?? 0) > 0;
 
   return (
     <div className="card p-6">
@@ -56,18 +64,13 @@ export function Wiki() {
         <div className="space-y-5">
           {overall && <CalibrationStrip m={overall} />}
 
-          {briefing.data?.briefing && (
-            <div className="rounded-xl border border-hairline bg-surface-2/40 p-3.5">
-              <div className="mb-1.5 text-[11px] font-medium text-text-secondary">
-                Active briefing · injected into analysis
-              </div>
-              <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-text-muted">
-                {briefing.data.briefing.body}
-              </pre>
-            </div>
-          )}
-
+          {/* The live, clickable book sits first — it's the interactive view. The briefing below is the
+              static text snapshot injected into analysis, collapsed so it doesn't bury the UI. */}
           {(inFlight.data?.calls.length ?? 0) > 0 && <InFlightPanel data={inFlight.data!} />}
+
+          {(tickers.data?.tickers.length ?? 0) > 0 && <TickerHistoryPanel tickers={tickers.data!.tickers} />}
+
+          {briefing.data?.briefing && <BriefingBlock body={briefing.data.briefing.body} />}
 
           <div className="space-y-2">
             {(lessons.data?.lessons ?? []).map((l) => (
@@ -144,19 +147,43 @@ const fmtPrice = (x: number | null) => (x == null ? "—" : x.toFixed(2));
 // Color an R figure by sign so a winning bet reads green and a losing one red (no more lone-red headline).
 const rTone = (x: number | null) => (x == null ? "text-text-muted" : x >= 0 ? "text-pos" : "text-neg");
 
-function InFlightPanel({ data }: { data: { assessment: InFlightAssessment; calls: InFlightCall[] } }) {
+/** The active briefing text injected into analysis — collapsed by default so it doesn't bury the live
+ *  book above it. It's a static snapshot; the interactive panel is the thing you click into. */
+function BriefingBlock({ body }: { body: string }) {
   const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-hairline bg-surface-2/40">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3.5 py-3 text-left transition-colors hover:bg-surface-2/50"
+      >
+        <span className="text-[11px] font-medium text-text-secondary">Active briefing · injected into analysis</span>
+        <span className="ml-auto text-[10px] text-text-muted">{open ? "hide" : "show text"}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-text-muted transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <pre className="whitespace-pre-wrap border-t border-hairline px-3.5 py-3 font-sans text-[11px] leading-relaxed text-text-muted">
+          {body}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function InFlightPanel({ data }: { data: { assessment: InFlightAssessment; calls: InFlightCall[] } }) {
+  const [open, setOpen] = useState(true);
   const a = data.assessment;
   const groups = groupCalls(data.calls);
   return (
-    <div className="mt-5 rounded-xl border border-hairline bg-surface-2/30">
+    <div className="rounded-xl border border-hairline bg-surface-2/30">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-surface-2/40"
       >
         <span className="text-[11px] uppercase tracking-wide text-text-muted shrink-0">
-          In-flight · {a.total} open
+          Live calls · {a.total} open
         </span>
         <StatusBar a={a} />
         <span className="tnum ml-auto shrink-0 text-[11px] text-text-muted">avg {fmtR(a.avgUnrealizedR)}</span>
@@ -168,7 +195,8 @@ function InFlightPanel({ data }: { data: { assessment: InFlightAssessment; calls
             <span>marked {a.date ?? "—"}</span>
             <span>avg MFE {fmtR(a.avgMfe)}</span>
             <span>avg MAE {fmtR(a.avgMae)}</span>
-            <span>{groups.length} tickers</span>
+            <span>{groups.length} tickers · best avg R first</span>
+            <span className="text-text-muted/70">click a ticker to expand</span>
           </div>
           <div className="divide-y divide-hairline">
             {groups.map((g) => (

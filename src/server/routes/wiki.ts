@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { App } from "../../app.ts";
 import { assessInFlight } from "../../resolution/track.ts";
+import { buildTickerHistory } from "../../wiki/tickerHistory.ts";
 
 /** Read-only performance-wiki views: active briefing, lessons, and calibration metrics. */
 export function wikiRoutes(app: App): Hono {
@@ -58,6 +59,9 @@ export function wikiRoutes(app: App): Hono {
   r.get("/forecasts/:id/marks", (c) =>
     c.json({ marks: app.repos.forecastDailyMarks.listForForecast(c.req.param("id")) }),
   );
+
+  // Per-ticker track record: every call (resolved + open) grouped by ticker, ordered best avg R first.
+  r.get("/tickers", (c) => c.json({ tickers: buildTickerHistory(app.repos.wiki.tickerHistoryRows()) }));
 
   return r;
 }

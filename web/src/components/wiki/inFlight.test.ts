@@ -99,12 +99,20 @@ describe("groupCalls — edge cases", () => {
     expect(g!.calls.map((c) => c.resolveBy)).toEqual(["2026-07-01", null]);
   });
 
-  test("separate tickers/sides form separate groups, most-at-risk first", () => {
+  test("separate groups sorted by avg R: most-right first, most-wrong last", () => {
     const groups = groupCalls([
-      call({ ticker: "AAPL", side: "bullish", unrealizedR: 1.5, status: "on_track" }),
       call({ ticker: "MRVL", side: "bearish", unrealizedR: -1.0, status: "near_stop" }),
+      call({ ticker: "AAPL", side: "bullish", unrealizedR: 1.5, status: "on_track" }),
+      call({ ticker: "TSLA", side: "bullish", unrealizedR: 0.2, status: "on_track" }),
     ]);
-    expect(groups).toHaveLength(2);
-    expect(groups[0]!.ticker).toBe("MRVL"); // near_stop sorts ahead of on_track
+    expect(groups.map((g) => g.ticker)).toEqual(["AAPL", "TSLA", "MRVL"]); // 1.5 → 0.2 → -1.0
+  });
+
+  test("groups with no R yet sort to the bottom", () => {
+    const groups = groupCalls([
+      call({ ticker: "AAA", side: "bullish", unrealizedR: null, status: "at_risk" }),
+      call({ ticker: "BBB", side: "bullish", unrealizedR: -0.5, status: "at_risk" }),
+    ]);
+    expect(groups.map((g) => g.ticker)).toEqual(["BBB", "AAA"]); // -0.5 ranks above null
   });
 });

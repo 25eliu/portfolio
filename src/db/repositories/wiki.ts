@@ -1,6 +1,7 @@
 import type { DB } from "../connection.ts";
 import { Briefing, WikiLesson, WikiMetric, type LessonState } from "../../domain/index.ts";
 import type { ResolvedRow } from "../../wiki/metrics.ts";
+import type { TickerHistoryRow } from "../../wiki/tickerHistory.ts";
 
 export function wikiRepo(db: DB) {
   return {
@@ -35,6 +36,45 @@ export function wikiRepo(db: DB) {
           terminalReturn: r.terminal_return,
           spyExcessReturn: r.spy_excess_return,
           forecastR: r.forecast_r,
+        }));
+    },
+
+    /**
+     * Every scored forecast (open + resolved) joined with its outcome and its latest daily mark, for
+     * the per-ticker track-record view. The correlated subquery picks each forecast's most recent mark
+     * so open calls carry a live unrealized R + status; resolved calls carry the graded outcome + R.
+     */
+    tickerHistoryRows(): TickerHistoryRow[] {
+      type Row = {
+        forecast_id: string; journal_entry_id: string; ticker: string; side: string;
+        created_at: string; resolve_at: string; conviction: number;
+        entry: number | null; target: number; stop: number;
+        outcome: string | null; resolution_date: string | null; forecast_r: number | null;
+        terminal_return: number | null; spy_excess_return: number | null;
+        mark_unrealized_r: number | null; mark_status: string | null; mark_date: string | null;
+      };
+      return db
+        .query<Row, []>(
+          `SELECT f.id AS forecast_id, f.journal_entry_id, f.ticker, f.side, f.created_at, f.resolve_at,
+                  f.conviction, f.entry, f.target, f.stop,
+                  o.outcome, o.resolution_date, o.forecast_r, o.terminal_return, o.spy_excess_return,
+                  m.unrealized_r AS mark_unrealized_r, m.status AS mark_status, m.date AS mark_date
+             FROM scored_forecasts f
+             LEFT JOIN forecast_outcomes o ON o.forecast_id = f.id
+             LEFT JOIN forecast_daily_marks m ON m.id = (
+               SELECT id FROM forecast_daily_marks mm WHERE mm.forecast_id = f.id ORDER BY mm.date DESC LIMIT 1
+             )`,
+        )
+        .all()
+        .map((r) => ({
+          forecastId: r.forecast_id, journalEntryId: r.journal_entry_id, ticker: r.ticker,
+          side: r.side as TickerHistoryRow["side"],
+          createdAt: r.created_at, resolveAt: r.resolve_at, conviction: r.conviction,
+          entry: r.entry, target: r.target, stop: r.stop,
+          outcome: r.outcome as TickerHistoryRow["outcome"], resolutionDate: r.resolution_date,
+          realizedR: r.forecast_r, terminalReturn: r.terminal_return, spyExcess: r.spy_excess_return,
+          unrealizedR: r.mark_unrealized_r, markStatus: r.mark_status as TickerHistoryRow["markStatus"],
+          markDate: r.mark_date,
         }));
     },
 

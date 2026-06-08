@@ -10,7 +10,7 @@
 > wiki), the execution planner + ledger (`src/execution/`), the universe/scan logic (`src/analysis/`),
 > the LLM prompt stages (`src/llm/`), the data model (`src/db/schema.ts` migrations), or a data
 > provider. Add a table, a pipeline step, or a memory layer → reflect it here and bump *Last updated*.
-> _Last updated: 2026-06-07 (knowledge-graph visualization completed: working node click/re-center, hover tooltips, node-detail rail with grouped connections, and cross-type `/api/graph/search`; Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; LLM graph-librarian)._
+> _Last updated: 2026-06-07 (performance-wiki UI overhaul: per-ticker track-record panel via `/api/wiki/tickers`, redesigned in-flight book with net-R headline + composite status + per-day trajectory sparkline + journal deep-links; knowledge-graph visualization completed: working node click/re-center, hover tooltips, node-detail rail with grouped connections, and cross-type `/api/graph/search`; Decision Engine v2: deliberation + graph-propagated calibration + regime sizing; local beta; risk/performance analytics; LLM graph-librarian)._
 
 ## 1. Product direction
 
@@ -544,6 +544,14 @@ rows (`src/wiki/openBook.ts`). This makes the wiki a live scorecard ("are my cur
 far?") in addition to a calibration record, and it feeds straight back into the next run's analysis. The
 two layers together are the AI's condensed trading memory.
 
+**Per-ticker track record (UI, implemented).** The web Performance wiki adds a "Track record by ticker"
+panel backed by `GET /api/wiki/tickers` (`buildTickerHistory` in `src/wiki/tickerHistory.ts`, fed by
+`wikiRepo.tickerHistoryRows()`). It groups *every* call for a ticker (resolved outcomes + still-open
+positions, with each open call's latest daily mark) into one record card: win/loss, hit rate, expectancy
+R, average open R, and a newest-first timeline where each call links back to its journal entry. Tickers
+are ordered how-right → how-wrong by average R (resolved expectancy, falling back to live open R). This
+is a read-only presentation over existing outcome/mark/journal data — no new tables or schema changes.
+
 ## 10. Planned APIs
 
 ### Journal and execution (implemented)
@@ -582,6 +590,7 @@ GET    /api/wiki/lessons
 GET    /api/wiki/metrics
 GET    /api/wiki/in-flight               (current in-flight assessment across open forecasts)
 GET    /api/wiki/forecasts/:id/marks     (full daily-mark history for one forecast)
+GET    /api/wiki/tickers                  (per-ticker track record: resolved + open calls, best avg R first)
 GET    /api/graph/nodes
 GET    /api/graph/node/:id
 GET    /api/graph/search                  (cross-type search; ranked by match quality then degree)

@@ -40,6 +40,8 @@ function byResolveAsc(a: InFlightCall, b: InFlightCall): number {
  * as one row. The headline is the net (average) CURRENT R — the book's real standing — with the worst R
  * and a composite status describing the spread, so a net-positive book no longer flashes a lone red
  * `near_stop`. Members are ordered by resolve deadline (soonest first) so the per-bet dates read in order.
+ * Groups are ordered by net R descending — how-right to how-wrong on average — so the best-performing
+ * theses sit on top and the ones bleeding the most fall to the bottom.
  */
 export function groupCalls(calls: InFlightCall[]): InFlightGroup[] {
   const map = new Map<string, InFlightCall[]>();
@@ -65,10 +67,12 @@ export function groupCalls(calls: InFlightCall[]): InFlightGroup[] {
       worstStatus, statusCounts, calls: sorted,
     };
   });
-  // Most-at-risk groups first: worst status, then deepest-negative worst R.
-  return groups.sort(
-    (a, b) =>
-      (CALL_SEVERITY[a.worstStatus] ?? 9) - (CALL_SEVERITY[b.worstStatus] ?? 9) ||
-      (a.worstR ?? 0) - (b.worstR ?? 0),
-  );
+  // How-right → how-wrong: highest average current R first, deepest-negative last. Groups with no R
+  // yet (null) sort to the bottom; ties break by deepest-negative worst R so riskier ties rank lower.
+  return groups.sort((a, b) => {
+    if (a.netR == null && b.netR == null) return 0;
+    if (a.netR == null) return 1;
+    if (b.netR == null) return -1;
+    return b.netR - a.netR || (a.worstR ?? 0) - (b.worstR ?? 0);
+  });
 }
