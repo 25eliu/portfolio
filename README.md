@@ -1,4 +1,4 @@
-# Portfolio Intelligence — a self‑improving AI trader
+# Evolving Portfolio  — a self‑improving AI trader
 
 > An AI that researches stocks, trades its own paper book, **grades every call against real outcomes**,
 > and compiles what it learns into an evolving **wiki + knowledge graph** — so its decisions get sharper
